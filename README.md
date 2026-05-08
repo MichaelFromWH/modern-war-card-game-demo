@@ -16,4 +16,4 @@ PORT=3001 npm run dev
 
 ## GitHub Pages
 
-仓库包含 `.github/workflows/pages.yml`，推送到 `main` 后可通过 GitHub Actions 部署为静态页面。
+仓库可通过 GitHub Pages 从 `main` 分支根目录直接发布为静态页面。
