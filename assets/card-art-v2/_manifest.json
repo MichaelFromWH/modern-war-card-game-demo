@@ -1,0 +1,137 @@
+﻿{
+    "ratio":  "2:3",
+    "size":  [
+                 1024,
+                 1536
+             ],
+    "generatedAt":  "2026-05-01T21:40:44",
+    "sourceDir":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art",
+    "outputDir":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2",
+    "files":  [
+                  {
+                      "name":  "us_aavp7.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_aavp7.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_aavp7.jpg"
+                  },
+                  {
+                      "name":  "us_ah1z.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_ah1z.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_ah1z.jpg"
+                  },
+                  {
+                      "name":  "us_airborne.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_airborne.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_airborne.jpg"
+                  },
+                  {
+                      "name":  "us_avenger.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_avenger.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_avenger.jpg"
+                  },
+                  {
+                      "name":  "us_b2.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_b2.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_b2.jpg"
+                  },
+                  {
+                      "name":  "us_bradley.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_bradley.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_bradley.jpg"
+                  },
+                  {
+                      "name":  "us_caat.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_caat.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_caat.jpg"
+                  },
+                  {
+                      "name":  "us_dragoon.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_dragoon.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_dragoon.jpg"
+                  },
+                  {
+                      "name":  "us_f35.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_f35.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_f35.jpg"
+                  },
+                  {
+                      "name":  "us_fmtv.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_fmtv.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_fmtv.jpg"
+                  },
+                  {
+                      "name":  "us_green_beret.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_green_beret.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_green_beret.jpg"
+                  },
+                  {
+                      "name":  "us_humvee_lras3.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_humvee_lras3.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_humvee_lras3.jpg"
+                  },
+                  {
+                      "name":  "us_lav25.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_lav25.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_lav25.jpg"
+                  },
+                  {
+                      "name":  "us_m1064.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_m1064.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_m1064.jpg"
+                  },
+                  {
+                      "name":  "us_m109.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_m109.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_m109.jpg"
+                  },
+                  {
+                      "name":  "us_m1a2.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_m1a2.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_m1a2.jpg"
+                  },
+                  {
+                      "name":  "us_m88.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_m88.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_m88.jpg"
+                  },
+                  {
+                      "name":  "us_marine_rifle.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_marine_rifle.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_marine_rifle.jpg"
+                  },
+                  {
+                      "name":  "us_mq1c.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_mq1c.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_mq1c.jpg"
+                  },
+                  {
+                      "name":  "us_mshorad.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_mshorad.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_mshorad.jpg"
+                  },
+                  {
+                      "name":  "us_patriot.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_patriot.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_patriot.jpg"
+                  },
+                  {
+                      "name":  "us_rangers_rrc.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_rangers_rrc.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_rangers_rrc.jpg"
+                  },
+                  {
+                      "name":  "us_rq170.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_rq170.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_rq170.jpg"
+                  },
+                  {
+                      "name":  "us_smoke.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_smoke.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_smoke.jpg"
+                  },
+                  {
+                      "name":  "us_stryker_atgm.jpg",
+                      "source":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art\\us_stryker_atgm.jpg",
+                      "output":  "D:\\OPC项目\\战争卡牌游戏\\现代战争三线卡牌WebDemo_V0.3_20260424\\assets\\card-art-v2\\us_stryker_atgm.jpg"
+                  }
+              ]
+}

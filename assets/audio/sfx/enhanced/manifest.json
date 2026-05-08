@@ -1,0 +1,84 @@
+{
+  "description": "Generated post-processed weapon SFX with non-abrupt tails and battlefield reflections.",
+  "sampleRate": 44100,
+  "files": [
+    {
+      "file": "unit_armor_cannon_enhanced.wav",
+      "duration": 5.4,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.03778
+    },
+    {
+      "file": "unit_artillery_howitzer_enhanced.wav",
+      "duration": 6.2,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.05275
+    },
+    {
+      "file": "unit_rocket_artillery_salvo_enhanced.wav",
+      "duration": 6.0,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.03662
+    },
+    {
+      "file": "unit_infantry_fire_enhanced.wav",
+      "duration": 2.8,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.00035
+    },
+    {
+      "file": "unit_heavy_aa_missile_enhanced.wav",
+      "duration": 5.2,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.00833
+    },
+    {
+      "file": "unit_mobile_aa_burst_enhanced.wav",
+      "duration": 3.2,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.00217
+    },
+    {
+      "file": "unit_helicopter_rocket_run_enhanced.wav",
+      "duration": 5.2,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.05739
+    },
+    {
+      "file": "unit_drone_strike_enhanced.wav",
+      "duration": 3.7,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.00669
+    },
+    {
+      "file": "unit_fighter_strike_enhanced.wav",
+      "duration": 4.5,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.00813
+    },
+    {
+      "file": "unit_bomber_bomb_run_enhanced.wav",
+      "duration": 6.4,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.02793
+    },
+    {
+      "file": "impact_heavy_explosion_near_enhanced.wav",
+      "duration": 5.8,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.03307
+    },
+    {
+      "file": "impact_armor_piercing_hit_enhanced.wav",
+      "duration": 3.9,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.00732
+    },
+    {
+      "file": "impact_airburst_missile_enhanced.wav",
+      "duration": 3.8,
+      "peak": 0.92,
+      "tail_rms_last_250ms": 0.00404
+    }
+  ]
+}

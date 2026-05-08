@@ -1,0 +1,51 @@
+{
+  "events": {
+    "card.draw": [
+      "card_draw_real.wav"
+    ],
+    "card.flip": [
+      "card_flip_real.wav"
+    ],
+    "unit.infantry.fire": [
+      "infantry_rifle_burst_01.wav",
+      "infantry_rifle_burst_02.wav"
+    ],
+    "unit.armor.fire": [
+      "tank_cannon_01.wav"
+    ],
+    "unit.helicopter.fire": [
+      "helicopter_rocket_run_01.wav"
+    ],
+    "unit.artillery.fire": [
+      "howitzer_fire_01.wav"
+    ],
+    "unit.rocketArtillery.fire": [
+      "mlrs_salvo_01.wav"
+    ],
+    "unit.heavyAa.fire": [
+      "sam_launch_01.wav"
+    ],
+    "unit.mobileAa.fire": [
+      "mobile_aa_burst_01.wav"
+    ],
+    "unit.drone.fire": [
+      "uav_strike_01.wav"
+    ],
+    "unit.fighter.fire": [
+      "jet_strike_01.wav"
+    ],
+    "unit.bomber.fire": [
+      "bomb_run_01.wav"
+    ],
+    "impact.heavyExplosion": [
+      "heavy_explosion_01.wav"
+    ],
+    "impact.armorPiercing": [
+      "armor_hit_01.wav"
+    ],
+    "impact.airburst": [
+      "airburst_01.wav"
+    ]
+  }
+}
+

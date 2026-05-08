@@ -1,0 +1,92 @@
+[
+  {
+    "name": "impact_heavy_explosion_near",
+    "event": "impact.heavyExplosion",
+    "prompt": "Realistic modern battlefield artillery shell impact close by, violent low frequency shockwave, dirt and metal debris, pressure wave tail, short cinematic game sound effect, no music, no voice, no cartoon sound.",
+    "file": "assets/audio/sfx/generated/impact_heavy_explosion_near.wav"
+  },
+  {
+    "name": "impact_armor_piercing_hit",
+    "event": "impact.armorPiercing",
+    "prompt": "Realistic armor piercing round striking a modern armored vehicle, sharp metallic crack, heavy low thud, fragments and metal resonance, short dry game sound effect, no music, no voice, no cartoon sound.",
+    "file": "assets/audio/sfx/generated/impact_armor_piercing_hit.wav"
+  },
+  {
+    "name": "impact_airburst_missile",
+    "event": "impact.airburst",
+    "prompt": "Realistic surface to air missile airburst explosion in the sky, fast whoosh, bright detonation, debris flutter and distant battlefield echo, short game sound effect, no music, no voice, no cartoon sound.",
+    "file": "assets/audio/sfx/generated/impact_airburst_missile.wav"
+  },
+  {
+    "name": "unit_infantry_fire",
+    "event": "unit.infantry.fire",
+    "prompt": "Loud close range modern infantry assault rifle burst starts immediately, six sharp gunshots, strong muzzle blast, spent shell casings, dry outdoor battlefield echo, short tactical game sound effect, no music, no voice, no cartoon sound.",
+    "file": "assets/audio/sfx/generated/unit_infantry_fire.wav"
+  },
+  {
+    "name": "unit_armor_cannon",
+    "event": "unit.armor.fire",
+    "prompt": "Realistic main battle tank cannon firing, massive muzzle blast, mechanical recoil, turret metal rattle, deep shockwave, short powerful game sound effect, no music, no voice, no cartoon sound.",
+    "file": "assets/audio/sfx/generated/unit_armor_cannon.wav"
+  },
+  {
+    "name": "unit_helicopter_rocket_run",
+    "event": "unit.helicopter.fire",
+    "prompt": "Realistic attack helicopter rocket run, heavy rotor blades overhead, several rockets launch, rocket motors streak away, distant impacts, short immersive game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_helicopter_rocket_run.wav"
+  },
+  {
+    "name": "unit_artillery_howitzer",
+    "event": "unit.artillery.fire",
+    "prompt": "Realistic self propelled howitzer firing a heavy shell, cannon breech blast, low pressure wave, mechanical chassis vibration, distant impact echo, short game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_artillery_howitzer.wav"
+  },
+  {
+    "name": "unit_rocket_artillery_salvo",
+    "event": "unit.rocketArtillery.fire",
+    "prompt": "Realistic multiple launch rocket system salvo, several rockets ignite and launch in rapid sequence, roaring motors, battlefield air pressure, distant explosions, short game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_rocket_artillery_salvo.wav"
+  },
+  {
+    "name": "unit_heavy_aa_missile",
+    "event": "unit.heavyAa.fire",
+    "prompt": "Realistic heavy surface to air missile launch, radar lock tone, booster ignition, missile roaring upward, airburst detonation far away, short military game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_heavy_aa_missile.wav"
+  },
+  {
+    "name": "unit_mobile_aa_burst",
+    "event": "unit.mobileAa.fire",
+    "prompt": "Realistic short range mobile air defense firing, rapid autocannon burst, small missile launch whoosh, radar electronics, metallic vehicle vibration, short game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_mobile_aa_burst.wav"
+  },
+  {
+    "name": "unit_drone_strike",
+    "event": "unit.drone.fire",
+    "prompt": "Realistic military drone strike, quiet propeller drone overhead, guided munition diving, sudden compact explosion, dust and debris, short tactical game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_drone_strike.wav"
+  },
+  {
+    "name": "unit_fighter_strike",
+    "event": "unit.fighter.fire",
+    "prompt": "Realistic fighter jet attack pass, fast jet roar across the sky, missile release whoosh, sharp explosion, Doppler flyby tail, short cinematic game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_fighter_strike.wav"
+  },
+  {
+    "name": "unit_bomber_bomb_run",
+    "event": "unit.bomber.fire",
+    "prompt": "Realistic bomber airstrike, large aircraft rumble overhead, multiple bombs falling, staggered heavy explosions, long low frequency battlefield tail, short game sound effect, no music, no voice.",
+    "file": "assets/audio/sfx/generated/unit_bomber_bomb_run.wav"
+  },
+  {
+    "name": "card_draw_tactical",
+    "event": "card.draw",
+    "prompt": "Physical tactical card drawn from a textured deck, paper friction, subtle military radio click, premium board game interface sound, short and clean, no music, no voice.",
+    "file": "assets/audio/sfx/generated/card_draw_tactical.wav"
+  },
+  {
+    "name": "card_flip_physical",
+    "event": "card.flip",
+    "prompt": "Physical tactical card flipped on a table, crisp paper slap, fabric mat texture, subtle command console click, premium board game interface sound, short and clean, no music, no voice.",
+    "file": "assets/audio/sfx/generated/card_flip_physical.wav"
+  }
+]

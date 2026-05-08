@@ -1,0 +1,5539 @@
+import {
+  CARD_LIBRARY,
+  FACTIONS,
+  LINES,
+  RARITY_LABELS,
+  STARTER_DECKS,
+  TYPE_LABELS,
+  VICTORY_SCORE,
+  getCard,
+  getFaction,
+  getLine,
+} from "./game-data.js";
+import { gameAudio } from "./audio.js";
+import {
+  getFactionMarkPath,
+  getCardArtPath,
+  getCardDetailImagePath,
+  getCardFireVideoPath,
+  getSkillIconPath,
+  getSkillGlyph,
+  getTagBadgePath,
+  hasGeneratedCardImages,
+  isModernUnitCard,
+  renderRarityStars,
+} from "./card-design.js";
+
+const refs = {
+  app: document.querySelector("#app"),
+  briefing: document.querySelector("#briefing"),
+  board: document.querySelector("#battle-board"),
+  hand: document.querySelector("#player-hand"),
+  score: document.querySelector("#score-overlay"),
+  logPanel: document.querySelector("#action-log-panel"),
+  logToggle: document.querySelector(".action-log-toggle"),
+  log: document.querySelector("#battle-log"),
+  inspector: document.querySelector("#card-inspector"),
+  spotlight: document.querySelector("#card-spotlight"),
+  codex: document.querySelector("#codex-overlay"),
+  guide: document.querySelector("#guide-overlay"),
+  deckBuilder: document.querySelector("#deck-builder-overlay"),
+  deckStatus: document.querySelector("#deck-status"),
+  bgm: document.querySelector("#battle-bgm"),
+  pass: document.querySelector("#pass-button"),
+  endTurn: document.querySelector("#end-turn-button"),
+  bgmButton: document.querySelector("#bgm-button"),
+  reset: document.querySelector("#reset-button"),
+  codexButton: document.querySelector("#codex-button"),
+  intent: document.querySelector("#intent-overlay"),
+  mulligan: document.querySelector("#mulligan-overlay"),
+  turnOverlay: document.querySelector("#turn-overlay"),
+  fxLayer: document.querySelector("#fx-layer"),
+  targetingLine: document.querySelector("#targeting-line"),
+  targetingPath: document.querySelector("#targeting-line-path"),
+  difficultyButtons: Array.from(document.querySelectorAll("[data-action^='ai-difficulty:']")),
+};
+
+const lineOrders = {
+  enemy: ["support", "frontline"],
+  player: ["frontline", "support"],
+};
+
+const BGM_PLAYLIST = [
+  "./assets/audio/bgm/assembling-the-fleet.mp3",
+  "./assets/audio/bgm/battle-loop.mp3",
+  "./assets/audio/bgm/opening-credits.mp3",
+  "./assets/audio/bgm/star-sky-instrumental.mp3",
+];
+
+const TURN_HANDOFF_MS = 1150;
+const AI_THINK_MS = 1050;
+const CARD_FLIGHT_MS = 760;
+const DEPLOY_CARD_FLIGHT_MS = 940;
+const DEPLOY_EFFECT_DELAY_MS = 1700;
+const DEPLOY_VIDEO_START_DELAY_MS = DEPLOY_CARD_FLIGHT_MS + 120;
+const COMBAT_RESOLUTION_HOLD_MS = 820;
+const TACTIC_PRESENTATION_MS = 1480;
+const MULLIGAN_LIMIT = 2;
+const CARD_FIRE_VIDEO_FALLBACK_MS = 7000;
+const CARD_FIRE_VIDEO_MAX_MS = 7000;
+const AI_DIFFICULTY_LABELS = {
+  easy: "简单",
+  medium: "中等",
+  hard: "困难",
+};
+const AI_DIFFICULTY_PROFILES = {
+  easy: {
+    topPool: 5,
+    mistakeChance: 0.26,
+    scoreNoise: 4.6,
+    targetRandomChance: 0.52,
+    hiddenMinScore: 16,
+    hiddenFirstMargin: 9,
+    hiddenBias: -5,
+    targetMultiplier: 0.24,
+    tacticMultiplier: 0.82,
+    killBonus: 0.55,
+    chainBonus: 0.35,
+    protectionBonus: 0.35,
+    scoreRaceBonus: 0.45,
+    concealSupportChance: 0.3,
+    concealHighValueChance: 0.12,
+  },
+  medium: {
+    topPool: 2,
+    mistakeChance: 0.04,
+    scoreNoise: 0.9,
+    targetRandomChance: 0.1,
+    hiddenMinScore: 11,
+    hiddenFirstMargin: 2,
+    hiddenBias: 0,
+    targetMultiplier: 0.42,
+    tacticMultiplier: 1,
+    killBonus: 1,
+    chainBonus: 1,
+    protectionBonus: 1,
+    scoreRaceBonus: 1,
+    concealSupportChance: 0.72,
+    concealHighValueChance: 0.55,
+  },
+  hard: {
+    topPool: 1,
+    mistakeChance: 0,
+    scoreNoise: 0.15,
+    targetRandomChance: 0.02,
+    hiddenMinScore: 8.5,
+    hiddenFirstMargin: -0.5,
+    hiddenBias: 2,
+    targetMultiplier: 0.62,
+    tacticMultiplier: 1.25,
+    killBonus: 1.55,
+    chainBonus: 1.6,
+    protectionBonus: 1.6,
+    scoreRaceBonus: 1.7,
+    concealSupportChance: 0.95,
+    concealHighValueChance: 0.9,
+  },
+};
+const COMMANDER_PROFILES = {
+  player: {
+    name: "林昊",
+    rank: "上校",
+    initial: "L",
+  },
+  enemy: {
+    name: "索科洛夫",
+    rank: "少将",
+    initial: "S",
+  },
+};
+const DECK_RULES = {
+  size: 30,
+  unitMin: 24,
+  unitMax: 24,
+  tacticMin: 6,
+  tacticMax: 6,
+  strikeTacticMin: 0,
+  strikeTacticMax: 0,
+  supportTacticMin: 6,
+  supportTacticMax: 6,
+  frontlineMin: 8,
+  supportMin: 7,
+  reconMin: 2,
+  airDefenseMin: 2,
+  copyLimitByRarity: {
+    common: 3,
+    uncommon: 3,
+    rare: 2,
+    epic: 2,
+    legendary: 1,
+  },
+};
+const DECK_STORAGE_PREFIX = "warzone.customDeck.v1";
+const FACTION_PAIR = {
+  usa: "russia",
+  russia: "usa",
+};
+const initialPlayerFaction = loadSavedDeckFaction();
+
+const state = {
+  screen: "briefing",
+  battle: null,
+  selectedHandUid: null,
+  hoveredCardId: null,
+  draggingUid: null,
+  dragMode: null,
+  dragTargets: [],
+  dragStart: null,
+  pending: null,
+  codexOpen: false,
+  codexFaction: "usa",
+  guideOpen: false,
+  deckBuilderOpen: false,
+  playerFaction: initialPlayerFaction,
+  playerDeck: loadSavedDeck(initialPlayerFaction),
+  logCollapsed: false,
+  bgmOn: false,
+  currentBgmTrack: null,
+  aiDifficulty: "medium",
+  mulligan: {
+    active: false,
+    selectedUids: [],
+  },
+  uidCounter: 0,
+};
+
+bootstrap();
+
+function bootstrap() {
+  gameAudio.preload();
+  bindEvents();
+  updateDifficultyButtons();
+  render();
+  exposeDebugHooks();
+}
+
+function bindEvents() {
+  window.addEventListener("pointerdown", () => gameAudio.unlock(), { once: true, passive: true });
+  window.addEventListener("keydown", () => gameAudio.unlock(), { once: true });
+  document.addEventListener("click", handleClick);
+  document.addEventListener("mouseover", handleHover);
+  document.addEventListener("mouseout", handleHoverOut);
+  document.addEventListener("dragstart", handleDragStart);
+  document.addEventListener("drag", handleDragMove);
+  document.addEventListener("dragover", handleDragOver);
+  document.addEventListener("dragleave", handleDragLeave);
+  document.addEventListener("drop", handleDrop);
+  document.addEventListener("dragend", clearDragState);
+  refs.bgm?.addEventListener("ended", handleBgmEnded);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      if (state.deckBuilderOpen) {
+        closeDeckBuilder();
+      } else if (state.guideOpen) {
+        closeGuide();
+      } else if (state.codexOpen) {
+        closeCodex();
+      } else {
+        cancelIntent();
+      }
+    }
+    if (event.key.toLowerCase() === "f") {
+      toggleFullscreen();
+    }
+  });
+}
+
+function handleClick(event) {
+  const target = event.target.closest("[data-action],[data-hand-card],[data-row],[data-board-card]");
+  if (!target) {
+    return;
+  }
+  gameAudio.unlock();
+
+  if (target.dataset.action) {
+    gameAudio.play("ui.click");
+    handleAction(target.dataset.action);
+    return;
+  }
+
+  if (target.dataset.handCard) {
+    if (state.mulligan.active) {
+      toggleMulliganCard(target.dataset.handCard);
+      return;
+    }
+    gameAudio.play("card.flip");
+    selectHandCard(target.dataset.handCard, { conceal: event.shiftKey });
+    return;
+  }
+
+  if (target.dataset.row) {
+    playSelectedUnitToRow(target.dataset.side, target.dataset.row);
+    return;
+  }
+
+  if (target.dataset.boardCard) {
+    handleBoardTarget(target.dataset.side, target.dataset.boardCard);
+  }
+}
+
+function handleHover(event) {
+  const cardElement = event.target.closest("[data-card-id]");
+  if (!cardElement) {
+    return;
+  }
+  gameAudio.play("ui.hover");
+  state.hoveredCardId = cardElement.dataset.cardId;
+  renderInspector();
+  renderSpotlight();
+}
+
+function handleHoverOut(event) {
+  const cardElement = event.target.closest("[data-card-id]");
+  if (!cardElement || cardElement.contains(event.relatedTarget)) {
+    return;
+  }
+  if (state.hoveredCardId === cardElement.dataset.cardId) {
+    clearSpotlight();
+  }
+}
+
+function clearSpotlight() {
+  state.hoveredCardId = null;
+  if (!refs.spotlight) {
+    return;
+  }
+  refs.spotlight.hidden = true;
+  refs.spotlight.innerHTML = "";
+}
+
+function isSpotlightSourceHovered(cardId) {
+  return Array.from(document.querySelectorAll(".hand-rail [data-card-id], .battle-board [data-card-id]")).some(
+    (element) => element.dataset.cardId === cardId && element.matches(":hover"),
+  );
+}
+
+function handleAction(action) {
+  if (action === "start") {
+    startBattle();
+  } else if (action.startsWith("ai-difficulty:")) {
+    setAiDifficulty(action.split(":")[1] || "medium");
+  } else if (action === "confirm-mulligan") {
+    confirmMulligan();
+  } else if (action === "skip-mulligan") {
+    skipMulligan();
+  } else if (action.startsWith("keep-supply:")) {
+    chooseSupplyCard(action.split(":")[1]);
+  } else if (action === "pass") {
+    passTurn("player");
+  } else if (action === "end-turn") {
+    passTurn("player");
+  } else if (action === "surrender") {
+    surrenderBattle();
+  } else if (action === "reset") {
+    resetBattle();
+  } else if (action === "cancel") {
+    gameAudio.play("ui.switch");
+    cancelIntent();
+  } else if (action === "open-codex") {
+    gameAudio.play("ui.switch");
+    openCodex();
+  } else if (action === "close-codex") {
+    gameAudio.play("ui.switch");
+    closeCodex();
+  } else if (action === "open-guide") {
+    gameAudio.play("ui.switch");
+    openGuide();
+  } else if (action === "close-guide") {
+    gameAudio.play("ui.switch");
+    closeGuide();
+  } else if (action === "open-deck-builder") {
+    gameAudio.play("ui.switch");
+    openDeckBuilder();
+  } else if (action === "close-deck-builder") {
+    gameAudio.play("ui.switch");
+    closeDeckBuilder();
+  } else if (action.startsWith("deck-faction:")) {
+    setDeckFaction(action.split(":")[1] || "usa");
+  } else if (action.startsWith("deck-add:")) {
+    addDeckCard(action.split(":")[1]);
+  } else if (action.startsWith("deck-remove:")) {
+    removeDeckCard(action.split(":")[1]);
+  } else if (action === "deck-reset") {
+    resetPlayerDeck();
+  } else if (action === "deck-clear") {
+    clearPlayerDeck();
+  } else if (action === "deck-autofill") {
+    autoFillPlayerDeck();
+  } else if (action === "toggle-bgm") {
+    gameAudio.play("ui.switch");
+    toggleBgm();
+  } else if (action === "toggle-log") {
+    gameAudio.play("ui.switch");
+    toggleLogPanel();
+  } else if (action.startsWith("play-hidden:")) {
+    selectHandCard(action.split(":")[1], { conceal: true });
+  } else if (action.startsWith("play-open:")) {
+    selectHandCard(action.split(":")[1], { conceal: false });
+  } else if (action.startsWith("codex:")) {
+    state.codexFaction = action.split(":")[1] || "usa";
+    renderCodex();
+  }
+}
+
+function startBattle() {
+  const validation = validateDeck(state.playerDeck, state.playerFaction);
+  if (!validation.valid) {
+    gameAudio.play("ui.error");
+    state.deckBuilderOpen = true;
+    render();
+    return;
+  }
+  state.battle = createBattle();
+  state.battle.log.push(`AI 难度：${AI_DIFFICULTY_LABELS[state.aiDifficulty]}。`);
+  state.battle.log.push(`玩家卡组：${getFaction(state.playerFaction).shortName}自定义编成，${state.playerDeck.length} 张。`);
+  state.screen = "battle";
+  state.selectedHandUid = null;
+  state.hoveredCardId = null;
+  state.pending = null;
+  state.guideOpen = false;
+  state.deckBuilderOpen = false;
+  state.mulligan = {
+    active: true,
+    selectedUids: [],
+  };
+  state.bgmOn = true;
+  playBgm(true);
+  gameAudio.play("system.start");
+  gameAudio.play("card.drawHand", { count: 7, side: "player" });
+  render();
+}
+
+function resetBattle() {
+  gameAudio.play("ui.switch");
+  clearBattleTimers(state.battle);
+  clearSpotlight();
+  if (refs.bgm) {
+    refs.bgm.pause();
+    refs.bgm.currentTime = 0;
+  }
+  state.screen = "briefing";
+  state.battle = null;
+  state.selectedHandUid = null;
+  state.hoveredCardId = null;
+  state.pending = null;
+  state.guideOpen = false;
+  state.deckBuilderOpen = false;
+  state.mulligan = {
+    active: false,
+    selectedUids: [],
+  };
+  state.bgmOn = false;
+  render();
+}
+
+function toggleMulliganCard(uid) {
+  const battle = state.battle;
+  if (!battle || !state.mulligan.active) {
+    return;
+  }
+  if (!battle.hands.player.some((instance) => instance.uid === uid)) {
+    return;
+  }
+  const selected = state.mulligan.selectedUids;
+  const index = selected.indexOf(uid);
+  if (index !== -1) {
+    selected.splice(index, 1);
+  } else if (selected.length < MULLIGAN_LIMIT) {
+    selected.push(uid);
+  } else {
+    gameAudio.play("ui.error");
+    return;
+  }
+  gameAudio.play("ui.switch");
+  renderHand();
+  renderMulligan();
+}
+
+function confirmMulligan() {
+  completeMulligan(state.mulligan.selectedUids);
+}
+
+function skipMulligan() {
+  completeMulligan([]);
+}
+
+function completeMulligan(selectedUids = []) {
+  const battle = state.battle;
+  if (!battle || !state.mulligan.active) {
+    return;
+  }
+
+  const selected = selectedUids.slice(0, MULLIGAN_LIMIT);
+  const returned = [];
+  selected.forEach((uid) => {
+    const index = battle.hands.player.findIndex((instance) => instance.uid === uid);
+    if (index === -1) {
+      return;
+    }
+    const [instance] = battle.hands.player.splice(index, 1);
+    returned.push(instance);
+  });
+
+  if (returned.length) {
+    battle.decks.player.push(...returned);
+    drawCards(battle, "player", returned.length);
+    battle.log.push(`美国完成开局调度，置换 ${returned.length} 张手牌。`);
+  } else {
+    battle.log.push("美国保留开局手牌。");
+  }
+
+  state.mulligan = {
+    active: false,
+    selectedUids: [],
+  };
+  state.selectedHandUid = null;
+  clearSpotlight();
+  beginTurnHandoff(battle, null, "player", { opening: true });
+}
+
+function clearBattleTimers(battle) {
+  if (!battle) {
+    return;
+  }
+  window.clearTimeout(battle.aiTimer);
+  window.clearTimeout(battle.turnTimer);
+  battle.aiTimer = null;
+  battle.turnTimer = null;
+  battle.turnTransition = null;
+  battle.aiThinking = false;
+  battle.actionAnimation = null;
+}
+
+function beginTurnHandoff(battle, fromSide, toSide, options = {}) {
+  if (!battle || battle.phase !== "battle") {
+    render();
+    return;
+  }
+
+  clearSpotlight();
+  window.clearTimeout(battle.aiTimer);
+  window.clearTimeout(battle.turnTimer);
+  battle.aiTimer = null;
+  battle.turnTimer = null;
+  battle.aiThinking = false;
+  battle.activeSide = toSide;
+  battle.turnTransition = {
+    fromSide,
+    toSide,
+    opening: Boolean(options.opening),
+    serial: battle.actionSerial,
+  };
+
+  if (!options.opening) {
+    gameAudio.play("ui.switch", { side: toSide });
+  }
+  render();
+
+  battle.turnTimer = window.setTimeout(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    battle.turnTransition = null;
+    resetTurnActions(battle, battle.activeSide);
+    render();
+    if (battle.activeSide === "enemy") {
+      scheduleAi();
+    }
+  }, options.duration || TURN_HANDOFF_MS);
+}
+
+function getSideLabel(side) {
+  if (side === "player") {
+    return "我方";
+  }
+  if (side === "enemy") {
+    return "敌方";
+  }
+  return "停火";
+}
+
+function resetTurnActions(battle, side) {
+  if (!battle || !side) {
+    return;
+  }
+  battle.turnActions ||= {};
+  battle.turnActions[side] = createTurnActionState();
+}
+
+function getTurnActions(battle, side) {
+  battle.turnActions ||= {};
+  battle.turnActions[side] ||= createTurnActionState();
+  return battle.turnActions[side];
+}
+
+function getTurnUiState(battle) {
+  if (!battle) {
+    return { tone: "neutral", eyebrow: "", title: "", detail: "" };
+  }
+  if (battle.phase === "match-over") {
+    const result = battle.matchWinner === "draw" ? "平局" : `${getSideLabel(battle.matchWinner)}胜利`;
+    return {
+      tone: battle.matchWinner || "neutral",
+      eyebrow: "交火结束",
+      title: result,
+      detail: "最终战力结算完成",
+    };
+  }
+  if (battle.turnTransition) {
+    const toSide = battle.turnTransition.toSide;
+    return {
+      tone: toSide || "neutral",
+      eyebrow: battle.turnTransition.opening ? "战斗开始" : "指挥权移交",
+      title: `${getSideLabel(toSide)}回合`,
+      detail: `行动序列 ${battle.turnTransition.serial}`,
+    };
+  }
+  if (battle.aiThinking) {
+    return {
+      tone: "enemy",
+      eyebrow: "敌方回合",
+      title: "敌方研判中",
+      detail: `行动序列 ${battle.actionSerial}`,
+    };
+  }
+  if (battle.activeSide === "player") {
+    return {
+      tone: "player",
+      eyebrow: "当前回合",
+      title: "我方行动",
+      detail: battle.finalActions ? `最终行动剩余 ${battle.finalActions.player}` : `行动序列 ${battle.actionSerial}`,
+    };
+  }
+  if (battle.activeSide === "enemy") {
+    return {
+      tone: "enemy",
+      eyebrow: "当前回合",
+      title: "敌方行动",
+      detail: battle.finalActions ? `最终行动剩余 ${battle.finalActions.enemy}` : `行动序列 ${battle.actionSerial}`,
+    };
+  }
+  return {
+    tone: "neutral",
+    eyebrow: "等待结算",
+    title: "停火",
+    detail: "战场状态同步中",
+  };
+}
+
+function createBattle() {
+  const playerFaction = state.playerFaction;
+  const enemyFaction = FACTION_PAIR[playerFaction] || "russia";
+  const battle = {
+    round: 1,
+    actionSerial: 1,
+    phase: "battle",
+    activeSide: "player",
+    factions: {
+      player: playerFaction,
+      enemy: enemyFaction,
+    },
+    aiDifficulty: state.aiDifficulty,
+    passed: {
+      player: false,
+      enemy: false,
+    },
+    turnActions: {
+      player: createTurnActionState(),
+      enemy: createTurnActionState(),
+    },
+    intel: {
+      player: 0,
+      enemy: 0,
+    },
+    scores: {
+      player: 0,
+      enemy: 0,
+    },
+    decks: {
+      player: createDeckFromList(state.playerDeck),
+      enemy: createDeckFromList(getStarterDeckForFaction(enemyFaction)),
+    },
+    hands: {
+      player: [],
+      enemy: [],
+    },
+    board: {
+      player: createEmptyLines(() => []),
+      enemy: createEmptyLines(() => []),
+    },
+    graves: {
+      player: [],
+      enemy: [],
+    },
+    guards: {
+      player: [],
+      enemy: [],
+    },
+    intelDenials: {
+      player: [],
+      enemy: [],
+    },
+    fireBoost: {
+      player: 0,
+      enemy: 0,
+    },
+    log: [
+      "V4.3 规则：单位战力同时代表生命值和摧毁得分价值，先达到 50 点战场得分者获胜。",
+      "导弹、战斗机、轰炸机均为驻场单位，拥有战力、可被摧毁并提供得分。",
+      "每回合可打出一张手牌，并可选择一个场上单位行动：隐蔽单位主动翻开，或已暴露单位再次发动技能。",
+    ],
+    aiTimer: null,
+    turnTimer: null,
+    turnTransition: null,
+    aiThinking: false,
+    actionAnimation: null,
+    matchWinner: null,
+    supplyExhausted: false,
+    finalActions: null,
+    finalTriggeredAtAction: null,
+  };
+
+  drawCards(battle, "player", 7, { triggerExhaustion: false, silent: true });
+  drawCards(battle, "enemy", 7, { triggerExhaustion: false, silent: true });
+  return battle;
+}
+
+function createDeckFromList(cardIds) {
+  return shuffleInstances(cardIds.map((cardId) => createInstance(cardId)));
+}
+
+function shuffleInstances(items) {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
+}
+
+function createInstance(cardId) {
+  return {
+    uid: `card-${++state.uidCounter}`,
+    cardId,
+    damage: 0,
+    exposed: false,
+    exposedAtAction: null,
+    hidden: false,
+    shield: false,
+    fortified: false,
+    decoy: false,
+    suppressed: false,
+    airspaceControl: false,
+    bonus: 0,
+    markedDamageBonus: 0,
+    calledAction: null,
+    assistAction: null,
+    interceptAction: null,
+    lastDamagedBy: null,
+    flipAnimation: null,
+    flipAnimationId: 0,
+  };
+}
+
+function createTurnActionState() {
+  return {
+    handPlayed: false,
+    hiddenActivated: false,
+  };
+}
+
+function render() {
+  refs.app.dataset.screen = state.screen;
+  refs.app.dataset.pending = state.pending ? "true" : "false";
+  refs.app.dataset.activeSide = state.battle?.activeSide || "none";
+  refs.app.dataset.turnLocked = state.battle?.turnTransition || state.battle?.aiThinking || state.battle?.actionAnimation ? "true" : "false";
+  refs.app.dataset.mulligan = state.mulligan.active ? "true" : "false";
+  refs.briefing.hidden = state.screen !== "briefing";
+  renderDeckStatus();
+  renderBoard();
+  renderHand();
+  renderScore();
+  renderTurnOverlay();
+  renderLog();
+  renderInspector();
+  renderSpotlight();
+  renderIntent();
+  renderMulligan();
+  renderCodex();
+  renderGuide();
+  renderDeckBuilder();
+}
+
+function renderBoard() {
+  const battle = state.battle;
+  if (!battle) {
+    refs.board.innerHTML = renderEmptyBoard();
+    return;
+  }
+
+  const enemyRows = lineOrders.enemy.map((lineId) => renderLine("enemy", lineId)).join("");
+  const playerRows = lineOrders.player.map((lineId) => renderLine("player", lineId)).join("");
+  refs.board.innerHTML = `${enemyRows}<div class="no-mans-land">NO MAN'S LAND</div>${playerRows}`;
+}
+
+function renderEmptyBoard() {
+  const rows = [
+    ...lineOrders.enemy.map((lineId) => renderEmptyLine("enemy", lineId)),
+    `<div class="no-mans-land">NO MAN'S LAND</div>`,
+    ...lineOrders.player.map((lineId) => renderEmptyLine("player", lineId)),
+  ];
+  return rows.join("");
+}
+
+function renderEmptyLine(side, lineId) {
+  const line = getLine(lineId);
+  return `
+    <section class="battle-line battle-line--${side}" data-side="${side}" data-row="${lineId}">
+      <div
+        class="battle-line__label battle-line__label--icon"
+        style="--lane-icon:url('${getLineIconPath(lineId)}')"
+        aria-label="${side === "player" ? "我方" : "敌方"}${line.name}"
+      ></div>
+      <div class="battle-line__cards"><span class="battle-line__empty">${line.role}</span></div>
+      <div class="battle-line__score" style="--lane-icon:url('${getLineIconPath(lineId)}')" aria-label="${line.label} 0">
+        <span></span>
+        <strong>0</strong>
+      </div>
+    </section>
+  `;
+}
+
+function renderLine(side, lineId) {
+  const battle = state.battle;
+  const line = getLine(lineId);
+  const cards = battle.board[side][lineId];
+  const score = getLineScore(battle, side, lineId);
+  const canDrop = isSelectedUnitAllowedOn(side, lineId);
+  const active = battle.activeSide === side && !battle.passed[side];
+  const unsupported = lineId === "support" && isSupportUncovered(battle, side);
+  return `
+    <section
+      class="battle-line battle-line--${side} ${active ? "is-active" : ""} ${canDrop ? "is-drop-valid" : ""} ${unsupported ? "is-uncovered" : ""}"
+      data-side="${side}"
+      data-row="${lineId}"
+    >
+      <div
+        class="battle-line__label battle-line__label--icon"
+        style="--lane-icon:url('${getLineIconPath(lineId)}')"
+        aria-label="${side === "player" ? "我方" : "敌方"}${line.name}"
+      ></div>
+      <div class="battle-line__cards">
+        ${
+          cards.length
+            ? cards.map((instance) => renderBoardCard(instance, side, lineId)).join("")
+            : `<span class="battle-line__empty">待部署</span>`
+        }
+      </div>
+      <div class="battle-line__score" style="--lane-icon:url('${getLineIconPath(lineId)}')" aria-label="${line.label} ${score}">
+        <span>${unsupported ? "失去掩护" : ""}</span>
+        <strong>${score}</strong>
+      </div>
+    </section>
+  `;
+}
+
+function renderBoardCard(instance, side, lineId) {
+  const card = getCard(instance.cardId);
+  const power = getCurrentPower(instance);
+  const targetable = isPendingTarget(side, instance.uid);
+  const concealed = instance.hidden;
+  const inspectable = !concealed || side === "player";
+  const artPath = concealed ? "./assets/ui/card-back-frame.png" : getCardArtPath(card);
+  const fireVideoPath = concealed ? "" : getCardFireVideoPath(card);
+  const title = concealed ? "" : card.name;
+  const tags = concealed ? "" : card.tags.slice(0, 2).join(" / ");
+  const flipClass = instance.flipAnimation ? `is-flipping-${instance.flipAnimation}` : "";
+  const generated = hasGeneratedCardImages(card);
+  const modernClass = !concealed && (isModernUnitCard(card) || generated) ? "board-card--modern" : "";
+  const generatedClass = !concealed && generated ? "board-card--generated-card" : "";
+  const actionAnimation = state.battle?.actionAnimation;
+  const firingClass =
+    !concealed && ["cardDeployVideo", "cardFireVideo"].includes(actionAnimation?.kind) && actionAnimation.sourceUid === instance.uid ? "is-video-firing" : "";
+  const stateTitle = concealed
+    ? side === "player"
+      ? `${card.name}（隐蔽部署，悬停查看详情）`
+      : "敌方隐蔽单位"
+    : targetable
+      ? `${card.name}（可选目标）`
+      : card.name;
+  return `
+    <article
+      class="board-card ${modernClass} ${generatedClass} ${firingClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
+      data-board-card="${instance.uid}"
+      data-side="${side}"
+      ${inspectable ? `data-card-id="${card.id}"` : ""}
+      aria-label="${escapeHtml(stateTitle)}"
+      title="${escapeHtml(stateTitle)}"
+      style="--accent:${getFaction(card.faction).accent};--card-art:${artPath ? `url('${artPath}')` : "none"};--art-position:${getCardArtPosition(card.id)}"
+    >
+      <div class="board-card__power">${concealed ? "" : power}</div>
+      ${fireVideoPath ? `<video class="board-card__fire-video" src="${escapeHtml(fireVideoPath)}" playsinline preload="auto"></video>` : ""}
+      <div class="board-card__art ${artPath ? "" : "is-empty"}" data-glyph="${escapeHtml(getPrimaryGlyph(card))}">
+        ${artPath ? "" : `<span>${escapeHtml(TYPE_LABELS[card.type])}</span>`}
+      </div>
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(tags)}</span>
+      <p class="board-card__effect">${concealed ? "" : escapeHtml(card.effect)}</p>
+      <div class="board-card__states">
+        ${!concealed && instance.hidden ? "<i>Hidden</i>" : ""}
+        ${!concealed && instance.exposed ? "<i>Exposed</i>" : ""}
+        ${!concealed && instance.shield ? "<i>Smoke</i>" : ""}
+        ${!concealed && instance.fortified ? "<i>Fortified</i>" : ""}
+        ${!concealed && instance.decoy ? "<i>Decoy</i>" : ""}
+        ${!concealed && instance.suppressed ? "<i>Suppressed</i>" : ""}
+        ${!concealed && instance.airspaceControl ? "<i>Airspace</i>" : ""}
+        ${!concealed && instance.bonus > 0 ? `<i>Bonus ${instance.bonus}</i>` : ""}
+        ${!concealed && instance.markedDamageBonus > 0 ? `<i>Marked +${instance.markedDamageBonus}</i>` : ""}
+        ${!concealed && instance.damage > 0 ? `<i>Damage ${instance.damage}</i>` : ""}
+      </div>
+    </article>
+  `;
+}
+function renderHand() {
+  const battle = state.battle;
+  if (!battle) {
+    refs.hand.innerHTML = "";
+    return;
+  }
+
+  refs.hand.innerHTML = battle.hands.player
+    .map((instance, index) =>
+      renderHandCard(instance, {
+        selected: state.selectedHandUid === instance.uid,
+        mulliganSelected: state.mulligan.active && state.mulligan.selectedUids.includes(instance.uid),
+        showDeployActions: !state.mulligan.active,
+        index,
+        total: battle.hands.player.length,
+      }),
+    )
+    .join("");
+}
+
+function renderHandCard(instance, options = {}) {
+  const card = getCard(instance.cardId);
+  return renderWarCard(card, {
+    ...options,
+    handUid: instance.uid,
+    canConceal: canConcealCardFromHand("player", card),
+  });
+}
+
+function renderPreviewCard(card) {
+  return renderWarCard(card, { preview: true });
+}
+
+function renderScore() {
+  const battle = state.battle;
+  if (!battle) {
+    refs.score.innerHTML = "";
+    refs.pass.disabled = true;
+    refs.endTurn.hidden = true;
+    refs.bgmButton.hidden = true;
+    refs.codexButton.hidden = true;
+    refs.reset.hidden = true;
+    return;
+  }
+
+  const playerFaction = getFaction(battle.factions.player);
+  const enemyFaction = getFaction(battle.factions.enemy);
+  const turn = getTurnUiState(battle);
+  refs.score.innerHTML = `
+    ${renderCommanderPanel(battle, "enemy", enemyFaction)}
+    <div class="enemy-hand-strip" aria-label="敌方手牌">
+      ${battle.hands.enemy.map((_, index) => `<span class="enemy-hand-back" style="--i:${index}"></span>`).join("")}
+    </div>
+    ${renderDeckPanel(battle, "enemy")}
+    <div class="round-plaque round-plaque--${turn.tone} ${battle.turnTransition ? "is-transitioning" : ""} ${battle.aiThinking ? "is-thinking" : ""}">
+      <span>${escapeHtml(turn.eyebrow)}</span>
+      <strong>${escapeHtml(turn.title)}</strong>
+      <div class="round-plaque__scores">
+        <i>${getTotalScore(battle, "player")}</i>
+        <em>:</em>
+        <i>${getTotalScore(battle, "enemy")}</i>
+      </div>
+      <small>${escapeHtml(turn.detail)}</small>
+    </div>
+    ${renderCommanderPanel(battle, "player", playerFaction)}
+    ${renderDeckPanel(battle, "player")}
+  `;
+  refs.pass.disabled = false;
+  refs.pass.textContent = "退出";
+  refs.endTurn.hidden = false;
+  refs.endTurn.disabled = !canPlayerEndTurn();
+  refs.endTurn.textContent = battle.activeSide === "player" && !battle.turnTransition ? "回合结束" : "等待对方";
+  refs.bgmButton.hidden = false;
+  refs.bgmButton.classList.toggle("is-active", state.bgmOn);
+  refs.bgmButton.textContent = state.bgmOn ? "🔊" : "🔇";
+  refs.bgmButton.setAttribute("aria-label", state.bgmOn ? "关闭音乐" : "开启音乐");
+  refs.bgmButton.setAttribute("title", state.bgmOn ? "关闭音乐" : "开启音乐");
+  refs.codexButton.hidden = true;
+  refs.reset.hidden = true;
+}
+
+function renderTurnOverlay() {
+  const battle = state.battle;
+  if (!refs.turnOverlay || !battle || state.screen !== "battle" || (!battle.turnTransition && !battle.aiThinking)) {
+    if (refs.turnOverlay) {
+      refs.turnOverlay.hidden = true;
+      refs.turnOverlay.innerHTML = "";
+    }
+    return;
+  }
+
+  const turn = getTurnUiState(battle);
+  refs.turnOverlay.hidden = false;
+  refs.turnOverlay.className = `turn-overlay turn-overlay--${turn.tone} ${battle.aiThinking ? "is-thinking" : "is-handoff"}`;
+  refs.turnOverlay.innerHTML = `
+    <div class="turn-overlay__band">
+      <span>${escapeHtml(turn.eyebrow)}</span>
+      <strong>${escapeHtml(turn.title)}</strong>
+      <small>${escapeHtml(turn.detail)}</small>
+    </div>
+  `;
+}
+
+function renderMulligan() {
+  if (!refs.mulligan) {
+    return;
+  }
+  if (!state.mulligan.active || !state.battle || state.screen !== "battle") {
+    refs.mulligan.hidden = true;
+    refs.mulligan.innerHTML = "";
+    return;
+  }
+  const selectedCount = state.mulligan.selectedUids.length;
+  refs.mulligan.hidden = false;
+  refs.mulligan.innerHTML = `
+    <div class="mulligan-panel">
+      <span>开局调度</span>
+      <strong>选择最多 ${MULLIGAN_LIMIT} 张手牌置换</strong>
+      <p>已选择 ${selectedCount}/${MULLIGAN_LIMIT}。确认后会抽取同等数量的新手牌，也可以直接放弃调度。</p>
+      <div class="mulligan-panel__actions">
+        <button type="button" class="small-button" data-action="confirm-mulligan" ${selectedCount ? "" : "disabled"}>确认调度</button>
+        <button type="button" class="primary-button" data-action="skip-mulligan">保留手牌</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCommanderPanel(battle, side, faction) {
+  const profile = COMMANDER_PROFILES[side];
+  const turnActive = battle.activeSide === side && battle.phase === "battle";
+  const status = battle.phase === "match-over" ? "结算" : turnActive ? (battle.aiThinking && side === "enemy" ? "研判" : "行动") : "待命";
+  return `
+    <section class="commander-hud commander-hud--${side} ${turnActive ? "is-active-turn" : ""}" style="--accent:${faction.accent}">
+      <div class="commander-hud__portrait commander-hud__portrait--${side}" aria-hidden="true"><span>${escapeHtml(profile.initial)}</span></div>
+      <div class="commander-hud__body">
+        <span class="commander-hud__turn">${escapeHtml(status)}</span>
+        <strong>${escapeHtml(profile.name)}</strong>
+        <small><b>${escapeHtml(profile.rank)}</b><em>${escapeHtml(faction.shortName)}</em></small>
+      </div>
+    </section>
+  `;
+}
+
+function renderWarCard(card, options = {}) {
+  const faction = getFaction(card.faction);
+  const typeLabel = TYPE_LABELS[card.type];
+  const line = card.line === "instant" ? "即时结算" : (card.lines || [card.line]).map((lineId) => getLine(lineId).label).join("/");
+  const glyph = getPrimaryGlyph(card);
+  const spread = (options.total || 1) > 8 ? 1.35 : 1.72;
+  const fan = ((options.index || 0) - ((options.total || 1) - 1) / 2) * spread;
+  const generated = hasGeneratedCardImages(card);
+  const detailArtPath = options.preview ? getCardDetailImagePath(card) : "";
+  const artPath = detailArtPath || getCardArtPath(card);
+  const modern = isModernUnitCard(card);
+  const primaryTag = card.tags[0] || typeLabel;
+  const metaItems = card.type === "unit" ? (modern ? [getDeployLabel(card)] : [getDeployLabel(card), primaryTag]) : [typeLabel, line];
+  const factionMarkPath = getFactionMarkPath(card.faction);
+  const classes = [
+    "war-card",
+    `war-card--${card.type}`,
+    `war-card--${card.rarity}`,
+    `war-card--faction-${card.faction}`,
+    modern ? "war-card--modern" : "",
+    generated ? "war-card--generated-card" : "",
+    detailArtPath ? "war-card--generated-detail" : "",
+    options.preview ? "war-card--detailed" : "war-card--simple",
+    options.preview ? "war-card--preview" : "",
+    options.selected ? "is-selected" : "",
+    options.mulliganSelected ? "is-mulligan-selected" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const showPowerBadge = card.type === "unit" || !generated;
+  const powerBadge = card.type === "unit" ? card.power : card.type === "tactic" ? "T" : "S";
+  const renderedTags = card.tags.slice(0, 3).map((tag) => {
+    const tagBadge = getTagBadgePath(tag);
+    const style = tagBadge ? ` style="--tag-art:url('${tagBadge}')"` : "";
+    return `<i class="${tagBadge ? "has-art" : ""}"${style} aria-label="${escapeHtml(tag)}"><span>${escapeHtml(tag)}</span></i>`;
+  }).join("");
+  const extraAttrs = options.handUid ? `data-hand-card="${options.handUid}" draggable="true"` : "";
+  const deployActions =
+    options.handUid && card.type === "unit" && options.showDeployActions !== false
+      ? `
+        <div class="war-card__deploy-actions">
+          <button type="button" data-action="play-open:${options.handUid}">正面</button>
+          <button type="button" data-action="play-hidden:${options.handUid}" ${options.canConceal ? "" : "disabled"}>隐蔽</button>
+        </div>
+      `
+      : "";
+  return `
+    <article
+      class="${classes}"
+      ${extraAttrs}
+      data-card-id="${card.id}"
+      title="${escapeHtml(card.effect)}"
+      style="--accent:${faction.accent};--fan:${fan.toFixed(2)}deg;--hand-index:${(options.index || 0) + 1};--card-art:${artPath ? `url('${artPath}')` : "none"};--art-position:${getCardArtPosition(card.id)}"
+    >
+        ${showPowerBadge ? `
+          <div class="war-card__power">
+            <strong>${powerBadge}</strong>
+          </div>
+        ` : ""}
+      <div class="war-card__titlebar">
+        <strong>${escapeHtml(card.name)}</strong>
+        <div class="war-card__meta">
+          ${metaItems.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+        </div>
+      </div>
+      <div class="war-card__art ${artPath ? "" : "is-empty"}" data-glyph="${escapeHtml(glyph)}">
+        ${artPath ? "" : "<span>插画待补</span>"}
+      </div>
+      <div class="war-card__tags">
+        ${renderedTags}
+      </div>
+      <div class="war-card__body">
+        ${renderEffectParagraphs(card.effect, card)}
+      </div>
+      <div class="war-card__footer">
+        <span class="war-card__stars" aria-label="${escapeHtml(RARITY_LABELS[card.rarity] || card.rarity)}">${renderRarityStars(card)}</span>
+        <em class="war-card__faction-mark" ${factionMarkPath ? `style="--faction-mark:url('${factionMarkPath}')"` : ""} aria-label="${escapeHtml(faction.shortName)}">${escapeHtml(card.specialization)}</em>
+      </div>
+      ${deployActions}
+    </article>
+  `;
+}
+
+function renderEffectParagraphs(effect, card) {
+  return splitEffectText(effect)
+    .map((part) => renderEffectPanel(part, card))
+    .join("");
+}
+
+function renderEffectPanel(part, card) {
+  const match = part.match(/^【([^】]+)】：(.+)$/);
+  const title = match ? match[1] : "";
+  const body = match ? match[2] : part;
+  const glyph = getSkillGlyph(title || body, card);
+  const iconPath = getSkillIconPath(title || body, card);
+  const iconStyle = iconPath ? ` style="--skill-icon:url('${iconPath}')"` : "";
+  return `
+    <p class="war-card__skill">
+      <span class="war-card__skill-icon" data-glyph="${escapeHtml(glyph)}"${iconStyle} aria-hidden="true"></span>
+      <span class="war-card__skill-copy">${title ? `<strong>【${escapeHtml(title)}】：</strong>` : ""}${escapeHtml(body)}</span>
+    </p>
+  `;
+}
+
+function splitEffectText(effect) {
+  const text = String(effect || "").trim();
+  if (!text) {
+    return [];
+  }
+  const skillStarts = Array.from(text.matchAll(/【[^】]+】：/g), (match) => match.index).filter((index) => Number.isFinite(index));
+  if (skillStarts.length <= 1) {
+    return [text];
+  }
+  return skillStarts
+    .map((start, index) => text.slice(start, skillStarts[index + 1] ?? text.length).trim())
+    .filter(Boolean);
+}
+
+function getDeployLabel(card) {
+  if (card.line === "instant") {
+    return "即时";
+  }
+  const lines = getDeployLines(card).map((lineId) => getLine(lineId).name);
+  return lines.join("/");
+}
+
+function renderDeckPanel(battle, side) {
+  const deckCount = battle.decks[side].length;
+  const graveCount = battle.graves[side].length;
+  return `
+    <section class="deck-hud deck-hud--${side}" aria-label="${side === "player" ? "我方" : "敌方"}牌库与弃牌">
+      ${renderPile("deck", "牌库", deckCount)}
+      ${renderPile("grave", "弃牌", graveCount)}
+    </section>
+  `;
+}
+
+function renderPile(kind, label, count) {
+  const layers = Math.max(1, Math.min(4, Math.ceil(count / 8)));
+  return `
+    <div class="deck-pile deck-pile--${kind}" data-pile="${kind}" style="--pile-count:${layers}">
+      <span class="deck-pile__cards" aria-hidden="true">
+        ${Array.from({ length: layers }, (_, index) => `<i style="--i:${index}"></i>`).join("")}
+      </span>
+      <span>${label}</span>
+      <strong>${count}</strong>
+    </div>
+  `;
+}
+
+function renderLog() {
+  const battle = state.battle;
+  const items = battle?.log.slice().reverse() || [
+    "正确来源：/Users/michaelwu/Documents/战区卡牌游戏项目/战争卡牌游戏。",
+    "本原型使用 V4.3 双层战场机制与美俄首发 30 张预组。",
+  ];
+  if (refs.logPanel) {
+    refs.logPanel.hidden = state.screen !== "battle";
+  }
+  refs.logPanel?.classList.toggle("is-collapsed", state.logCollapsed);
+  refs.logToggle?.setAttribute("aria-expanded", String(!state.logCollapsed));
+  refs.log.innerHTML = items.map((item) => `<div>${escapeHtml(item)}</div>`).join("");
+}
+
+function renderInspector() {
+  const battle = state.battle;
+  const selected = battle?.hands.player.find((item) => item.uid === state.selectedHandUid);
+  const cardId = selected?.cardId || state.hoveredCardId;
+  const card = cardId ? getCard(cardId) : getCard("us_reaper");
+  refs.inspector.innerHTML = `
+    <div class="inspector-card" style="--accent:${getFaction(card.faction).accent}">
+      <span>${escapeHtml(TYPE_LABELS[card.type])} / ${escapeHtml(RARITY_LABELS[card.rarity])}</span>
+      <strong>${escapeHtml(card.name)}</strong>
+      <p>${escapeHtml(card.effect)}</p>
+      <div>
+        ${card.tags.map((tag) => `<i>${escapeHtml(tag)}</i>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderSpotlight() {
+  if (!state.hoveredCardId || state.screen !== "battle" || state.pending || state.draggingUid || state.codexOpen || state.guideOpen || state.deckBuilderOpen || (!canPlayerAct() && !state.mulligan.active)) {
+    clearSpotlight();
+    return;
+  }
+  if (!isSpotlightSourceHovered(state.hoveredCardId)) {
+    clearSpotlight();
+    return;
+  }
+  const card = getCard(state.hoveredCardId);
+  refs.spotlight.hidden = false;
+  refs.spotlight.innerHTML = renderPreviewCard(card);
+}
+
+function shouldConcealEnemyInfo(target) {
+  return Boolean(target?.side === "enemy" && target.instance?.hidden);
+}
+
+function renderIntentTargetButton(target) {
+  const concealed = shouldConcealEnemyInfo(target);
+  const targetCard = getCard(target.instance.cardId);
+  const side = target.side === "player" ? "我方" : "敌方";
+  const power = getCurrentPower(target.instance);
+  const artPath = concealed ? "./assets/ui/card-back-frame.png" : getCardArtPath(targetCard);
+  const targetLabel = concealed ? "敌方隐蔽单位" : `${side}${targetCard.name}`;
+  const cardClass = concealed ? "intent-target__card intent-target__card--back" : "intent-target__card";
+
+  return `
+    <button
+      class="intent-target ${concealed ? "intent-target--concealed" : ""}"
+      type="button"
+      data-board-card="${target.uid}"
+      data-side="${target.side}"
+      aria-label="${escapeHtml(targetLabel)}"
+      title="${escapeHtml(concealed ? "" : targetLabel)}"
+    >
+      <span
+        class="${cardClass}"
+        style="--mini-art:${artPath ? `url('${artPath}')` : "none"};--accent:${getFaction(targetCard.faction).accent}"
+        aria-hidden="true"
+      >
+        ${concealed ? "" : `<i>${power}</i><b>${escapeHtml(targetCard.name)}</b>`}
+      </span>
+      ${concealed ? "" : `<span>${escapeHtml(side)} / ${escapeHtml(getLine(target.lineId).name)}</span>`}
+    </button>
+  `;
+}
+
+function renderIntent() {
+  if (!state.pending) {
+    refs.intent.hidden = true;
+    refs.intent.innerHTML = "";
+    return;
+  }
+
+  if (state.pending.kind === "supplyChoice") {
+    renderSupplyChoice();
+    return;
+  }
+
+  const card = getCard(state.pending.cardId);
+  const targetButtons = state.pending.targets.map((target) => renderIntentTargetButton(target)).join("");
+  refs.intent.hidden = false;
+  refs.intent.innerHTML = `
+    <div>
+      <span>选择目标 · ${state.pending.targets.length}</span>
+      <strong>${escapeHtml(card.name)}</strong>
+      <p>${escapeHtml(getIntentCopy(card, state.pending))}</p>
+      <div class="intent-targets">${targetButtons}</div>
+    </div>
+    <button type="button" data-action="cancel">取消</button>
+  `;
+}
+
+function renderSupplyChoice() {
+  const pending = state.pending;
+  const sourceCard = getCard(pending.cardId);
+  const choiceCards = pending.drawn
+    .map((instance) => {
+      const card = getCard(instance.cardId);
+      return `
+        <button class="supply-choice-card" type="button" data-action="keep-supply:${instance.uid}">
+          ${renderWarCard(card, { preview: true })}
+        </button>
+      `;
+    })
+    .join("");
+  refs.intent.hidden = false;
+  refs.intent.innerHTML = `
+    <div>
+      <span>补给调度 · 保留 ${pending.keepAmount}/${pending.drawn.length}</span>
+      <strong>${escapeHtml(sourceCard.name)}</strong>
+      <p>选择一张加入手牌，其余放回牌库底。</p>
+      <div class="supply-choice-grid">${choiceCards}</div>
+    </div>
+  `;
+}
+
+function renderCodex() {
+  refs.codex.hidden = !state.codexOpen;
+  if (!state.codexOpen) {
+    refs.codex.innerHTML = "";
+    return;
+  }
+
+  const faction = getFaction(state.codexFaction);
+  const cards = Object.values(CARD_LIBRARY)
+    .filter((card) => card.faction === state.codexFaction)
+    .sort((left, right) => {
+      const typeOrder = { unit: 0, tactic: 1, strategy: 2 };
+      return typeOrder[left.type] - typeOrder[right.type] || (left.power || 99) - (right.power || 99) || left.name.localeCompare(right.name, "zh-CN");
+    });
+
+  refs.codex.innerHTML = `
+    <div class="codex-panel" style="--accent:${faction.accent}">
+      <header class="codex-panel__header">
+        <div>
+          <span>牌组预览</span>
+          <strong>${escapeHtml(faction.name)}</strong>
+        </div>
+        <nav class="codex-tabs" aria-label="阵营筛选">
+          ${Object.values(FACTIONS)
+            .map(
+              (item) => `
+                <button
+                  type="button"
+                  class="${item.id === state.codexFaction ? "is-active" : ""}"
+                  data-action="codex:${item.id}"
+                  style="--accent:${item.accent}"
+                >${escapeHtml(item.shortName)}</button>
+              `,
+            )
+            .join("")}
+        </nav>
+        <button class="codex-close" type="button" data-action="close-codex" aria-label="关闭牌组预览">×</button>
+      </header>
+      <div class="codex-grid">
+        ${cards.map((card) => renderCodexCard(card)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderCodexCard(card) {
+  return renderWarCard(card, { preview: true });
+}
+
+function renderGuide() {
+  if (!refs.guide) {
+    return;
+  }
+  refs.guide.hidden = !state.guideOpen;
+  if (!state.guideOpen) {
+    refs.guide.innerHTML = "";
+    return;
+  }
+
+  const steps = [
+    {
+      index: "01",
+      title: "胜利目标",
+      body: "摧毁敌方单位即可按其基础战力得分，率先达到 50 分获胜。若牌库耗尽，会进入终局行动并比较得分。",
+    },
+    {
+      index: "02",
+      title: "双层战场",
+      body: "前线负责步兵、装甲、直升机接敌；支援区负责榴弹炮、火箭炮、导弹、防空、无人机和航空兵。",
+    },
+    {
+      index: "03",
+      title: "隐蔽与暴露",
+      body: "单位可以正面或隐蔽部署。每回合除了打出一张手牌，还能选择一个场上单位行动：隐蔽单位主动翻开，或已暴露单位再次发动技能。",
+    },
+    {
+      index: "04",
+      title: "火力链",
+      body: "侦察单位先翻开目标，远火、导弹、战斗机和轰炸机作为驻场单位兑现伤害。防空单位会拦截空中和导弹威胁。",
+    },
+    {
+      index: "05",
+      title: "首局建议",
+      body: "先部署前线地面单位稳住战线，再隐藏支援火力；不要急着暴露高价值单位，等侦察链准备好再集中打击。",
+    },
+  ];
+
+  refs.guide.innerHTML = `
+    <div class="guide-panel">
+      <header class="guide-panel__header">
+        <div>
+          <span>FIELD MANUAL</span>
+          <strong>新玩家作战简报</strong>
+        </div>
+        <button class="codex-close" type="button" data-action="close-guide" aria-label="关闭玩法介绍">×</button>
+      </header>
+      <div class="guide-grid">
+        ${steps
+          .map(
+            (step) => `
+              <section class="guide-step">
+                <small>${escapeHtml(step.index)}</small>
+                <strong>${escapeHtml(step.title)}</strong>
+                <p>${escapeHtml(step.body)}</p>
+              </section>
+            `,
+          )
+          .join("")}
+      </div>
+      <footer class="guide-panel__footer">
+        <button class="small-button" type="button" data-action="open-deck-builder">调整卡组</button>
+        <button class="primary-button" type="button" data-action="start">开始作战</button>
+      </footer>
+    </div>
+  `;
+}
+
+function renderDeckStatus() {
+  if (!refs.deckStatus) {
+    return;
+  }
+  if (state.screen !== "briefing") {
+    refs.deckStatus.innerHTML = "";
+    return;
+  }
+
+  const validation = validateDeck(state.playerDeck, state.playerFaction);
+  const faction = getFaction(state.playerFaction);
+  refs.deckStatus.innerHTML = `
+    <div class="deck-status__panel ${validation.valid ? "is-valid" : "is-invalid"}" style="--accent:${faction.accent}">
+      <div>
+        <span>当前卡组</span>
+        <strong>${escapeHtml(faction.shortName)}编成 · ${validation.stats.total}/${DECK_RULES.size}</strong>
+      </div>
+      <div class="deck-status__chips">
+        ${renderDeckMetric("单位", `${validation.stats.units}/${DECK_RULES.unitMin}-${DECK_RULES.unitMax}`, validation.stats.units >= DECK_RULES.unitMin && validation.stats.units <= DECK_RULES.unitMax)}
+        ${renderDeckMetric("战术", `${validation.stats.tactics}/${DECK_RULES.tacticMin}`, validation.stats.tactics >= DECK_RULES.tacticMin && validation.stats.tactics <= DECK_RULES.tacticMax)}
+        ${renderDeckMetric("前线", `${validation.stats.frontline}/${DECK_RULES.frontlineMin}+`, validation.stats.frontline >= DECK_RULES.frontlineMin)}
+        ${renderDeckMetric("支援", `${validation.stats.support}/${DECK_RULES.supportMin}+`, validation.stats.support >= DECK_RULES.supportMin)}
+        ${renderDeckMetric("侦察", `${validation.stats.recon}/${DECK_RULES.reconMin}+`, validation.stats.recon >= DECK_RULES.reconMin)}
+        ${renderDeckMetric("防空", `${validation.stats.airDefense}/${DECK_RULES.airDefenseMin}+`, validation.stats.airDefense >= DECK_RULES.airDefenseMin)}
+      </div>
+      <button class="small-button" type="button" data-action="open-deck-builder">${validation.valid ? "编辑卡组" : "修正卡组"}</button>
+    </div>
+  `;
+}
+
+function renderDeckMetric(label, value, valid) {
+  return `<i class="${valid ? "is-valid" : "is-invalid"}"><span>${escapeHtml(label)}</span>${escapeHtml(value)}</i>`;
+}
+
+function renderDeckBuilder() {
+  if (!refs.deckBuilder) {
+    return;
+  }
+  refs.deckBuilder.hidden = !state.deckBuilderOpen;
+  if (!state.deckBuilderOpen) {
+    refs.deckBuilder.innerHTML = "";
+    return;
+  }
+
+  const faction = getFaction(state.playerFaction);
+  const validation = validateDeck(state.playerDeck, state.playerFaction);
+  const cards = getFactionCards(state.playerFaction);
+  const issueList = validation.errors.length
+    ? validation.errors.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
+    : "<li>卡组满足当前组卡限制，可以直接进入战场。</li>";
+
+  refs.deckBuilder.innerHTML = `
+    <div class="deck-builder-panel" style="--accent:${faction.accent}">
+      <header class="deck-builder-panel__header">
+        <div>
+          <span>ARMORY / DECK BUILDING</span>
+          <strong>自由组卡</strong>
+        </div>
+        <nav class="codex-tabs" aria-label="玩家阵营">
+          ${Object.values(FACTIONS)
+            .map(
+              (item) => `
+                <button
+                  type="button"
+                  class="${item.id === state.playerFaction ? "is-active" : ""}"
+                  data-action="deck-faction:${item.id}"
+                  style="--accent:${item.accent}"
+                >${escapeHtml(item.shortName)}</button>
+              `,
+            )
+            .join("")}
+        </nav>
+        <button class="codex-close" type="button" data-action="close-deck-builder" aria-label="关闭自由组卡">×</button>
+      </header>
+      <div class="deck-builder-layout">
+        <aside class="deck-builder-summary">
+          <section class="deck-builder-count ${validation.valid ? "is-valid" : "is-invalid"}">
+            <span>当前编成</span>
+            <strong>${validation.stats.total}/${DECK_RULES.size}</strong>
+            <p>${escapeHtml(faction.doctrine)}</p>
+          </section>
+          <section class="deck-builder-rules">
+            <strong>组卡限制</strong>
+            <ul>
+              <li>总数必须为 ${DECK_RULES.size} 张。</li>
+              <li>驻场单位 ${DECK_RULES.unitMin} 张，功能战术 ${DECK_RULES.tacticMin} 张；导弹、战斗机、轰炸机都算驻场单位。</li>
+              <li>前线可部署单位至少 ${DECK_RULES.frontlineMin} 张，支援可部署单位至少 ${DECK_RULES.supportMin} 张。</li>
+              <li>侦察/暴露链至少 ${DECK_RULES.reconMin} 张，防空拦截至少 ${DECK_RULES.airDefenseMin} 张。</li>
+              <li>1星/2星最多 3 张，3星/4星最多 2 张，5星最多 1 张。</li>
+            </ul>
+          </section>
+          <section class="deck-builder-issues">
+            <strong>${validation.valid ? "校验通过" : "需要修正"}</strong>
+            <ul>${issueList}</ul>
+          </section>
+          <div class="deck-builder-actions">
+            <button class="small-button" type="button" data-action="deck-reset">恢复默认</button>
+            <button class="small-button" type="button" data-action="deck-autofill">自动补齐</button>
+            <button class="small-button" type="button" data-action="deck-clear">清空</button>
+            <button class="primary-button" type="button" data-action="start" ${validation.valid ? "" : "disabled"}>使用此卡组作战</button>
+          </div>
+        </aside>
+        <section class="deck-builder-pool" aria-label="可选卡牌">
+          ${cards.map((card) => renderDeckBuilderCard(card, validation.counts[card.id] || 0)).join("")}
+        </section>
+      </div>
+    </div>
+  `;
+}
+
+function renderDeckBuilderCard(card, count) {
+  const maxCopies = getCopyLimit(card);
+  const canAdd = state.playerDeck.length < DECK_RULES.size && count < maxCopies;
+  const line = card.line === "instant" ? "即时" : getDeployLines(card).map((lineId) => getLine(lineId).label).join("/");
+  const tags = card.tags.slice(0, 3).map((tag) => `<i>${escapeHtml(tag)}</i>`).join("");
+  return `
+    <article class="deck-card ${count ? "is-in-deck" : ""}" data-card-id="${card.id}" style="--accent:${getFaction(card.faction).accent}">
+      <div class="deck-card__art" style="--card-art:url('${getCardArtPath(card)}')"></div>
+      <div class="deck-card__body">
+        <div class="deck-card__title">
+          <strong>${escapeHtml(card.name)}</strong>
+          <span>${card.type === "unit" ? card.power : "T"}</span>
+        </div>
+        <p>${escapeHtml(TYPE_LABELS[card.type])} / ${escapeHtml(line)} / ${escapeHtml(RARITY_LABELS[card.rarity] || card.rarity)}</p>
+        <div class="deck-card__tags">${tags}</div>
+        <em>${escapeHtml(card.specialization)}</em>
+      </div>
+      <div class="deck-card__controls">
+        <button type="button" data-action="deck-remove:${card.id}" ${count ? "" : "disabled"}>-</button>
+        <strong>${count}/${maxCopies}</strong>
+        <button type="button" data-action="deck-add:${card.id}" ${canAdd ? "" : "disabled"}>+</button>
+      </div>
+    </article>
+  `;
+}
+
+function selectHandCard(uid, options = {}) {
+  const battle = state.battle;
+  if (!canPlayerAct() || state.pending) {
+    return;
+  }
+  if (!canUseHandAction(battle, "player")) {
+    gameAudio.play("ui.error");
+    battle.log.push("本回合已经打出过一张手牌。你仍可执行一次场上单位行动，或点击【回合结束】。");
+    render();
+    return;
+  }
+
+  const instance = battle.hands.player.find((item) => item.uid === uid);
+  if (!instance) {
+    return;
+  }
+
+  const card = getCard(instance.cardId);
+  state.selectedHandUid = uid;
+  state.pending = null;
+
+  if (card.type === "unit") {
+    playUnitFromHand(battle, "player", uid, card.line, { hidden: Boolean(options.conceal) });
+    return;
+  }
+
+  if (card.type !== "unit") {
+    if (card.ability?.noTarget || ["damageGuard", "intelDeny", "fireBoost", "supply"].includes(card.ability?.kind)) {
+      const result = resolveNoTargetHandEffect(battle, "player", uid, card);
+      if (result === "pending") {
+        render();
+        return;
+      }
+      finishAction("player");
+      return;
+    }
+    const targets = getValidEffectTargets(battle, "player", card.ability, card);
+    if (!targets.length) {
+      gameAudio.play("ui.error");
+      battle.log.push(getNoLegalTargetMessage(card));
+      state.selectedHandUid = null;
+      render();
+      return;
+    }
+    state.pending = {
+      kind: "handEffect",
+      side: "player",
+      handUid: uid,
+      cardId: card.id,
+      ability: card.ability,
+      targets,
+    };
+    gameAudio.play("target.lock", { card });
+    if (targets.length === 1) {
+      const [target] = targets;
+      state.pending = null;
+      state.selectedHandUid = null;
+      const result = resolveEffectOnTarget(battle, {
+        side: "player",
+        handUid: uid,
+        cardId: card.id,
+        ability: card.ability,
+        target,
+      });
+      if (result === "pending-animation") {
+        return;
+      }
+      finishAction("player");
+      return;
+    }
+  }
+
+  render();
+}
+
+function playSelectedUnitToRow(side, lineId) {
+  const battle = state.battle;
+  if (!battle || !state.selectedHandUid || !canPlayerAct()) {
+    return;
+  }
+  if (side !== "player") {
+    return;
+  }
+
+  const instance = battle.hands.player.find((item) => item.uid === state.selectedHandUid);
+  if (!instance) {
+    return;
+  }
+  const card = getCard(instance.cardId);
+  if (card.type !== "unit" || !getDeployLines(card).includes(lineId)) {
+    return;
+  }
+
+  playUnitFromHand(battle, "player", instance.uid, lineId);
+}
+
+function playUnitFromHand(battle, side, uid, lineId, options = {}) {
+  const hand = battle.hands[side];
+  const index = hand.findIndex((item) => item.uid === uid);
+  if (index === -1) {
+    return;
+  }
+
+  const sourceRect = getHandCardElement(side, uid)?.getBoundingClientRect();
+  const [instance] = hand.splice(index, 1);
+  const card = getCard(instance.cardId);
+  markHandActionUsed(battle, side);
+  instance.hidden = Boolean(options.hidden && canConcealCardForSide(battle, side, card));
+  battle.board[side][lineId].push(instance);
+  battle.actionAnimation = {
+    kind: "deployHold",
+    side,
+    sourceUid: instance.uid,
+    cardId: card.id,
+  };
+  state.selectedHandUid = null;
+  render();
+  playCardFlight(card, side, sourceRect, getBoardCardElement(side, instance.uid)?.getBoundingClientRect(), {
+    back: instance.hidden,
+    duration: DEPLOY_CARD_FLIGHT_MS,
+  });
+  gameAudio.playCard(card, { action: instance.hidden ? "conceal" : "deploy", side, hidden: instance.hidden });
+  battle.log.push(getDeploymentLog(battle, side, instance, card, lineId));
+
+  const deployDelay = shouldDeferCardDeployVideo(side, card, { side, lineId, instance }) ? DEPLOY_VIDEO_START_DELAY_MS : DEPLOY_EFFECT_DELAY_MS;
+  window.setTimeout(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    const liveRef = findBoardInstance(battle, side, instance.uid);
+    if (!liveRef) {
+      battle.actionAnimation = null;
+      render();
+      return;
+    }
+    battle.actionAnimation = null;
+    continueUnitDeployment(battle, side, liveRef, card);
+  }, deployDelay);
+}
+
+function getDeploymentLog(battle, side, instance, card, lineId) {
+  if (side === "enemy" && instance.hidden) {
+    return `${getSideName(battle, side)}在${getLine(lineId).name}部署了一个隐蔽单位。`;
+  }
+  return `${getSideName(battle, side)}${instance.hidden ? "隐蔽部署" : "部署"} ${card.name} 到${getLine(lineId).name}。`;
+}
+
+function continueUnitDeployment(battle, side, sourceRef, card) {
+  const { instance, lineId } = sourceRef;
+  let frontlineEngagementResolved = false;
+  if (instance.hidden) {
+    resolveFrontlineEngagement(battle, side, sourceRef);
+    frontlineEngagementResolved = true;
+    if (instance.hidden) {
+      refreshIntelValues(battle);
+      finishAction(side);
+      return;
+    }
+  }
+
+  if (!frontlineEngagementResolved) {
+    resolveFrontlineEngagement(battle, side, sourceRef);
+  }
+  if (!findBoardInstance(battle, side, instance.uid)) {
+    finishActionWithResolutionHold(battle, side, { pacedFinish: true });
+    return;
+  }
+
+  applyDeploySelfBonuses(battle, side, instance, card);
+
+  const deployVideoPlayed = shouldDeferCardDeployVideo(side, card, { side, lineId, instance });
+  if (deployVideoPlayed) {
+    return beginCardDeployVideoTransition(battle, side, { side, lineId, instance }, card);
+  }
+
+  resolveDeployBoardEffect(battle, side, instance, card, { skipCardFireVideo: false, pacedFinish: true });
+}
+
+function shouldDeferCardDeployVideo(side, card, sourceRef) {
+  return Boolean(
+    sourceRef?.instance &&
+      !sourceRef.instance.hidden &&
+      getCardFireVideoPath(card),
+  );
+}
+
+function beginCardDeployVideoTransition(battle, side, sourceRef, card) {
+  battle.actionAnimation = {
+    kind: "cardDeployVideo",
+    side,
+    sourceUid: sourceRef.instance.uid,
+    cardId: card.id,
+  };
+  state.pending = null;
+  state.selectedHandUid = null;
+  clearSpotlight();
+  render();
+
+  playCardFireVideo(sourceRef, card).finally(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    battle.actionAnimation = null;
+    resolveDeployBoardEffect(battle, side, sourceRef.instance, card, { skipCardFireVideo: true, pacedFinish: true });
+  });
+  return "pending-animation";
+}
+
+function resolveDeployBoardEffect(battle, side, instance, card, options = {}) {
+  if (!findBoardInstance(battle, side, instance.uid)) {
+    finishAction(side);
+    return;
+  }
+
+  if (instance.exposed) {
+    finishActionWithResolutionHold(battle, side, options);
+    return;
+  }
+
+  const targets = getValidEffectTargets(battle, side, card.ability, card);
+  if (card.ability && targets.length) {
+    if (side === "player") {
+      if (targets.length === 1) {
+        const result = resolveEffectOnTarget(battle, {
+          side,
+          sourceUid: instance.uid,
+          cardId: card.id,
+          ability: card.ability,
+          target: targets[0],
+        }, { skipCardFireVideo: Boolean(options.skipCardFireVideo) });
+        if (result === "pending-animation") {
+          return;
+        }
+        finishActionWithResolutionHold(battle, side, options);
+        return;
+      }
+      state.pending = {
+        kind: "boardEffect",
+        side,
+        sourceUid: instance.uid,
+        cardId: card.id,
+        ability: card.ability,
+        targets,
+        skipCardFireVideo: Boolean(options.skipCardFireVideo),
+      };
+      render();
+      return;
+    }
+
+    const result = resolveEffectOnTarget(battle, {
+      side,
+      sourceUid: instance.uid,
+      cardId: card.id,
+      ability: card.ability,
+      target: side === "enemy" ? chooseAiTarget(battle, card, targets, battle.aiDifficulty || "medium") : chooseBestTarget(battle, targets),
+    }, { skipCardFireVideo: Boolean(options.skipCardFireVideo) });
+    if (result === "pending-animation") {
+      return;
+    }
+  } else if (card.ability) {
+    resolveNoTargetAbility(battle, side, instance, card);
+  }
+
+  finishActionWithResolutionHold(battle, side, options);
+}
+
+function handleBoardTarget(side, uid) {
+  const battle = state.battle;
+  if (!battle) {
+    return;
+  }
+
+  if (state.pending?.kind === "supplyChoice") {
+    return;
+  }
+
+  if (!state.pending) {
+    if (side === "player" && canPlayerAct()) {
+      activateOwnBoardUnit(battle, side, uid);
+    }
+    return;
+  }
+
+  if (!isPendingTarget(side, uid)) {
+    return;
+  }
+
+  const pending = state.pending;
+  state.pending = null;
+  state.selectedHandUid = null;
+  gameAudio.play("target.lock");
+  const result = resolveEffectOnTarget(battle, {
+    side: pending.side,
+    handUid: pending.handUid,
+    sourceUid: pending.sourceUid,
+    cardId: pending.cardId,
+    ability: pending.ability,
+    target: { side, uid },
+  }, { skipCardFireVideo: Boolean(pending.skipCardFireVideo) });
+  if (result === "pending-animation") {
+    return;
+  }
+  if (pending.kind === "boardEffect") {
+    finishActionWithResolutionHold(battle, pending.side, { pacedFinish: true });
+    return;
+  }
+  finishAction(pending.side);
+}
+
+function activateOwnBoardUnit(battle, side, uid) {
+  const source = findBoardInstance(battle, side, uid);
+  if (!source || (!source.instance.hidden && !source.instance.exposed)) {
+    return;
+  }
+  if (!canUseBoardAction(battle, side)) {
+    battle.log.push("本回合已经执行过一次场上单位行动。");
+    gameAudio.play("ui.error");
+    render();
+    return;
+  }
+  if (source.instance.suppressed) {
+    battle.log.push(`${getCard(source.instance.cardId).name} 受到【电子压制】，本回合不能主动发动技能。`);
+    gameAudio.play("ui.error");
+    render();
+    return;
+  }
+  const card = getCard(source.instance.cardId);
+  if (!card.ability) {
+    gameAudio.play("ui.error");
+    battle.log.push(`${card.name} 暂无可主动发动的技能。`);
+    render();
+    return;
+  }
+  if (source.instance.exposed && !canResolveBoardAbilityWithoutTargets(card)) {
+    const previewTargets = getValidEffectTargets(battle, side, card.ability, card);
+    if (!previewTargets.length) {
+      gameAudio.play("ui.error");
+      battle.log.push(getNoLegalTargetMessage(card));
+      render();
+      return;
+    }
+  }
+
+  markBoardActionUsed(battle, side);
+  if (source.instance.hidden) {
+    source.instance.hidden = false;
+    markCardFlip(source.instance, "reveal");
+    gameAudio.playCard(card, { action: "reveal", side });
+    battle.log.push(`${getSideName(battle, side)}主动翻开 ${card.name}。`);
+  } else {
+    battle.log.push(`${getSideName(battle, side)}命令已暴露的 ${card.name} 再次发动技能。`);
+  }
+
+  if (card.ability && ["damageGuard", "intelDeny", "fireBoost", "supply"].includes(card.ability.kind)) {
+    resolveNoTargetBoardEffect(battle, side, source.instance, card);
+    finishAction(side);
+    return;
+  }
+
+  const targets = getValidEffectTargets(battle, side, card.ability, card);
+  if (card.ability && targets.length) {
+    if (targets.length === 1) {
+      const result = resolveEffectOnTarget(battle, {
+        side,
+        sourceUid: source.instance.uid,
+        cardId: card.id,
+        ability: card.ability,
+        target: targets[0],
+      });
+      if (result === "pending-animation") {
+        return;
+      }
+      finishAction(side);
+      return;
+    }
+    state.pending = {
+      kind: "boardEffect",
+      side,
+      sourceUid: source.instance.uid,
+      cardId: card.id,
+      ability: card.ability,
+      targets,
+    };
+    render();
+    return;
+  }
+
+  finishAction(side);
+}
+
+function revealOwnHiddenUnit(battle, side, uid) {
+  activateOwnBoardUnit(battle, side, uid);
+}
+
+function canResolveBoardAbilityWithoutTargets(card) {
+  const ability = card.ability;
+  if (!ability) {
+    return false;
+  }
+  return (
+    ability.noTarget ||
+    ["damageGuard", "intelDeny", "fireBoost", "supply", "fortify", "repair"].includes(ability.kind) ||
+    (ability.kind === "damageOrSelfBonus" && ability.selfBonusIfNoTargets)
+  );
+}
+
+function resolveEffectOnTarget(battle, payload, options = {}) {
+  const sourceCard = getCard(payload.cardId);
+  const target = findBoardInstance(battle, payload.target.side, payload.target.uid);
+  if (!target) {
+    return;
+  }
+
+  const ability = payload.ability;
+  const sourceRef = payload.sourceUid ? findBoardInstance(battle, payload.side, payload.sourceUid) : null;
+  if (shouldDeferCardFireVideo(payload, sourceCard, sourceRef, options)) {
+    return beginCardFireVideoTransition(battle, payload, sourceRef, sourceCard);
+  }
+  if (applyIntelDenial(battle, payload.side, sourceCard, ability)) {
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+    return;
+  }
+  if (!spendIntelForAbility(battle, payload.side, ability, sourceCard)) {
+    return;
+  }
+
+  if (payload.handUid) {
+    markHandActionUsed(battle, payload.side);
+    playTacticCardPresentation(payload.side, sourceCard);
+    moveHandCardToGrave(battle, payload.side, payload.handUid);
+    battle.log.push(`${getSideName(battle, payload.side)}打出 ${sourceCard.name}。`);
+  }
+
+  if (!options.skipActionAudio) {
+    gameAudio.playCard(sourceCard, { action: "effect", ability, side: payload.side });
+  }
+
+  if (ability.kind === "expose") {
+    if (exposeInstance(battle, target, sourceCard.name)) {
+      applyExposeMarkers(battle, payload.side, ability, target, sourceCard);
+    }
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "exposeDeployTag") {
+    if (exposeInstance(battle, target, sourceCard.name)) {
+      deployHandUnitWithTagAndActivate(battle, payload.side, ability.deployTag, sourceCard);
+    }
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "exposeAndSupply") {
+    if (exposeInstance(battle, target, sourceCard.name)) {
+      resolveImmediateSupplyDraw(battle, payload.side, ability, sourceCard);
+    }
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "exposeAndCallFire") {
+    const didExpose = exposeInstance(battle, target, sourceCard.name);
+    if (didExpose) {
+      const caller = findCallableUnit(battle, payload.side, ability.callerTags);
+      if (!caller) {
+        battle.log.push(`${sourceCard.name} 完成坐标引导，但己方没有可立即开火的远程单位。`);
+      } else {
+        resolveCalledFire(battle, payload.side, sourceCard, caller, target, caller.card.fire || caller.card.ability || {});
+      }
+    }
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "exposeOrDamage") {
+    if (target.instance.hidden) {
+      exposeInstance(battle, target, sourceCard.name);
+    } else if (ability.damageIfExposed && target.instance.exposed) {
+      dealDamage(battle, payload.side, target.side, target, ability.damageIfExposed, sourceCard, sourceRef);
+    } else if (ability.damageIfTag && hasTag(target.instance, ability.damageIfTag.tag)) {
+      dealDamage(battle, payload.side, target.side, target, ability.damageIfTag.amount, sourceCard, sourceRef);
+    }
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "damage" || ability.kind === "damageOrSelfBonus" || ability.kind === "strike") {
+    if (target.instance.hidden && ability.canRevealHidden) {
+      exposeInstance(battle, target, sourceCard.name);
+    }
+    const amount = getDamageAmount(battle, payload.side, ability, target.instance, target.lineId, sourceCard);
+    dealDamage(battle, payload.side, target.side, target, amount, sourceCard, sourceRef);
+    if (ability.splash) {
+      applySplashDamage(battle, payload.side, target, ability.splash, sourceCard);
+    }
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "areaDamage") {
+    const areaTargets = getAreaDamageTargets(battle, payload.side, ability, target);
+    areaTargets.forEach((areaTarget, index) => {
+      if (areaTarget.instance.hidden && ability.canRevealHidden) {
+        exposeInstance(battle, areaTarget, sourceCard.name);
+      }
+      const amount = getDamageAmount(battle, payload.side, ability, areaTarget.instance, areaTarget.lineId, sourceCard, { areaIndex: index });
+      dealDamage(battle, payload.side, areaTarget.side, areaTarget, amount, sourceCard, sourceRef);
+    });
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "damageBoost") {
+    target.instance.markedDamageBonus = Math.max(target.instance.markedDamageBonus || 0, ability.amount || 1);
+    battle.log.push(`${sourceCard.name} 标定 ${getCard(target.instance.cardId).name}，其下一次受到的打击伤害 +${ability.amount || 1}。`);
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+  }
+
+  if (ability.kind === "callFire" || ability.kind === "counterBattery") {
+    const caller = findCallableUnit(battle, payload.side, ability.callerTags);
+    if (!caller) {
+      battle.log.push(`${sourceCard.name} 没有可调用单位。`);
+    } else {
+      caller.instance.calledAction = battle.actionSerial;
+      const callerCard = getCard(caller.instance.cardId);
+      const fire = ability.kind === "callFire" ? callerCard.fire : { amount: ability.amount, sourceExposes: true };
+      resolveCalledFire(battle, payload.side, sourceCard, caller, target, fire);
+      if (ability.kind === "callFire" && fire.splash) {
+        applySplashDamage(battle, payload.side, target, fire.splash, callerCard);
+      }
+    }
+  }
+
+  if (ability.kind === "smoke") {
+    const wasHidden = target.instance.hidden;
+    target.instance.exposed = false;
+    target.instance.exposedAtAction = null;
+    target.instance.hidden = ability.hide !== false;
+    target.instance.shield = Boolean(ability.shield);
+    if (!wasHidden && target.instance.hidden) {
+      markCardFlip(target.instance, "hide");
+    }
+    if (ability.repairIfTag && hasTag(target.instance, ability.repairIfTag.tag)) {
+      const before = target.instance.damage;
+      target.instance.damage = Math.max(0, target.instance.damage - ability.repairIfTag.amount);
+      battle.log.push(`${sourceCard.name} 修复 ${getCard(target.instance.cardId).name} ${before - target.instance.damage} 点伤害。`);
+    }
+    battle.log.push(`${sourceCard.name} 令 ${getCard(target.instance.cardId).name} 重新进入【隐蔽】。`);
+  }
+
+  if (ability.kind === "suppress") {
+    target.instance.suppressed = true;
+    battle.log.push(`${sourceCard.name} 压制 ${getCard(target.instance.cardId).name}，其下回合不能主动发动技能。`);
+  }
+
+  if (ability.kind === "decoy") {
+    target.instance.decoy = true;
+    battle.log.push(`${sourceCard.name} 为 ${getCard(target.instance.cardId).name} 建立假目标阵地，下一次侦查暴露无效。`);
+  }
+
+  if (ability.kind === "camouflage") {
+    const wasHidden = target.instance.hidden;
+    target.instance.exposed = false;
+    target.instance.exposedAtAction = null;
+    target.instance.hidden = true;
+    if (!wasHidden) {
+      markCardFlip(target.instance, "hide");
+    }
+    battle.log.push(`${sourceCard.name} 令 ${getCard(target.instance.cardId).name} 进入【隐蔽】。`);
+  }
+
+  if (ability.kind === "airspaceControl") {
+    target.instance.airspaceControl = true;
+    battle.log.push(`${sourceCard.name} 为 ${getCard(target.instance.cardId).name} 建立空域管制，下一次伴随防空拦截减弱。`);
+  }
+
+  if (ability.kind === "repair") {
+    const before = target.instance.damage;
+    const amount = getRepairAmount(ability, target.instance);
+    target.instance.damage = Math.max(0, target.instance.damage - amount);
+    battle.log.push(`${sourceCard.name} 修复 ${getCard(target.instance.cardId).name} ${before - target.instance.damage} 点伤害。`);
+    resolveSupplySideEffects(battle, payload.side, ability, sourceCard, { repaired: true });
+  }
+
+  cleanupDestroyed(battle, payload.side, sourceCard, target);
+  return "resolved";
+}
+
+function shouldDeferCardFireVideo(payload, sourceCard, sourceRef, options = {}) {
+  return Boolean(
+    !options.skipCardFireVideo &&
+      payload?.sourceUid &&
+      sourceRef?.instance &&
+      !sourceRef.instance.hidden &&
+      getCardFireVideoPath(sourceCard),
+  );
+}
+
+function beginCardFireVideoTransition(battle, payload, sourceRef, sourceCard) {
+  battle.actionAnimation = {
+    kind: "cardFireVideo",
+    side: payload.side,
+    sourceUid: sourceRef.instance.uid,
+    cardId: sourceCard.id,
+  };
+  state.pending = null;
+  state.selectedHandUid = null;
+  clearSpotlight();
+  render();
+
+  playCardFireVideo(sourceRef, sourceCard).finally(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    battle.actionAnimation = null;
+    resolveEffectOnTarget(battle, payload, { skipActionAudio: true, skipCardFireVideo: true });
+    finishAction(payload.side);
+  });
+  return "pending-animation";
+}
+
+function playCardFireVideo(sourceRef, sourceCard) {
+  return new Promise((resolve) => {
+    const element = getBoardCardElement(sourceRef.side, sourceRef.instance.uid);
+    const video = element?.querySelector(".board-card__fire-video");
+    if (!element || !video) {
+      resolve();
+      return;
+    }
+
+    let settled = false;
+    let timer = null;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.clearTimeout(timer);
+      video.pause();
+      video.currentTime = 0;
+      element.classList.remove("is-video-firing");
+      resolve();
+    };
+    const getTimeoutMs = () => {
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        return Math.min(Math.max(video.duration * 1000 + 180, 900), CARD_FIRE_VIDEO_MAX_MS);
+      }
+      return CARD_FIRE_VIDEO_FALLBACK_MS;
+    };
+    const armTimeout = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(finish, getTimeoutMs());
+    };
+
+    element.classList.add("is-video-firing");
+    video.muted = false;
+    video.volume = 1;
+    video.playsInline = true;
+    video.currentTime = 0;
+    video.addEventListener("ended", finish, { once: true });
+    video.addEventListener("error", finish, { once: true });
+    video.addEventListener("loadedmetadata", armTimeout, { once: true });
+    armTimeout();
+    const playPromise = video.play();
+    if (playPromise?.catch) {
+      playPromise.catch(finish);
+    }
+  });
+}
+
+function dealDamage(battle, attackerSide, defenderSide, targetRefOrInstance, rawAmount, sourceCard, sourceRef = null, options = {}) {
+  const targetRef = normalizeTargetRef(battle, defenderSide, targetRefOrInstance);
+  if (!targetRef) {
+    return;
+  }
+  const target = targetRef.instance;
+  let amount = rawAmount;
+
+  if (target.shield && !target.hidden) {
+    target.shield = false;
+  }
+
+  if (target.shield && target.hidden && sourceCard.type !== "unit") {
+    target.shield = false;
+    playBlockedVfx(targetRef, "烟幕吸收");
+    battle.log.push(`${getCard(target.cardId).name} 的烟幕吸收了 ${sourceCard.name}。`);
+    return;
+  }
+
+  amount = applyOutgoingFireBoost(battle, attackerSide, amount, sourceCard);
+  if (target.markedDamageBonus) {
+    amount += target.markedDamageBonus;
+    battle.log.push(`${getCard(target.cardId).name} 被精确标定，本次伤害 +${target.markedDamageBonus}。`);
+    target.markedDamageBonus = 0;
+  }
+  amount = applyDamageGuard(battle, defenderSide, amount, sourceCard);
+  amount = applyInterception(battle, defenderSide, targetRef.lineId, amount, sourceCard, sourceRef);
+  amount = applyContinuousDamageReduction(battle, defenderSide, targetRef, amount, sourceCard);
+  amount = applyScreening(battle, defenderSide, targetRef, amount, sourceCard);
+  if (amount <= 0) {
+    amount = Math.min(1, Math.max(0, rawAmount));
+  }
+  if (amount <= 0) {
+    return;
+  }
+
+  target.damage += amount;
+  target.lastDamagedBy = attackerSide;
+  gameAudio.playImpact(sourceCard, getCard(target.cardId), { amount, defenderSide });
+  playCombatVfx({ attackerSide, sourceCard, targetRef, amount });
+  battle.log.push(`${sourceCard.name} 对 ${getCard(target.cardId).name} 造成 ${amount} 点伤害。`);
+  if (!options.skipAssist) {
+    applyAssistFire(battle, attackerSide, defenderSide, targetRef, sourceCard, sourceRef);
+  }
+}
+
+function playCombatVfx({ attackerSide, sourceCard, targetRef, amount }) {
+  if (!refs.fxLayer || state.screen !== "battle") {
+    return;
+  }
+  const targetElement = getBoardCardElement(targetRef.side, targetRef.instance.uid);
+  const sourceElement = findVfxSourceElement(attackerSide, sourceCard);
+  const start = getElementCenter(sourceElement) || getFallbackVfxPoint(attackerSide, sourceCard.line);
+  const end = getElementCenter(targetElement) || getFallbackVfxPoint(targetRef.side, targetRef.lineId);
+  const kind = getCombatVfxKind(sourceCard, amount);
+
+  flashSource(start, kind);
+  pulseElement(sourceElement, "is-firing", 360);
+  pulseElement(targetElement, "is-hit", 520);
+
+  if (kind === "rocket") {
+    playRocketSalvoVfx(start, end, amount);
+  } else if (kind === "artillery") {
+    playArtilleryVfx(start, end, amount);
+  } else if (kind === "infantry" || kind === "autocannon") {
+    playBurstVfx(start, end, kind, amount);
+  } else {
+    playProjectileVfx(start, end, kind, amount);
+  }
+
+  window.setTimeout(() => playImpactVfx(end, kind, amount), getImpactDelay(kind));
+  shakeScreen(kind, amount);
+}
+
+function playProjectileVfx(start, end, kind, amount, delay = 0) {
+  const projectile = createFxElement("span", `fx-projectile fx-projectile--${kind}`);
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  projectile.style.setProperty("--angle", `${angle}rad`);
+  projectile.style.setProperty("--power", String(Math.max(1, amount || 1)));
+  refs.fxLayer.append(projectile);
+  const duration = kind === "tank" ? 260 : kind === "air" ? 380 : 320;
+  animateAndRemove(
+    projectile,
+    [
+      { transform: `translate(${start.x}px, ${start.y}px) rotate(${angle}rad) scaleX(0.72)`, opacity: 0 },
+      { transform: `translate(${start.x}px, ${start.y}px) rotate(${angle}rad) scaleX(1)`, opacity: 1, offset: 0.12 },
+      { transform: `translate(${end.x}px, ${end.y}px) rotate(${angle}rad) scaleX(1.18)`, opacity: 1 },
+    ],
+    { duration, delay, easing: "cubic-bezier(0.08, 0.72, 0.18, 1)" },
+  );
+}
+
+function playArtilleryVfx(start, end, amount) {
+  const shell = createFxElement("span", "fx-projectile fx-projectile--artillery");
+  const middle = {
+    x: (start.x + end.x) / 2,
+    y: Math.min(start.y, end.y) - Math.min(210, 92 + Math.abs(end.x - start.x) * 0.08),
+  };
+  refs.fxLayer.append(shell);
+  animateAndRemove(
+    shell,
+    [
+      { transform: `translate(${start.x}px, ${start.y}px) rotate(-34deg) scale(0.76)`, opacity: 0 },
+      { transform: `translate(${middle.x}px, ${middle.y}px) rotate(8deg) scale(1)`, opacity: 1, offset: 0.48 },
+      { transform: `translate(${end.x}px, ${end.y}px) rotate(62deg) scale(1.18)`, opacity: 1 },
+    ],
+    { duration: 720, easing: "cubic-bezier(0.24, 0.05, 0.18, 1)" },
+  );
+  makeTrailPath(start, middle, end, "fx-arc-path");
+}
+
+function playRocketSalvoVfx(start, end, amount) {
+  const rockets = Math.min(6, Math.max(3, amount || 3));
+  for (let index = 0; index < rockets; index += 1) {
+    const offset = {
+      x: (index - (rockets - 1) / 2) * 22,
+      y: ((index % 2) - 0.5) * 26,
+    };
+    const nextEnd = { x: end.x + offset.x, y: end.y + offset.y };
+    const nextStart = { x: start.x + offset.x * 0.2, y: start.y - index * 4 };
+    playProjectileVfx(nextStart, nextEnd, "rocket", amount, index * 70);
+    window.setTimeout(() => playImpactVfx(nextEnd, "rocket", Math.max(2, amount - 1)), 510 + index * 70);
+  }
+}
+
+function playBurstVfx(start, end, kind, amount) {
+  const shots = kind === "autocannon" ? 9 : 6;
+  for (let index = 0; index < shots; index += 1) {
+    const spread = {
+      x: (Math.random() - 0.5) * 34,
+      y: (Math.random() - 0.5) * 26,
+    };
+    const nextEnd = { x: end.x + spread.x, y: end.y + spread.y };
+    const delay = index * (kind === "autocannon" ? 42 : 55);
+    playProjectileVfx(start, nextEnd, kind, amount, delay);
+    window.setTimeout(() => playSparkVfx(nextEnd, kind), 190 + delay);
+  }
+}
+
+function playImpactVfx(point, kind, amount = 1) {
+  if (!refs.fxLayer) {
+    return;
+  }
+  const impact = createFxElement("div", `fx-impact fx-impact--${kind}`);
+  impact.style.left = `${point.x}px`;
+  impact.style.top = `${point.y}px`;
+  impact.style.setProperty("--power", String(Math.max(1, amount || 1)));
+  impact.innerHTML = `
+    <span class="fx-impact__core"></span>
+    <span class="fx-impact__ring"></span>
+    <span class="fx-impact__smoke"></span>
+  `;
+  refs.fxLayer.append(impact);
+  addParticles(point, kind, amount);
+  addDamageNumber(point, amount);
+  removeFxElement(impact, kind === "artillery" || kind === "rocket" || kind === "heavy" ? 1050 : 760);
+}
+
+function playSparkVfx(point, kind) {
+  const spark = createFxElement("span", `fx-spark fx-spark--${kind}`);
+  spark.style.left = `${point.x}px`;
+  spark.style.top = `${point.y}px`;
+  refs.fxLayer?.append(spark);
+  removeFxElement(spark, 420);
+}
+
+function playBlockedVfx(targetRef, label = "拦截") {
+  if (!refs.fxLayer || state.screen !== "battle") {
+    return;
+  }
+  const point = getElementCenter(getBoardCardElement(targetRef.side, targetRef.instance.uid)) || getFallbackVfxPoint(targetRef.side, targetRef.lineId);
+  const block = createFxElement("div", "fx-blocked");
+  block.style.left = `${point.x}px`;
+  block.style.top = `${point.y}px`;
+  block.textContent = label;
+  refs.fxLayer.append(block);
+  removeFxElement(block, 740);
+}
+
+function playDestroyedVfx(side, uid) {
+  if (!refs.fxLayer || state.screen !== "battle") {
+    return;
+  }
+  const point = getElementCenter(getBoardCardElement(side, uid));
+  if (!point) {
+    return;
+  }
+  const destroyed = createFxElement("div", "fx-destroyed");
+  destroyed.style.left = `${point.x}px`;
+  destroyed.style.top = `${point.y}px`;
+  destroyed.textContent = "摧毁";
+  refs.fxLayer.append(destroyed);
+  addParticles(point, "destroyed", 5);
+  removeFxElement(destroyed, 980);
+}
+
+function flashSource(point, kind) {
+  const flash = createFxElement("span", `fx-muzzle fx-muzzle--${kind}`);
+  flash.style.left = `${point.x}px`;
+  flash.style.top = `${point.y}px`;
+  refs.fxLayer?.append(flash);
+  removeFxElement(flash, 360);
+}
+
+function addDamageNumber(point, amount) {
+  const damage = createFxElement("span", "fx-damage-number");
+  damage.style.left = `${point.x}px`;
+  damage.style.top = `${point.y}px`;
+  damage.textContent = `-${amount}`;
+  refs.fxLayer?.append(damage);
+  removeFxElement(damage, 900);
+}
+
+function addParticles(point, kind, amount = 1) {
+  const count = kind === "infantry" || kind === "autocannon" ? 5 : Math.min(16, 7 + amount);
+  for (let index = 0; index < count; index += 1) {
+    const particle = createFxElement("span", `fx-particle fx-particle--${kind}`);
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 22 + Math.random() * (kind === "tank" || kind === "artillery" || kind === "rocket" ? 72 : 38);
+    particle.style.left = `${point.x}px`;
+    particle.style.top = `${point.y}px`;
+    particle.style.setProperty("--px", `${Math.cos(angle) * distance}px`);
+    particle.style.setProperty("--py", `${Math.sin(angle) * distance}px`);
+    particle.style.animationDelay = `${Math.random() * 70}ms`;
+    refs.fxLayer?.append(particle);
+    removeFxElement(particle, 850);
+  }
+}
+
+function makeTrailPath(start, middle, end, className) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("fx-trail-svg");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("class", className);
+  path.setAttribute("d", `M ${start.x} ${start.y} Q ${middle.x} ${middle.y} ${end.x} ${end.y}`);
+  svg.append(path);
+  refs.fxLayer?.append(svg);
+  removeFxElement(svg, 820);
+}
+
+function getImpactDelay(kind) {
+  if (kind === "artillery") return 720;
+  if (kind === "rocket") return 510;
+  if (kind === "infantry" || kind === "autocannon") return 430;
+  if (kind === "air") return 410;
+  return 260;
+}
+
+function getCombatVfxKind(card, amount = 1) {
+  const signal = `${card.id || ""} ${card.name || ""} ${card.specialization || ""} ${(card.tags || []).join(" ")}`.toLowerCase();
+  if (signal.includes("himars") || signal.includes("m270") || signal.includes("tos") || signal.includes("rocket") || signal.includes("火箭") || signal.includes("导弹")) {
+    return "rocket";
+  }
+  if (signal.includes("m109") || signal.includes("2s19") || signal.includes("howitzer") || signal.includes("artillery") || signal.includes("榴弹") || signal.includes("炮兵")) {
+    return "artillery";
+  }
+  if (signal.includes("m1a2") || signal.includes("t90") || signal.includes("t-90") || signal.includes("tank") || signal.includes("装甲")) {
+    return "tank";
+  }
+  if (signal.includes("avenger") || signal.includes("pantsir") || signal.includes("mshorad")) {
+    return "autocannon";
+  }
+  if (signal.includes("infantry") || signal.includes("marine") || signal.includes("ranger") || signal.includes("步兵")) {
+    return "infantry";
+  }
+  if (signal.includes("apache") || signal.includes("helicopter") || signal.includes("fighter") || signal.includes("bomber") || signal.includes("直升机") || signal.includes("战斗机") || signal.includes("空战") || signal.includes("战机") || signal.includes("轰炸机")) {
+    return "air";
+  }
+  return amount >= 5 ? "heavy" : "small";
+}
+
+function findVfxSourceElement(side, sourceCard) {
+  if (!sourceCard) {
+    return null;
+  }
+  const direct = refs.board.querySelector(`[data-side="${side}"][data-card-id="${sourceCard.id}"]`);
+  if (direct) {
+    return direct;
+  }
+  const lineId = sourceCard.line === "support" || sourceCard.tags?.some((tag) => ["榴弹炮", "火箭炮", "导弹", "重型防空", "无人机", "战斗机", "轰炸机"].includes(tag)) ? "support" : "frontline";
+  return refs.board.querySelector(`.battle-line[data-side="${side}"][data-row="${lineId}"]`) || document.querySelector(`.commander-hud--${side}`);
+}
+
+function getBoardCardElement(side, uid) {
+  return refs.board.querySelector(`[data-side="${side}"][data-board-card="${uid}"]`);
+}
+
+function getHandCardElement(side, uid) {
+  if (side === "player") {
+    return document.querySelector(`[data-hand-card="${uid}"]`);
+  }
+  return document.querySelector(".enemy-hand-strip .enemy-hand-back:last-child");
+}
+
+function getPileElement(side, kind) {
+  return document.querySelector(`.deck-hud--${side} [data-pile="${kind}"] .deck-pile__cards`);
+}
+
+function getElementCenter(element) {
+  if (!element) {
+    return null;
+  }
+  const rect = element.getBoundingClientRect();
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+}
+
+function getRectCenter(rect) {
+  if (!rect) {
+    return null;
+  }
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+}
+
+function playCardFlight(card, side, fromRect, toRect, options = {}) {
+  if (!refs.fxLayer || state.screen !== "battle") {
+    return;
+  }
+  const from = getRectCenter(fromRect);
+  const to = getRectCenter(toRect);
+  if (!from || !to) {
+    return;
+  }
+  const element = document.createElement("div");
+  element.className = `card-flight card-flight--${side} ${options.back ? "is-back" : "is-front"}`;
+  element.style.setProperty("--from-x", `${from.x}px`);
+  element.style.setProperty("--from-y", `${from.y}px`);
+  element.style.setProperty("--to-x", `${to.x}px`);
+  element.style.setProperty("--to-y", `${to.y}px`);
+  element.style.setProperty("--mid-x", `${(from.x + to.x) / 2}px`);
+  element.style.setProperty("--mid-y", `${Math.min(from.y, to.y) - 88}px`);
+  element.style.setProperty("--card-art", options.back ? "url('./assets/ui/card-back-frame.png')" : `url('${getCardArtPath(card)}')`);
+  element.style.setProperty("--flight-duration", `${options.duration || CARD_FLIGHT_MS}ms`);
+  element.innerHTML = `<span>${options.back ? "" : escapeHtml(card?.name || "")}</span>`;
+  refs.fxLayer.append(element);
+  window.setTimeout(() => element.remove(), options.duration || CARD_FLIGHT_MS);
+}
+
+function playCardFlightBetweenElements(card, side, fromElement, toElement, options = {}) {
+  const fromRect = fromElement?.getBoundingClientRect?.();
+  const toRect = toElement?.getBoundingClientRect?.();
+  playCardFlight(card, side, fromRect, toRect, options);
+}
+
+function playTacticCardPresentation(side, card) {
+  if (!refs.fxLayer || state.screen !== "battle" || !card) {
+    return;
+  }
+  const element = document.createElement("div");
+  element.className = `played-card-stage played-card-stage--${side}`;
+  element.style.setProperty("--stage-duration", `${TACTIC_PRESENTATION_MS}ms`);
+  element.innerHTML = renderPreviewCard(card);
+  refs.fxLayer.append(element);
+  window.setTimeout(() => element.remove(), TACTIC_PRESENTATION_MS);
+}
+
+function getFallbackVfxPoint(side, lineId = "frontline") {
+  const line = refs.board.querySelector(`.battle-line[data-side="${side}"][data-row="${lineId === "support" ? "support" : "frontline"}"]`);
+  const point = getElementCenter(line);
+  if (point) {
+    return point;
+  }
+  return {
+    x: side === "player" ? window.innerWidth * 0.42 : window.innerWidth * 0.58,
+    y: side === "player" ? window.innerHeight * 0.72 : window.innerHeight * 0.28,
+  };
+}
+
+function createFxElement(tagName, className) {
+  const element = document.createElement(tagName);
+  element.className = className;
+  return element;
+}
+
+function animateAndRemove(element, keyframes, options) {
+  const animation = element.animate(keyframes, { fill: "both", ...options });
+  animation.finished.then(() => element.remove()).catch(() => element.remove());
+  return animation;
+}
+
+function removeFxElement(element, delay = 600) {
+  window.setTimeout(() => element.remove(), delay);
+}
+
+function pulseElement(element, className, delay = 360) {
+  if (!element) {
+    return;
+  }
+  element.classList.add(className);
+  window.setTimeout(() => element.classList.remove(className), delay);
+}
+
+function shakeScreen(kind, amount = 1) {
+  if (!refs.app || ["infantry", "autocannon", "small"].includes(kind)) {
+    return;
+  }
+  refs.app.classList.remove("is-screen-shaking");
+  refs.app.style.setProperty("--shake-power", `${Math.min(10, 3 + amount)}px`);
+  window.requestAnimationFrame(() => refs.app.classList.add("is-screen-shaking"));
+  window.setTimeout(() => refs.app.classList.remove("is-screen-shaking"), kind === "artillery" || kind === "rocket" || kind === "heavy" ? 560 : 360);
+}
+
+function applyInterception(battle, defenderSide, targetLineId, amount, sourceCard, sourceRef = null) {
+  if (!sourceCard.tags.some((tag) => ["直升机", "战斗机", "轰炸机", "导弹", "空战", "战机", "巡航导弹", "弹道导弹"].includes(tag))) {
+    return amount;
+  }
+
+  const candidates = [];
+  LINES.forEach((line) => {
+    battle.board[defenderSide][line.id].forEach((instance) => {
+      const card = getCard(instance.cardId);
+      const intercept = card.continuous?.intercept;
+      const canProtectLine = !card.continuous?.protectLines || card.continuous.protectLines.includes(targetLineId);
+      const canIntercept = card.continuous?.interceptTags?.some((tag) => sourceCard.tags.includes(tag));
+      const tagAllowed = !sourceCard.ability?.interceptByTags || sourceCard.ability.interceptByTags.some((tag) => card.tags.includes(tag));
+      if (intercept && canProtectLine && canIntercept && tagAllowed && getCurrentPower(instance) > 0 && !instance.hidden && instance.interceptAction !== battle.actionSerial) {
+        let appliedIntercept = intercept;
+        if (sourceRef?.instance?.airspaceControl && sourceCard.tags.includes("战斗机") && card.tags.includes("伴随防空")) {
+          appliedIntercept = Math.max(0, appliedIntercept - 1);
+        }
+        candidates.push({ line, instance, card, appliedIntercept });
+      }
+    });
+  });
+
+  const interceptors = isSingleInterceptorStrikeCard(sourceCard)
+    ? candidates.sort((left, right) => right.appliedIntercept - left.appliedIntercept).slice(0, 1)
+    : candidates;
+  let reduction = 0;
+  interceptors.forEach(({ line, instance, card, appliedIntercept }) => {
+    if (sourceRef?.instance?.airspaceControl && sourceCard.tags.includes("战斗机") && card.tags.includes("伴随防空")) {
+      sourceRef.instance.airspaceControl = false;
+      battle.log.push(`${sourceCard.name} 获得空域管制，${card.name} 拦截减弱 1 点。`);
+    }
+    instance.interceptAction = battle.actionSerial;
+    reduction += appliedIntercept;
+    exposeInstance(battle, { side: defenderSide, lineId: line.id, instance }, `${card.name} 拦截`, { ignoreDecoy: true });
+    if (card.continuous?.counterDamage && sourceRef?.instance) {
+      dealDamage(battle, defenderSide, sourceRef.side, sourceRef, card.continuous.counterDamage, card);
+    }
+  });
+
+  if (reduction > 0) {
+    gameAudio.play("defense.intercept", { sourceCard, reduction });
+  }
+  return Math.max(0, amount - reduction);
+}
+
+function applyContinuousDamageReduction(battle, defenderSide, targetRef, amount, sourceCard) {
+  const candidates = [];
+  LINES.forEach((line) => {
+    battle.board[defenderSide][line.id].forEach((instance) => {
+      const card = getCard(instance.cardId);
+      const rule = card.continuous?.reduceDamage;
+      if (!rule || getCurrentPower(instance) <= 0 || instance.hidden) {
+        return;
+      }
+      if (rule.targetLines && !rule.targetLines.includes(targetRef.lineId)) {
+        return;
+      }
+      const targetTagMatched = !rule.targetTags || rule.targetTags.some((tag) => hasTag(targetRef.instance, tag));
+      const targetCardMatched = !rule.targetCards || rule.targetCards.includes(targetRef.instance.cardId);
+      if (rule.targetMatch === "any" ? !targetTagMatched && !targetCardMatched : !targetTagMatched || !targetCardMatched) {
+        return;
+      }
+      if (rule.sourceTags && !rule.sourceTags.some((tag) => sourceCard.tags.includes(tag))) {
+        return;
+      }
+      if (rule.requiresOwnTag && !hasOwnTagOnLine(battle, defenderSide, rule.requiresOwnTag.line, rule.requiresOwnTag.tag)) {
+        return;
+      }
+      candidates.push({ amount: rule.amount || 1, card });
+    });
+  });
+  if (!candidates.length) {
+    return amount;
+  }
+  const best = candidates.sort((left, right) => right.amount - left.amount)[0];
+  const nextAmount = Math.max(1, amount - best.amount);
+  battle.log.push(`${best.card.name} 协同减伤，${sourceCard.name} 伤害 -${amount - nextAmount}。`);
+  return nextAmount;
+}
+
+function applyAssistFire(battle, attackerSide, defenderSide, targetRef, sourceCard, sourceRef = null) {
+  if (!sourceCard?.tags?.length || sourceCard.type !== "unit") {
+    return;
+  }
+
+  LINES.forEach((line) => {
+    battle.board[attackerSide][line.id].forEach((instance) => {
+      if (sourceRef?.instance?.uid === instance.uid || getCurrentPower(instance) <= 0 || instance.hidden) {
+        return;
+      }
+      const card = getCard(instance.cardId);
+      const rule = card.continuous?.assistFire;
+      if (!rule || instance.assistAction === battle.actionSerial) {
+        return;
+      }
+      if (rule.triggerTags && !rule.triggerTags.some((tag) => sourceCard.tags.includes(tag))) {
+        return;
+      }
+      if (rule.rows && !rule.rows.includes(targetRef.lineId)) {
+        return;
+      }
+      if (!matchesTargetRequirements(targetRef.instance, rule)) {
+        return;
+      }
+
+      instance.assistAction = battle.actionSerial;
+      const amount = rule.amount || 1;
+      battle.log.push(`${card.name} 触发【前线协同】，追加 ${amount} 点伤害。`);
+      dealDamage(battle, attackerSide, defenderSide, targetRef, amount, card, { side: attackerSide, lineId: line.id, instance }, { skipAssist: true });
+    });
+  });
+}
+
+function applyScreening(battle, defenderSide, targetRef, amount, sourceCard) {
+  if (targetRef.lineId !== "support" || sourceCard.type === "strategy") {
+    return amount;
+  }
+  const screen = battle.board[defenderSide].frontline.find((instance) => {
+    const card = getCard(instance.cardId);
+    return getCurrentPower(instance) > 0 && !instance.hidden && card.screen;
+  });
+  if (!screen) {
+    return amount;
+  }
+
+  const screenCard = getCard(screen.cardId);
+  const capacity = screen.fortified ? screenCard.screen?.fortifiedAmount || 3 : screenCard.screen?.amount || 2;
+  const redirected = Math.min(capacity, amount);
+  screen.damage += redirected;
+  gameAudio.play("defense.screen", { sourceCard, screenCard, redirected });
+  battle.log.push(`${screenCard.name} 抗线，替支援区承受 ${redirected} 点伤害。`);
+  return amount - redirected;
+}
+
+function cleanupDestroyed(battle, actingSide, sourceCard, targetSnapshot) {
+  const destroyed = [];
+  ["player", "enemy"].forEach((side) => {
+    LINES.forEach((line) => {
+      const row = battle.board[side][line.id];
+      for (let index = row.length - 1; index >= 0; index -= 1) {
+        const instance = row[index];
+        if (getCurrentPower(instance) <= 0) {
+          const card = getCard(instance.cardId);
+          const sourceRect = getBoardCardElement(side, instance.uid)?.getBoundingClientRect();
+          const scorer = instance.lastDamagedBy && instance.lastDamagedBy !== side ? instance.lastDamagedBy : actingSide !== side ? actingSide : null;
+          row.splice(index, 1);
+          battle.graves[side].push(instance);
+          playCardFlight(card, side, sourceRect, getPileElement(side, "grave")?.getBoundingClientRect(), { back: true, duration: 720 });
+          destroyed.push({ side, lineId: line.id, instance });
+          if (scorer) {
+            const points = card.power || 0;
+            battle.scores[scorer] += points;
+            battle.log.push(`${getSideName(battle, scorer)}摧毁 ${card.name}，获得 ${points} 点战场得分。`);
+          }
+          gameAudio.play("combat.destroyed", { card, side });
+          playDestroyedVfx(side, instance.uid);
+          battle.log.push(`${card.name} 被摧毁。`);
+        }
+      }
+    });
+  });
+
+  const targetDestroyed = destroyed.some((item) => item.instance.uid === targetSnapshot?.instance?.uid);
+  if (targetDestroyed && sourceCard.ability?.splashOnDestroy && targetSnapshot.lineId !== "frontline") {
+    const row = battle.board[targetSnapshot.side][targetSnapshot.lineId];
+    const splash = row[0];
+    if (splash) {
+      dealDamage(battle, actingSide, targetSnapshot.side, splash, sourceCard.ability.splashOnDestroy, sourceCard);
+      cleanupDestroyed(battle, actingSide, sourceCard, null);
+    }
+  }
+}
+
+function finishActionWithResolutionHold(battle, side, options = {}) {
+  if (!options.pacedFinish || options.holdMs === 0) {
+    finishAction(side);
+    return;
+  }
+
+  battle.actionAnimation = {
+    kind: "resolutionHold",
+    side,
+  };
+  render();
+  window.setTimeout(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    battle.actionAnimation = null;
+    finishAction(side);
+  }, options.holdMs ?? COMBAT_RESOLUTION_HOLD_MS);
+}
+
+function finishAction(side, options = {}) {
+  const battle = state.battle;
+  if (!battle || battle.phase !== "battle") {
+    render();
+    return;
+  }
+
+  clearSpotlight();
+  state.selectedHandUid = null;
+  state.pending = null;
+  refreshIntelValues(battle);
+
+  if (!options.endTurn && !battle.finalActions && (side === "player" || side === "enemy")) {
+    if (resolveBattleEndIfReady(battle)) {
+      render();
+      return;
+    }
+    render();
+    if (side === "enemy") {
+      if (shouldAiContinueAfterAction(battle)) {
+        scheduleAi();
+      } else {
+        scheduleAiPassTurn(battle);
+      }
+    }
+    return;
+  }
+
+  clearSuppressionForSide(battle, side);
+  if (battle.finalActions && battle.finalTriggeredAtAction !== battle.actionSerial) {
+    battle.finalActions[side] = Math.max(0, battle.finalActions[side] - 1);
+  } else if (!battle.finalActions) {
+    drawCards(battle, side, 1);
+  }
+
+  if (resolveBattleEndIfReady(battle)) {
+    render();
+    return;
+  }
+
+  const other = side === "player" ? "enemy" : "player";
+  let nextSide = null;
+  if (battle.finalActions) {
+    nextSide = battle.finalActions[other] > 0 ? other : battle.finalActions[side] > 0 ? side : null;
+  } else {
+    nextSide = other;
+  }
+  battle.actionSerial += 1;
+  beginTurnHandoff(battle, side, nextSide);
+}
+
+function shouldAiContinueAfterAction(battle) {
+  if (!battle || battle.phase !== "battle" || battle.activeSide !== "enemy" || battle.turnTransition || battle.aiThinking) {
+    return false;
+  }
+  return Boolean(chooseAiTurnAction(battle));
+}
+
+function scheduleAiPassTurn(battle) {
+  window.clearTimeout(battle.aiTimer);
+  battle.aiTimer = window.setTimeout(() => {
+    if (state.battle !== battle || battle.phase !== "battle" || battle.activeSide !== "enemy" || battle.turnTransition || battle.aiThinking || state.pending) {
+      return;
+    }
+    passTurn("enemy");
+  }, Math.max(360, AI_THINK_MS * 0.45));
+}
+
+function passTurn(side) {
+  const battle = state.battle;
+  if (!battle || state.pending || battle.turnTransition || battle.aiThinking || battle.phase !== "battle" || battle.activeSide !== side) {
+    return;
+  }
+
+  refreshIntelValues(battle);
+  gameAudio.play("system.pass", { side });
+  battle.log.push(`${getSideName(battle, side)}结束回合，移交指挥权。`);
+  state.selectedHandUid = null;
+  state.pending = null;
+  finishAction(side, { endTurn: true });
+}
+
+function surrenderBattle() {
+  const battle = state.battle;
+  if (!battle) {
+    return;
+  }
+  clearBattleTimers(battle);
+  clearSpotlight();
+  state.selectedHandUid = null;
+  state.hoveredCardId = null;
+  state.pending = null;
+  clearDragState({ render: false });
+  gameAudio.play("system.defeat");
+  if (refs.bgm) {
+    refs.bgm.pause();
+    refs.bgm.currentTime = 0;
+  }
+  state.screen = "briefing";
+  state.battle = null;
+  state.codexOpen = false;
+  state.guideOpen = false;
+  state.deckBuilderOpen = false;
+  state.mulligan = {
+    active: false,
+    selectedUids: [],
+  };
+  state.bgmOn = false;
+  render();
+}
+
+function performAiTurn() {
+  const battle = state.battle;
+  if (!battle || battle.phase !== "battle" || battle.activeSide !== "enemy") {
+    return;
+  }
+  battle.aiThinking = false;
+
+  const play = chooseAiTurnAction(battle);
+  if (!play) {
+    passTurn("enemy");
+    return;
+  }
+
+  if (play.kind === "board") {
+    performAiBoardActivation(battle, play);
+    return;
+  }
+
+  performAiHandPlay(battle, play);
+}
+
+function performAiHandPlay(battle, play) {
+  if (play.card.type === "unit") {
+    playUnitFromHand(battle, "enemy", play.instance.uid, play.card.line, { hidden: play.conceal });
+    return;
+  }
+
+  if (play.noTarget) {
+    const result = resolveNoTargetHandEffect(battle, "enemy", play.instance.uid, play.card);
+    if (result !== "pending") {
+      finishAction("enemy");
+    }
+    return;
+  }
+
+  markHandActionUsed(battle, "enemy");
+  playTacticCardPresentation("enemy", play.card);
+  moveHandCardToGrave(battle, "enemy", play.instance.uid);
+  battle.log.push(`${getSideName(battle, "enemy")}打出 ${play.card.name}。`);
+  const result = resolveEffectOnTarget(battle, {
+    side: "enemy",
+    cardId: play.card.id,
+    ability: play.card.ability,
+    target: play.target,
+  });
+  if (result === "pending-animation") {
+    return;
+  }
+  finishAction("enemy");
+}
+
+function performAiBoardActivation(battle, play) {
+  const source = findBoardInstance(battle, "enemy", play.instance.uid);
+  if (!source || (!source.instance.hidden && !source.instance.exposed) || source.instance.suppressed || !canUseBoardAction(battle, "enemy")) {
+    passTurn("enemy");
+    return;
+  }
+
+  markBoardActionUsed(battle, "enemy");
+  if (source.instance.hidden) {
+    source.instance.hidden = false;
+    markCardFlip(source.instance, "reveal");
+    gameAudio.playCard(play.card, { action: "reveal", side: "enemy" });
+    battle.log.push(`${getSideName(battle, "enemy")}主动翻开 ${play.card.name}。`);
+  } else {
+    battle.log.push(`${getSideName(battle, "enemy")}命令已暴露的 ${play.card.name} 再次发动技能。`);
+  }
+
+  if (play.card.ability && ["damageGuard", "intelDeny", "fireBoost", "supply"].includes(play.card.ability.kind)) {
+    resolveNoTargetBoardEffect(battle, "enemy", source.instance, play.card);
+    finishAction("enemy");
+    return;
+  }
+
+  const targets = getAiEffectTargets(battle, "enemy", play.card.ability, play.card);
+  if (play.card.ability && targets.length) {
+    const target = chooseAiTarget(battle, play.card, targets, battle.aiDifficulty || "medium");
+    const result = resolveEffectOnTarget(battle, {
+      side: "enemy",
+      sourceUid: source.instance.uid,
+      cardId: play.card.id,
+      ability: play.card.ability,
+      target,
+    });
+    if (result === "pending-animation") {
+      return;
+    }
+    finishAction("enemy");
+    return;
+  }
+
+  if (play.card.ability) {
+    resolveNoTargetAbility(battle, "enemy", source.instance, play.card);
+  }
+  finishAction("enemy");
+}
+
+function chooseAiTurnAction(battle) {
+  const difficulty = battle.aiDifficulty || "medium";
+  const profile = getAiProfile(difficulty);
+  const actions = getTurnActions(battle, "enemy");
+  const handPlay = !actions.handPlayed ? chooseAiPlay(battle) : null;
+  const boardPlay = !actions.hiddenActivated ? chooseAiBoardActivation(battle) : null;
+
+  if (!handPlay && !boardPlay) {
+    return null;
+  }
+  if (!handPlay) {
+    return getAiOptionScore(boardPlay) >= profile.hiddenMinScore ? boardPlay : null;
+  }
+  if (!boardPlay) {
+    return handPlay;
+  }
+  if (actions.handPlayed) {
+    return getAiOptionScore(boardPlay) >= profile.hiddenMinScore ? boardPlay : null;
+  }
+  if (actions.hiddenActivated) {
+    return handPlay;
+  }
+
+  const hiddenScore = getAiOptionScore(boardPlay) + profile.hiddenBias;
+  const handScore = getAiOptionScore(handPlay);
+  if (difficulty === "easy") {
+    return hiddenScore > handScore + profile.hiddenFirstMargin && Math.random() < 0.22 ? boardPlay : handPlay;
+  }
+  return hiddenScore > handScore + profile.hiddenFirstMargin ? boardPlay : handPlay;
+}
+
+function chooseAiPlay(battle) {
+  const difficulty = battle.aiDifficulty || "medium";
+  if (!canUseHandAction(battle, "enemy")) {
+    return null;
+  }
+  const options = battle.hands.enemy
+    .map((instance) => createAiPlayOption(battle, instance, difficulty))
+    .filter(Boolean);
+
+  if (!options.length) {
+    return null;
+  }
+  const weightedOptions = options.map((option) => ({
+    ...option,
+    kind: "hand",
+    finalWeight: applyAiScoreNoise(scoreAiOption(battle, option, difficulty), difficulty),
+  }));
+  return chooseAiOptionByDifficulty(weightedOptions, difficulty);
+}
+
+function createAiPlayOption(battle, instance, difficulty) {
+  const card = getCard(instance.cardId);
+  if (card.type === "unit") {
+    const conceal = chooseAiConceal(battle, card, difficulty);
+    return {
+      instance,
+      card,
+      weight: scoreAiUnitOption(battle, card, conceal, difficulty),
+      target: null,
+      conceal,
+    };
+  }
+  if (card.ability?.noTarget || ["damageGuard", "intelDeny", "fireBoost", "supply"].includes(card.ability?.kind)) {
+    return { instance, card, weight: scoreAiNoTargetOption(battle, card, difficulty), noTarget: true };
+  }
+  const targets = getAiEffectTargets(battle, "enemy", card.ability, card);
+  if (!targets.length) {
+    return null;
+  }
+  const target = chooseAiTarget(battle, card, targets, difficulty);
+  return {
+    instance,
+    card,
+    weight: scoreAiTargetedOption(battle, card, target, difficulty),
+    target,
+  };
+}
+
+function chooseEasyAiPlay(options) {
+  return chooseAiOptionByDifficulty(
+    options.map((option) => ({ ...option, finalWeight: option.finalWeight ?? option.weight ?? 0 })),
+    "easy",
+  );
+}
+
+function chooseHardAiPlay(battle, options) {
+  return chooseAiOptionByDifficulty(
+    options.map((option) => ({ ...option, finalWeight: scoreAiOption(battle, option, "hard") })),
+    "hard",
+  );
+}
+
+function chooseAiBoardActivation(battle) {
+  const difficulty = battle.aiDifficulty || "medium";
+  if (!canUseBoardAction(battle, "enemy")) {
+    return null;
+  }
+  const options = getAiBoardActivationOptions(battle, difficulty);
+  if (!options.length) {
+    return null;
+  }
+  return chooseAiOptionByDifficulty(options, difficulty);
+}
+
+function getAiBoardActivationOptions(battle, difficulty) {
+  return getAllBoardTargets(battle, "enemy")
+    .filter((target) => (target.instance.hidden || target.instance.exposed) && !target.instance.suppressed)
+    .map((target) => createAiBoardActivationOption(battle, target, difficulty))
+    .filter(Boolean);
+}
+
+function createAiBoardActivationOption(battle, source, difficulty) {
+  const card = getCard(source.instance.cardId);
+  if (!card.ability) {
+    return null;
+  }
+  const scoreWithSourceState = () => {
+    if (["damageGuard", "intelDeny", "fireBoost", "supply"].includes(card.ability.kind)) {
+      return scoreAiNoTargetOption(battle, card, difficulty) + 2;
+    }
+    const targets = getAiEffectTargets(battle, "enemy", card.ability, card);
+    if (!targets.length) {
+      return scoreAiUnitNoTargetActivation(battle, card, difficulty);
+    }
+    const target = chooseAiTarget(battle, card, targets, difficulty);
+    return scoreAiTargetedOption(battle, card, target, difficulty) + 1.5;
+  };
+  const weight = source.instance.hidden ? withAiSourceVisible(source.instance, scoreWithSourceState) : scoreWithSourceState();
+  const finalWeight = applyAiScoreNoise(weight + (source.instance.hidden ? getAiProfile(difficulty).hiddenBias : 0), difficulty);
+  if (finalWeight < getAiProfile(difficulty).hiddenMinScore * 0.55) {
+    return null;
+  }
+  return {
+    kind: "board",
+    instance: source.instance,
+    card,
+    source,
+    weight,
+    finalWeight,
+  };
+}
+
+function withAiSourceVisible(instance, callback) {
+  const previousHidden = instance.hidden;
+  const previousExposed = instance.exposed;
+  instance.hidden = false;
+  instance.exposed = false;
+  try {
+    return callback();
+  } finally {
+    instance.hidden = previousHidden;
+    instance.exposed = previousExposed;
+  }
+}
+
+function chooseAiOptionByDifficulty(options, difficulty) {
+  if (!options.length) {
+    return null;
+  }
+  const profile = getAiProfile(difficulty);
+  const sorted = options.slice().sort((left, right) => getAiOptionScore(right) - getAiOptionScore(left));
+  if (difficulty === "easy") {
+    if (sorted.length > 1 && Math.random() < profile.mistakeChance) {
+      const lowerHalf = sorted.slice(Math.max(1, Math.floor(sorted.length / 2)));
+      return lowerHalf[Math.floor(Math.random() * lowerHalf.length)] || sorted[sorted.length - 1];
+    }
+    const relaxedPool = sorted.slice(0, Math.min(sorted.length, profile.topPool));
+    return relaxedPool[Math.floor(Math.random() * relaxedPool.length)] || sorted[0];
+  }
+  if (difficulty === "medium") {
+    const topPool = sorted.slice(0, Math.min(sorted.length, profile.topPool));
+    if (topPool.length > 1 && Math.random() < 0.18) {
+      return chooseWeightedAiOption(topPool);
+    }
+    if (sorted.length > 1 && Math.random() < profile.mistakeChance) {
+      return sorted[1];
+    }
+  }
+  return sorted[0];
+}
+
+function chooseWeightedAiOption(options) {
+  const minScore = Math.min(...options.map((option) => getAiOptionScore(option)));
+  const weights = options.map((option) => Math.max(0.2, getAiOptionScore(option) - minScore + 0.8));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let roll = Math.random() * total;
+  for (let index = 0; index < options.length; index += 1) {
+    roll -= weights[index];
+    if (roll <= 0) {
+      return options[index];
+    }
+  }
+  return options[0];
+}
+
+function getAiOptionScore(option) {
+  return Number.isFinite(option?.finalWeight) ? option.finalWeight : option?.weight || 0;
+}
+
+function chooseAiConceal(battle, card, difficulty) {
+  if (!canConcealCardForSide(battle, "enemy", card)) {
+    return false;
+  }
+  const profile = getAiProfile(difficulty);
+  const immediateTargets = getAiEffectTargets(battle, "enemy", card.ability, card);
+  const immediateScore = scoreBestAiEffectTarget(battle, card, immediateTargets, difficulty);
+  if (immediateScore >= (difficulty === "hard" ? 19 : 23)) {
+    return false;
+  }
+  const highValue = isHighValueAiCard(card);
+  if (difficulty === "easy") {
+    if (card.line === "support") {
+      return Math.random() < profile.concealSupportChance;
+    }
+    return highValue && Math.random() < profile.concealHighValueChance;
+  }
+  if (difficulty === "hard") {
+    return card.line === "support" || highValue || card.rarity === "epic" || card.rarity === "legendary";
+  }
+  if (card.line === "support") {
+    return getTotalScore(battle, "enemy") >= getTotalScore(battle, "player") || Math.random() < profile.concealSupportChance;
+  }
+  return highValue && Math.random() < profile.concealHighValueChance;
+}
+
+function chooseAiTarget(battle, card, targets, difficulty) {
+  const profile = getAiProfile(difficulty);
+  if (Math.random() < profile.targetRandomChance) {
+    return targets[Math.floor(Math.random() * targets.length)];
+  }
+  return targets
+    .slice()
+    .sort((left, right) => scoreAiTarget(battle, card, card.ability, right, difficulty) - scoreAiTarget(battle, card, card.ability, left, difficulty))[0];
+}
+
+function scoreAiOption(battle, option, difficulty) {
+  if (option.target) {
+    return scoreAiTargetedOption(battle, option.card, option.target, difficulty);
+  }
+  if (option.noTarget) {
+    return scoreAiNoTargetOption(battle, option.card, difficulty);
+  }
+  return scoreAiUnitOption(battle, option.card, option.conceal, difficulty);
+}
+
+function scoreAiUnitOption(battle, card, conceal, difficulty) {
+  const profile = getAiProfile(difficulty);
+  const ownFrontline = countAliveUnitsOnLine(battle, "enemy", "frontline");
+  let score = (card.power || 0) + getRarityAiValue(card) + (card.ability ? 2 : 0);
+  if (card.line === "frontline" && !ownFrontline) {
+    score += difficulty === "hard" ? 6 : difficulty === "medium" ? 4 : 2;
+  }
+  if (card.line === "support" && !ownFrontline) {
+    score -= difficulty === "hard" ? 2.5 : difficulty === "medium" ? 2 : 0.5;
+  }
+  if (isHighValueAiCard(card)) {
+    score += difficulty === "hard" ? 3.5 : difficulty === "medium" ? 2 : 0.4;
+  }
+  if (conceal) {
+    score += (isHighValueAiCard(card) ? 3.2 : 1.2) * profile.protectionBonus;
+  } else if (card.ability) {
+    const targets = getAiEffectTargets(battle, "enemy", card.ability, card);
+    score += scoreBestAiEffectTarget(battle, card, targets, difficulty) * 0.32;
+  }
+  if (getTotalScore(battle, "enemy") < getTotalScore(battle, "player")) {
+    score += (card.power || 0) * (difficulty === "hard" ? 0.55 : 0.25);
+  }
+  return score;
+}
+
+function scoreAiNoTargetOption(battle, card, difficulty) {
+  const profile = getAiProfile(difficulty);
+  const ability = card.ability || {};
+  let score = card.type === "strategy" ? 8 : 4;
+  if (ability.kind === "supply") {
+    if (battle.hands.enemy.length <= 3) {
+      score += difficulty === "hard" ? 6 : difficulty === "medium" ? 4 : 1.5;
+    }
+    if (battle.hands.enemy.length >= 6) {
+      score -= difficulty === "hard" ? 5 : 2;
+    }
+  }
+  if (ability.kind === "fireBoost") {
+    score += (hasAiCallableFireSource(battle) ? 4 : -2) + countAiExposedTargets(battle, "player") * 2.2 * profile.chainBonus;
+  }
+  if (ability.kind === "damageGuard" || ability.kind === "intelDeny") {
+    const exposedValue = getAiBestOwnExposedValue(battle);
+    score += exposedValue * 0.55 * profile.protectionBonus;
+    if (ability.kind === "damageGuard" && battle.guards.enemy.length) {
+      score -= 4;
+    }
+    if (ability.kind === "intelDeny" && battle.intelDenials.enemy.length) {
+      score -= 4;
+    }
+  }
+  return score;
+}
+
+function scoreAiTargetedOption(battle, card, target, difficulty) {
+  const profile = getAiProfile(difficulty);
+  let score = card.type === "strategy" ? 8 : card.type === "tactic" ? 6 : 4;
+  if (isStrikeAiCard(card)) {
+    score += 2.5;
+  }
+  score += scoreAiTarget(battle, card, card.ability, target, difficulty) * profile.targetMultiplier;
+  if (isExposureAbility(card.ability)) {
+    score += scoreAiExposureChain(battle, card.ability, difficulty);
+  }
+  return score * profile.tacticMultiplier;
+}
+
+function scoreAiTarget(battle, sourceCard, ability, target, difficulty = "medium") {
+  if (target.side === "enemy") {
+    return scoreAiOwnTarget(battle, sourceCard, ability, target, difficulty);
+  }
+  return scoreAiEnemyTarget(battle, sourceCard, ability, target, difficulty);
+}
+
+function scoreAiOwnTarget(battle, sourceCard, ability, target, difficulty) {
+  void battle;
+  void sourceCard;
+  const profile = getAiProfile(difficulty);
+  const targetCard = getCard(target.instance.cardId);
+  const currentPower = getCurrentPower(target.instance);
+  let score = currentPower * 0.8 + getRarityAiValue(targetCard);
+  if (isHighValueAiCard(targetCard)) {
+    score += 5 * profile.protectionBonus;
+  }
+  if (target.lineId === "support") {
+    score += 2.5 * profile.protectionBonus;
+  }
+  if (target.instance.exposed) {
+    score += 8 * profile.protectionBonus;
+  }
+  if (ability?.kind === "repair") {
+    score += target.instance.damage * 5 + (target.instance.damage >= currentPower ? 8 : 0);
+  }
+  if (["smoke", "camouflage"].includes(ability?.kind)) {
+    score += target.instance.exposed ? 7 * profile.protectionBonus : 1.5;
+  }
+  if (ability?.kind === "decoy") {
+    score += (target.instance.decoy ? -8 : 4) + (isHighValueAiCard(targetCard) ? 3 : 0);
+  }
+  if (ability?.kind === "airspaceControl") {
+    score += aiTargetHasAnyKnownTag(target, ["重型防空", "伴随防空"]) ? 5 : 1;
+  }
+  return score;
+}
+
+function scoreAiEnemyTarget(battle, sourceCard, ability, target, difficulty) {
+  const profile = getAiProfile(difficulty);
+  const targetCard = getAiKnownTargetCard(target);
+  const currentPower = getAiTargetCurrentPower(target);
+  const knownDamage = getAiKnownTargetDamage(target);
+  const estimatedDamage = estimateAiDamage(battle, sourceCard, ability, target);
+  const targetValue = getAiTargetEstimatedValue(target);
+  let score = currentPower + knownDamage * 1.5 + targetValue * 0.35;
+  if (estimatedDamage >= currentPower && currentPower > 0) {
+    score += (18 + targetValue) * profile.killBonus;
+  } else {
+    score += estimatedDamage * 2.3;
+  }
+  if (target.lineId === "support") {
+    score += 2.5;
+  }
+  if (target.instance.exposed) {
+    score += 3.2 * profile.chainBonus;
+  }
+  if (target.instance.hidden) {
+    score += isExposureAbility(ability) || ability?.kind === "suppress" ? 5.5 * profile.chainBonus : -4;
+    if (target.lineId === "support") {
+      score += 2.5 * profile.chainBonus;
+    }
+  }
+  if (ability?.kind === "exposeAndCallFire" && findCallableUnit(battle, "enemy", ability.callerTags)) {
+    score += 7 * profile.chainBonus;
+  }
+  if (ability?.kind === "suppress" && target.instance.hidden) {
+    score += 4 * profile.chainBonus;
+  }
+  if (isStrikeAiCard(sourceCard) && target.instance.exposed) {
+    score += 4.5 * profile.chainBonus;
+  }
+  if (targetCard && isHighValueAiCard(targetCard)) {
+    score += 4.5;
+  }
+  if (aiTargetHasAnyKnownTag(target, ["重型防空", "榴弹炮", "火箭炮", "无人机", "导弹"])) {
+    score += 3.2;
+  }
+  score += scoreAiVictoryRace(battle, target, estimatedDamage, profile);
+  return score;
+}
+
+function estimateAiDamage(battle, sourceCard, ability, target) {
+  if (!ability) {
+    return 0;
+  }
+  if (["damage", "damageOrSelfBonus", "strike", "areaDamage"].includes(ability.kind)) {
+    if (!canAiKnowTargetIdentity(target)) {
+      return getBasicAbilityAmount(ability, target.lineId);
+    }
+    return getDamageAmount(battle, "enemy", ability, target.instance, target.lineId, sourceCard) || 0;
+  }
+  if (ability.kind === "exposeOrDamage") {
+    if (target.instance.hidden) {
+      return 0;
+    }
+    if (ability.damageIfExposed && target.instance.exposed) {
+      return ability.damageIfExposed;
+    }
+    if (ability.damageIfTag && aiTargetHasTag(target, ability.damageIfTag.tag)) {
+      return ability.damageIfTag.amount;
+    }
+  }
+  if (ability.kind === "callFire" || ability.kind === "counterBattery") {
+    const caller = findCallableUnit(battle, "enemy", ability.callerTags);
+    const fire = ability.kind === "callFire" ? caller?.card?.fire : ability;
+    return fire?.amount || 0;
+  }
+  return 0;
+}
+
+function getAiProfile(difficulty) {
+  return AI_DIFFICULTY_PROFILES[difficulty] || AI_DIFFICULTY_PROFILES.medium;
+}
+
+function applyAiScoreNoise(score, difficulty) {
+  const noise = getAiProfile(difficulty).scoreNoise;
+  if (!noise) {
+    return score;
+  }
+  return score + (Math.random() - 0.35) * noise;
+}
+
+function getAiEffectTargets(battle, side, ability, sourceCard) {
+  if (!ability) {
+    return [];
+  }
+  const targets = getValidEffectTargets(battle, side, ability, sourceCard);
+  if (side !== "enemy" || isExposureAbility(ability) || ability.kind === "suppress") {
+    return targets;
+  }
+  if (ability.requiresAnyTag || ability.requiresExposedOrAnyTag) {
+    return targets.filter((target) => target.side !== "player" || !target.instance.hidden);
+  }
+  return targets;
+}
+
+function scoreBestAiEffectTarget(battle, sourceCard, targets, difficulty) {
+  if (!targets?.length) {
+    return 0;
+  }
+  return Math.max(...targets.map((target) => scoreAiTarget(battle, sourceCard, sourceCard.ability, target, difficulty)));
+}
+
+function scoreAiUnitNoTargetActivation(battle, card, difficulty) {
+  if (!card.ability) {
+    return 0;
+  }
+  if (card.ability.kind === "damageOrSelfBonus" && card.ability.selfBonusIfNoTargets) {
+    return 5 + card.ability.selfBonusIfNoTargets * 2;
+  }
+  if (card.ability.kind === "repair") {
+    return scoreAiNoTargetOption(battle, card, difficulty) * 0.5;
+  }
+  return card.ability.sourceExposes ? -2 : 1;
+}
+
+function canAiKnowTargetIdentity(target) {
+  return target.side !== "player" || !target.instance.hidden;
+}
+
+function getAiKnownTargetCard(target) {
+  return canAiKnowTargetIdentity(target) ? getCard(target.instance.cardId) : null;
+}
+
+function getAiTargetCurrentPower(target) {
+  if (!canAiKnowTargetIdentity(target)) {
+    return target.lineId === "support" ? 4.5 : 3.5;
+  }
+  return getCurrentPower(target.instance);
+}
+
+function getAiKnownTargetDamage(target) {
+  return canAiKnowTargetIdentity(target) ? target.instance.damage : 0;
+}
+
+function getAiTargetEstimatedValue(target) {
+  const targetCard = getAiKnownTargetCard(target);
+  if (targetCard) {
+    return targetCard.power || getCurrentPower(target.instance);
+  }
+  return target.lineId === "support" ? 4 : 3;
+}
+
+function aiTargetHasTag(target, tag) {
+  return canAiKnowTargetIdentity(target) && hasTag(target.instance, tag);
+}
+
+function aiTargetHasAnyKnownTag(target, tags = []) {
+  return tags.some((tag) => aiTargetHasTag(target, tag));
+}
+
+function isHighValueAiCard(card) {
+  if (!card) {
+    return false;
+  }
+  return (
+    card.rarity === "epic" ||
+    card.rarity === "legendary" ||
+    card.tags.some((tag) => ["侦察", "无人机", "导弹", "榴弹炮", "火箭炮", "重型防空", "战斗机", "轰炸机"].includes(tag))
+  );
+}
+
+function isStrikeAiCard(card) {
+  if (!card?.ability) {
+    return false;
+  }
+  return (
+    ["strike", "areaDamage", "damage"].includes(card.ability.kind) &&
+    (card.type !== "unit" || card.tags.some((tag) => ["导弹", "战斗机", "轰炸机", "火箭炮", "榴弹炮"].includes(tag)))
+  );
+}
+
+function isExposureAbility(ability) {
+  return ["expose", "exposeAndCallFire", "exposeDeployTag", "exposeAndSupply", "exposeOrDamage"].includes(ability?.kind);
+}
+
+function getRarityAiValue(card) {
+  return {
+    common: 0.4,
+    uncommon: 0.8,
+    rare: 1.4,
+    epic: 2.2,
+    legendary: 3,
+  }[card?.rarity] || 0;
+}
+
+function hasAiCallableFireSource(battle) {
+  return Boolean(findCallableUnit(battle, "enemy", ["榴弹炮", "火箭炮", "导弹"]));
+}
+
+function countAiExposedTargets(battle, side) {
+  return getAllBoardTargets(battle, side).filter((target) => target.instance.exposed && !target.instance.hidden).length;
+}
+
+function getAiBestOwnExposedValue(battle) {
+  return getAllBoardTargets(battle, "enemy")
+    .filter((target) => target.instance.exposed && !target.instance.hidden)
+    .reduce((best, target) => Math.max(best, getCurrentPower(target.instance) + (isHighValueAiCard(getCard(target.instance.cardId)) ? 4 : 0)), 0);
+}
+
+function scoreAiExposureChain(battle, ability, difficulty) {
+  const profile = getAiProfile(difficulty);
+  let score = 0;
+  if (ability?.kind === "exposeAndCallFire" && findCallableUnit(battle, "enemy", ability.callerTags)) {
+    score += 6;
+  }
+  const followUp = battle.hands.enemy.some((instance) => {
+    const card = getCard(instance.cardId);
+    return card.ability?.requiresExposed || card.ability?.requiresExposedOrAnyTag || isStrikeAiCard(card);
+  });
+  if (followUp) {
+    score += 4;
+  }
+  return score * profile.chainBonus;
+}
+
+function scoreAiVictoryRace(battle, target, estimatedDamage, profile) {
+  const currentPower = getAiTargetCurrentPower(target);
+  if (estimatedDamage < currentPower || currentPower <= 0) {
+    return 0;
+  }
+  const targetValue = getAiTargetEstimatedValue(target);
+  let score = 0;
+  if (getTotalScore(battle, "enemy") + targetValue >= VICTORY_SCORE) {
+    score += 24 * profile.scoreRaceBonus;
+  }
+  if (getTotalScore(battle, "player") > getTotalScore(battle, "enemy")) {
+    score += Math.min(8, getTotalScore(battle, "player") - getTotalScore(battle, "enemy")) * 0.6 * profile.scoreRaceBonus;
+  }
+  return score;
+}
+
+function getBasicAbilityAmount(ability, lineId) {
+  if (!ability) {
+    return 0;
+  }
+  if (Number.isFinite(ability.hiddenAmount)) {
+    return ability.hiddenAmount;
+  }
+  if (Number.isFinite(ability.lineAmounts?.[lineId])) {
+    return ability.lineAmounts[lineId];
+  }
+  if (ability.fallbackRows?.includes(lineId) && Number.isFinite(ability.fallbackAmount)) {
+    return ability.fallbackAmount;
+  }
+  return ability.amount || ability.secondaryAmount || 0;
+}
+
+function scheduleAi() {
+  const battle = state.battle;
+  if (!battle || battle.phase !== "battle" || battle.activeSide !== "enemy" || battle.turnTransition) {
+    return;
+  }
+  window.clearTimeout(battle.aiTimer);
+  battle.aiThinking = true;
+  render();
+  battle.aiTimer = window.setTimeout(performAiTurn, AI_THINK_MS);
+}
+
+function resolveBattleEndIfReady(battle) {
+  const playerScore = getTotalScore(battle, "player");
+  const enemyScore = getTotalScore(battle, "enemy");
+  if (playerScore >= VICTORY_SCORE || enemyScore >= VICTORY_SCORE) {
+    const winner = playerScore === enemyScore ? "draw" : playerScore > enemyScore ? "player" : "enemy";
+    battle.phase = "match-over";
+    battle.activeSide = null;
+    battle.matchWinner = winner;
+    clearBattleTimers(battle);
+    gameAudio.play(winner === "draw" ? "system.draw" : winner === "player" ? "system.victory" : "system.defeat");
+    battle.log.push(`战场得分达标：美国 ${playerScore} : 俄罗斯 ${enemyScore}，${winner === "draw" ? "双方平局" : `${getSideName(battle, winner)}获胜`}。`);
+    return true;
+  }
+
+  if (!battle.finalActions) {
+    return false;
+  }
+
+  if (battle.finalActions.player > 0 || battle.finalActions.enemy > 0) {
+    return false;
+  }
+
+  revealAllHidden(battle);
+  const playerBoardPower = getBoardPowerTotal(battle, "player");
+  const enemyBoardPower = getBoardPowerTotal(battle, "enemy");
+  battle.phase = "match-over";
+  battle.activeSide = null;
+  battle.matchWinner =
+    playerScore === enemyScore
+      ? playerBoardPower === enemyBoardPower
+        ? "draw"
+        : playerBoardPower > enemyBoardPower
+          ? "player"
+          : "enemy"
+      : playerScore > enemyScore
+        ? "player"
+        : "enemy";
+  clearBattleTimers(battle);
+  gameAudio.play(battle.matchWinner === "draw" ? "system.draw" : battle.matchWinner === "player" ? "system.victory" : "system.defeat");
+  if (battle.matchWinner === "draw") {
+    battle.log.push(`补给耗尽最终结算：美国 ${playerScore} : 俄罗斯 ${enemyScore}，场上战力 ${playerBoardPower} : ${enemyBoardPower}，整场平局。`);
+  } else {
+    battle.log.push(`补给耗尽最终结算：美国 ${playerScore} : 俄罗斯 ${enemyScore}，场上战力 ${playerBoardPower} : ${enemyBoardPower}，${getSideName(battle, battle.matchWinner)}获胜。`);
+  }
+  return true;
+}
+
+function moveBoardToGraves(battle) {
+  ["player", "enemy"].forEach((side) => {
+    LINES.forEach((line) => {
+      battle.board[side][line.id].forEach((instance) => battle.graves[side].push(instance));
+      battle.board[side][line.id] = [];
+    });
+  });
+}
+
+function autoPassEmptyHands(battle) {
+  ["player", "enemy"].forEach((side) => {
+    if (battle.hands[side].length === 0 && !battle.passed[side]) {
+      battle.passed[side] = true;
+      battle.log.push(`${getSideName(battle, side)}已无手牌，被迫 Pass。`);
+    }
+  });
+}
+
+function getValidEffectTargets(battle, side, ability, sourceCard) {
+  if (!ability) {
+    return [];
+  }
+  if (ability.intelCost && battle.intel[side] < ability.intelCost) {
+    return [];
+  }
+
+  if (ability.kind === "smoke") {
+    return getAllBoardTargets(battle, side).filter((target) => {
+      if (!target.instance.exposed) {
+        return false;
+      }
+      if (ability.rows && !ability.rows.includes(target.lineId)) {
+        return false;
+      }
+      return matchesTargetRequirements(target.instance, ability);
+    });
+  }
+
+  if (ability.kind === "decoy") {
+    return getAllBoardTargets(battle, side).filter((target) => {
+      if (ability.rows && !ability.rows.includes(target.lineId)) {
+        return false;
+      }
+      return !target.instance.decoy;
+    });
+  }
+
+  if (ability.kind === "camouflage") {
+    return getAllBoardTargets(battle, side).filter((target) => {
+      if (ability.rows && !ability.rows.includes(target.lineId)) {
+        return false;
+      }
+      return !target.instance.exposed;
+    });
+  }
+
+  if (ability.kind === "airspaceControl") {
+    return getAllBoardTargets(battle, side).filter((target) => matchesTargetRequirements(target.instance, ability));
+  }
+
+  if (ability.kind === "repair") {
+    return getAllBoardTargets(battle, side).filter((target) => target.instance.damage > 0 && matchesTargetRequirements(target.instance, ability));
+  }
+
+  if (ability.kind === "fortify") {
+    return [];
+  }
+
+  const opponent = side === "player" ? "enemy" : "player";
+  const enemyTargets = getAllBoardTargets(battle, opponent);
+
+  if (ability.kind === "suppress") {
+    return enemyTargets.filter((target) => {
+      if (ability.rows && !ability.rows.includes(target.lineId)) {
+        return false;
+      }
+      return target.instance.hidden && !target.instance.suppressed;
+    });
+  }
+
+  if (ability.kind === "expose" || ability.kind === "exposeAndCallFire" || ability.kind === "exposeDeployTag" || ability.kind === "exposeAndSupply") {
+    return enemyTargets.filter((target) => {
+      if (!ability.rows.includes(target.lineId)) {
+        return false;
+      }
+      return ability.hiddenOnly ? target.instance.hidden : !target.instance.exposed;
+    });
+  }
+
+  if (ability.kind === "exposeOrDamage") {
+    const hiddenTargets = enemyTargets.filter((target) => ability.exposeRows.includes(target.lineId) && target.instance.hidden);
+    if (hiddenTargets.length) {
+      return hiddenTargets;
+    }
+    return enemyTargets.filter(
+      (target) =>
+        ability.damageRows.includes(target.lineId) &&
+        !target.instance.hidden &&
+        ((ability.damageIfExposed && target.instance.exposed) || (ability.damageIfTag && hasTag(target.instance, ability.damageIfTag.tag))),
+    );
+  }
+
+  if (ability.kind === "damage" || ability.kind === "damageOrSelfBonus" || ability.kind === "strike" || ability.kind === "areaDamage") {
+    if (ability.requiresOwnSupportTag && !hasOwnAnyTagOnLine(battle, side, "support", ability.requiresOwnSupportTag)) {
+      return [];
+    }
+    const targets = enemyTargets.filter((target) => {
+      if (!ability.rows?.includes(target.lineId)) {
+        return false;
+      }
+      if (!canTargetForAbility(battle, side, target, ability, sourceCard)) {
+        return false;
+      }
+      return matchesTargetRequirements(target.instance, ability);
+    });
+    if (targets.length || !ability.fallbackRows) {
+      return targets;
+    }
+    return enemyTargets.filter((target) => {
+      if (!ability.fallbackRows.includes(target.lineId)) {
+        return false;
+      }
+      if (target.instance.hidden) {
+        return false;
+      }
+      return matchesTargetRequirements(target.instance, { ...ability, requiresExposed: false });
+    });
+  }
+
+  if (ability.kind === "damageBoost") {
+    return enemyTargets.filter((target) => ability.rows.includes(target.lineId) && target.instance.exposed && !target.instance.hidden);
+  }
+
+  if (ability.kind === "callFire") {
+    if (!findCallableUnit(battle, side, ability.callerTags)) {
+      return [];
+    }
+    return enemyTargets.filter((target) => {
+      const caller = findCallableUnit(battle, side, ability.callerTags);
+      const fire = caller?.card?.fire || {};
+      const rows = fire.rows || ["frontline", "support"];
+      return caller && rows.includes(target.lineId) && canTargetForAbility(battle, side, target, { ...fire, rows, canRevealHidden: fire.canRevealHidden }, sourceCard) && matchesTargetRequirements(target.instance, fire);
+    });
+  }
+
+  if (ability.kind === "counterBattery") {
+    if (!findCallableUnit(battle, side, ability.callerTags)) {
+      return [];
+    }
+    return enemyTargets.filter((target) => target.lineId === "support" && target.instance.exposed && !target.instance.hidden);
+  }
+
+  return [];
+}
+
+function getAllBoardTargets(battle, side) {
+  const targets = [];
+  LINES.forEach((line) => {
+    battle.board[side][line.id].forEach((instance) => {
+      targets.push({ side, lineId: line.id, uid: instance.uid, instance });
+    });
+  });
+  return targets;
+}
+
+function isPendingTarget(side, uid) {
+  return Boolean(
+    state.pending?.targets?.some((target) => target.side === side && target.uid === uid) ||
+      state.dragTargets.some((target) => target.side === side && target.uid === uid),
+  );
+}
+
+function chooseBestTarget(battle, targets) {
+  if (targets.some((target) => target.instance.damage > 0)) {
+    return targets.slice().sort((left, right) => right.instance.damage - left.instance.damage)[0];
+  }
+  return targets
+    .slice()
+    .sort((left, right) => getCurrentPower(right.instance) - getCurrentPower(left.instance))[0];
+}
+
+function getDamageAmount(battle, side, ability, target, lineId, sourceCard = null, context = {}) {
+  const bonus = ability.bonuses?.find((item) => hasTag(target, item.tag));
+  let amount = bonus?.amount || ability.lineAmounts?.[lineId] || (ability.fallbackRows?.includes(lineId) && !ability.rows?.includes(lineId) ? ability.fallbackAmount : ability.amount);
+  if (context.areaIndex > 0 && Number.isFinite(ability.secondaryAmount)) {
+    amount = ability.secondaryAmount;
+  }
+  if (target.exposedAtAction === battle.actionSerial && ability.hiddenAmount) {
+    amount = ability.hiddenAmount;
+  }
+  if (target.damage > 0 && ability.damagedAmount) {
+    amount = ability.damagedAmount;
+  }
+  if (ability.damagedBonus && target.damage > 0) {
+    amount += ability.damagedBonus;
+  }
+  if (ability.exposedBonus && target.exposed) {
+    amount += ability.exposedBonus;
+  }
+  if (ability.ownTagBonus && hasOwnTagOnLine(battle, side, ability.ownTagBonus.line, ability.ownTagBonus.tag)) {
+    amount += ability.ownTagBonus.amount;
+    if (Number.isFinite(ability.ownTagBonus.cap)) {
+      amount = Math.min(amount, ability.ownTagBonus.cap);
+    }
+  }
+  if (ability.ownAnyTagBonus && hasOwnAnyTagOnLine(battle, side, ability.ownAnyTagBonus.line, ability.ownAnyTagBonus.tags)) {
+    amount += ability.ownAnyTagBonus.amount;
+  }
+  if (ability.ownSameCardBonus && sourceCard && countOwnVisibleCardOnLine(battle, side, ability.ownSameCardBonus.line, sourceCard.id) > 1) {
+    amount += ability.ownSameCardBonus.amount;
+  }
+  if (ability.scoutExtraDamage && hasOwnTagOnLine(battle, side, "frontline", "侦察")) {
+    amount += ability.scoutExtraDamage;
+  }
+  if (ability.artillerySynergyAmount && hasOwnArtillery(battle, side)) {
+    amount = Math.max(amount, ability.artillerySynergyAmount);
+  }
+  if (ability.antiInfiltrationAmount && opponentControlsTag(battle, side, "渗透")) {
+    amount = Math.max(amount, ability.antiInfiltrationAmount);
+  }
+  return amount;
+}
+
+function getRepairAmount(ability, target) {
+  const bonus = ability.bonuses?.find((item) => hasTag(target, item.tag));
+  return bonus?.amount || ability.amount;
+}
+
+function getContinuousSum(battle, side, key) {
+  let sum = 0;
+  LINES.forEach((line) => {
+    battle.board[side][line.id].forEach((instance) => {
+      const card = getCard(instance.cardId);
+      const canProvide = key === "intel" || !instance.hidden;
+      if (card.continuous?.[key] && getCurrentPower(instance) > 0 && canProvide) {
+        sum += card.continuous[key];
+      }
+    });
+  });
+  return sum;
+}
+
+function applyDeploySelfBonuses(battle, side, instance, card) {
+  const ability = card.ability;
+  if (!ability?.selfBonusIfOwnScout) {
+    return;
+  }
+  if (hasOwnTagOnLine(battle, side, "frontline", "侦察") || hasOwnTagOnLine(battle, side, "support", "侦察")) {
+    instance.bonus += ability.selfBonusIfOwnScout;
+    battle.log.push(`${card.name} 获得侦察引导，战力 +${ability.selfBonusIfOwnScout}。`);
+  }
+}
+
+function resolveNoTargetHandEffect(battle, side, uid, card) {
+  if (!spendIntelForAbility(battle, side, card.ability, card)) {
+    return "failed";
+  }
+  markHandActionUsed(battle, side);
+  playTacticCardPresentation(side, card);
+  moveHandCardToGrave(battle, side, uid);
+  battle.log.push(`${getSideName(battle, side)}打出 ${card.name}。`);
+  gameAudio.playCard(card, { action: "effect", ability: card.ability, side });
+  return resolveNoTargetEffect(battle, side, null, card);
+}
+
+function resolveNoTargetBoardEffect(battle, side, instance, card) {
+  if (!spendIntelForAbility(battle, side, card.ability, card)) {
+    return "failed";
+  }
+  gameAudio.playCard(card, { action: "effect", ability: card.ability, side });
+  return resolveNoTargetEffect(battle, side, instance, card);
+}
+
+function getNoLegalTargetMessage(card) {
+  if (card.ability?.requiresExposed) {
+    return `${card.name} 暂无已暴露的合法目标。`;
+  }
+  if (card.ability?.requiresExposedOrAnyTag) {
+    return `${card.name} 暂无已暴露或符合标签条件的合法目标。`;
+  }
+  return `${card.name} 暂无合法目标。`;
+}
+
+function resolveNoTargetEffect(battle, side, sourceInstance, card) {
+  const ability = card.ability || {};
+  if (ability.kind === "fireBoost") {
+    battle.fireBoost[side] = Math.max(battle.fireBoost[side] || 0, ability.amount || 1);
+    battle.log.push(`${card.name} 完成无人校射，己方下一次远火伤害 +${ability.amount || 1}。`);
+  }
+
+  if (ability.kind === "supply") {
+    return resolveSupplyDraw(battle, side, ability, card);
+  }
+
+  if (ability.kind === "damageGuard") {
+    battle.guards[side].push({
+      reduction: ability.reduction || 1,
+      sourceTags: ability.sourceTags || [],
+      sourceName: card.name,
+    });
+    battle.log.push(`${card.name} 建立诱饵窗口，下一次匹配打击伤害 -${ability.reduction || 1}。`);
+    drawIfOwnCardPresent(battle, side, ability.drawIfOwnCard, card);
+  }
+
+  if (ability.kind === "intelDeny") {
+    battle.intelDenials[side].push({ sourceName: card.name });
+    battle.log.push(`${card.name} 建立电子压制窗口，敌方下一次情报/引导技能将被取消。`);
+    drawIfOwnCardPresent(battle, side, ability.drawIfOwnCard, card);
+  }
+
+  if (ability.sourceExposes && sourceInstance) {
+    exposeInstance(battle, { side, lineId: findBoardInstance(battle, side, sourceInstance.uid)?.lineId, instance: sourceInstance }, card.name, { ignoreDecoy: true });
+  }
+  return "resolved";
+}
+
+function resolveSupplyDraw(battle, side, ability, sourceCard) {
+  const drawAmount = ability.draw || 1;
+  const keepAmount = ability.keep || drawAmount;
+  const drawn = [];
+  for (let index = 0; index < drawAmount; index += 1) {
+    const card = battle.decks[side].shift();
+    if (!card) {
+      triggerSupplyExhaustion(battle, side);
+      break;
+    }
+    drawn.push(card);
+  }
+  if (!drawn.length) {
+    battle.log.push(`${sourceCard.name} supply draw failed: deck is empty.`);
+    return "resolved";
+  }
+  if (side === "player" && drawn.length > keepAmount) {
+    state.pending = {
+      kind: "supplyChoice",
+      side,
+      cardId: sourceCard.id,
+      ability,
+      drawn,
+      keepAmount,
+    };
+    gameAudio.play(drawn.length > 1 ? "card.drawHand" : "card.draw", { count: drawn.length, side });
+    battle.log.push(`${sourceCard.name} revealed ${drawn.length} supply choices; waiting to keep ${keepAmount}.`);
+    return "pending";
+  }
+  const kept = chooseSupplyCardsForAi(battle, side, drawn, keepAmount);
+  completeSupplyDraw(battle, side, sourceCard, drawn, kept);
+  return "resolved";
+}
+
+function resolveImmediateSupplyDraw(battle, side, ability, sourceCard) {
+  const drawAmount = ability.draw || 1;
+  const keepAmount = ability.keep || drawAmount;
+  const drawn = [];
+  for (let index = 0; index < drawAmount; index += 1) {
+    const card = battle.decks[side].shift();
+    if (!card) {
+      triggerSupplyExhaustion(battle, side);
+      break;
+    }
+    drawn.push(card);
+  }
+  if (!drawn.length) {
+    battle.log.push(`${sourceCard.name} 未能完成侦查补给，牌库已空。`);
+    return;
+  }
+  const kept = chooseSupplyCardsForAi(battle, side, drawn, keepAmount);
+  completeSupplyDraw(battle, side, sourceCard, drawn, kept);
+}
+
+function chooseSupplyCardsForAi(battle, side, drawn, keepAmount) {
+  if (side !== "enemy") {
+    return drawn.slice(0, keepAmount);
+  }
+  return drawn
+    .slice()
+    .sort((left, right) => scoreSupplyCard(battle, side, right) - scoreSupplyCard(battle, side, left))
+    .slice(0, keepAmount);
+}
+
+function scoreSupplyCard(battle, side, instance) {
+  const card = getCard(instance.cardId);
+  let score = card.type === "unit" ? card.power || 0 : card.type === "strategy" ? 6 : 4;
+  if (card.type === "unit" && card.line === "frontline" && !countAliveUnitsOnLine(battle, side, "frontline")) {
+    score += 4;
+  }
+  if (card.ability?.kind === "supply" && battle.hands[side].length <= 2) {
+    score += 2;
+  }
+  if (card.rarity === "legendary") {
+    score += 3;
+  } else if (card.rarity === "epic") {
+    score += 2;
+  }
+  return score;
+}
+
+function chooseSupplyCard(uid) {
+  const battle = state.battle;
+  const pending = state.pending;
+  if (!battle || pending?.kind !== "supplyChoice" || pending.side !== "player") {
+    return;
+  }
+  const selected = pending.drawn.find((instance) => instance.uid === uid);
+  if (!selected) {
+    gameAudio.play("ui.error");
+    return;
+  }
+  completeSupplyDraw(battle, pending.side, getCard(pending.cardId), pending.drawn, [selected]);
+  state.pending = null;
+  state.selectedHandUid = null;
+  finishAction(pending.side);
+}
+
+function completeSupplyDraw(battle, side, sourceCard, drawn, kept) {
+  const keptIds = new Set(kept.map((instance) => instance.uid));
+  const returned = drawn.filter((instance) => !keptIds.has(instance.uid));
+  battle.hands[side].push(...kept);
+  battle.decks[side].push(...returned);
+  gameAudio.play(kept.length > 1 ? "card.drawHand" : "card.draw", { count: kept.length, side });
+  battle.log.push(`${sourceCard.name} kept ${kept.length} supply card(s); ${returned.length} returned to deck bottom.`);
+}
+function resolveNoTargetAbility(battle, side, instance, card) {
+  if (card.ability && ["damageGuard", "intelDeny", "fireBoost", "supply"].includes(card.ability.kind)) {
+    resolveNoTargetBoardEffect(battle, side, instance, card);
+    return;
+  }
+  if (card.ability?.kind === "fortify") {
+    gameAudio.playCard(card, { action: "effect", ability: card.ability, side });
+    instance.fortified = true;
+    battle.log.push(`${card.name} 构筑【阵地】，抗线承伤上限提高。`);
+    return;
+  }
+  if (card.ability?.kind === "damageOrSelfBonus" && card.ability.selfBonusIfNoTargets) {
+    gameAudio.playCard(card, { action: "effect", ability: card.ability, side });
+    instance.bonus += card.ability.selfBonusIfNoTargets;
+    battle.log.push(`${card.name} 未发现步兵目标，转入机动推进，当前战力 +${card.ability.selfBonusIfNoTargets}。`);
+    exposeSourceAfterActiveAttempt(battle, side, instance, card);
+    return;
+  }
+  if (card.ability?.kind !== "repair") {
+    exposeSourceAfterActiveAttempt(battle, side, instance, card);
+    return;
+  }
+  const didSomething = resolveSupplySideEffects(battle, side, card.ability, card);
+  if (!didSomething) {
+    battle.log.push(`${card.name} 未找到可修复目标，部署效果略过。`);
+  }
+  exposeSourceAfterActiveAttempt(battle, side, instance, card);
+}
+
+function exposeSourceAfterActiveAttempt(battle, side, instance, card) {
+  if (!instance || !card?.ability?.sourceExposes) {
+    return false;
+  }
+  const source = findBoardInstance(battle, side, instance.uid);
+  if (!source || source.instance.exposed) {
+    return false;
+  }
+  return exposeInstance(battle, source, card.name, { ignoreDecoy: true });
+}
+
+function resolveSupplySideEffects(battle, side, ability, sourceCard, context = {}) {
+  let didSomething = false;
+  const drawAmount = ability.draw || (!context.repaired ? ability.drawAlternative : 0);
+  if (drawAmount) {
+    const before = battle.hands[side].length;
+    drawCards(battle, side, drawAmount);
+    const drawn = battle.hands[side].length - before;
+    if (drawn > 0) {
+      battle.log.push(`${sourceCard.name} 补给 ${drawn} 张手牌。`);
+      didSomething = true;
+    }
+  }
+
+  if (ability.rescueMaxPower && !context.repaired) {
+    const grave = battle.graves[side];
+    const index = grave.findIndex((instance) => {
+      const card = getCard(instance.cardId);
+      return card.type === "unit" && card.power <= ability.rescueMaxPower;
+    });
+    if (index !== -1) {
+      const [rescued] = grave.splice(index, 1);
+      rescued.damage = 0;
+      rescued.exposed = false;
+      rescued.exposedAtAction = null;
+      rescued.hidden = false;
+      rescued.shield = false;
+      rescued.fortified = false;
+      rescued.markedDamageBonus = 0;
+      battle.hands[side].push(rescued);
+      battle.log.push(`${sourceCard.name} 回收 ${getCard(rescued.cardId).name} 至手牌。`);
+      didSomething = true;
+    }
+  }
+  return didSomething;
+}
+
+function spendIntelForAbility(battle, side, ability, sourceCard) {
+  const cost = ability?.intelCost || 0;
+  if (!cost) {
+    return true;
+  }
+  if (battle.intel[side] < cost) {
+    battle.log.push(`${sourceCard.name} 需要 ${cost} 点情报，当前情报不足。`);
+    return false;
+  }
+  battle.intel[side] -= cost;
+  battle.log.push(`${getSideName(battle, side)}为 ${sourceCard.name} 消耗 ${cost} 点情报。`);
+  return true;
+}
+
+function applyIntelDenial(battle, actingSide, sourceCard, ability) {
+  if (!ability?.intelCost) {
+    return false;
+  }
+  const defender = actingSide === "player" ? "enemy" : "player";
+  const denial = battle.intelDenials[defender].shift();
+  if (!denial) {
+    return false;
+  }
+  gameAudio.playCard(sourceCard, { action: "effect", ability: { kind: "intelDeny" }, side: defender });
+  battle.log.push(`${denial.sourceName} 取消了 ${sourceCard.name} 的情报/引导效果。`);
+  return true;
+}
+
+function applyOutgoingFireBoost(battle, side, amount, sourceCard) {
+  const boost = battle.fireBoost?.[side] || 0;
+  if (!boost || !sourceCard.tags.some((tag) => ["榴弹炮", "火箭炮"].includes(tag))) {
+    return amount;
+  }
+  battle.fireBoost[side] = 0;
+  gameAudio.play("target.lock", { sourceCard });
+  battle.log.push(`${sourceCard.name} 获得无人校射，伤害 +${boost}。`);
+  return amount + boost;
+}
+
+function applyDamageGuard(battle, defenderSide, amount, sourceCard) {
+  const guards = battle.guards?.[defenderSide] || [];
+  const index = guards.findIndex((guard) => !guard.sourceTags.length || guard.sourceTags.some((tag) => sourceCard.tags.includes(tag)));
+  if (index === -1) {
+    return amount;
+  }
+  const [guard] = guards.splice(index, 1);
+  const nextAmount = Math.max(0, amount - guard.reduction);
+  gameAudio.playCard(sourceCard, { action: "effect", ability: { kind: "damageGuard" }, side: defenderSide });
+  battle.log.push(`${guard.sourceName} 干扰 ${sourceCard.name}，伤害 -${amount - nextAmount}。`);
+  return nextAmount;
+}
+
+function drawIfOwnCardPresent(battle, side, cardId, sourceCard) {
+  if (!cardId || !hasOwnCardOnBoard(battle, side, cardId)) {
+    return;
+  }
+  const drawn = drawCards(battle, side, 1);
+  if (drawn) {
+    battle.log.push(`${sourceCard.name} 与电子战单位协同，补给 1 张手牌。`);
+  }
+}
+
+function hasOwnCardOnBoard(battle, side, cardId) {
+  return LINES.some((line) => battle.board[side][line.id].some((instance) => instance.cardId === cardId && getCurrentPower(instance) > 0));
+}
+
+function getAreaDamageTargets(battle, side, ability, primaryTarget) {
+  const rows = ability.sameLineOnly ? [primaryTarget.lineId] : ability.rows || [primaryTarget.lineId];
+  const candidates = getAllBoardTargets(battle, primaryTarget.side).filter((target) => {
+    if (!rows.includes(target.lineId)) {
+      return false;
+    }
+    if (!canTargetForAbility(battle, side, target, ability)) {
+      return false;
+    }
+    return matchesTargetRequirements(target.instance, ability);
+  });
+  const ordered = candidates.sort((left, right) => {
+    if (left.uid === primaryTarget.uid) return -1;
+    if (right.uid === primaryTarget.uid) return 1;
+    return getCurrentPower(right.instance) - getCurrentPower(left.instance);
+  });
+  return ordered.slice(0, ability.maxTargets || ordered.length);
+}
+
+function resolveFrontlineEngagement(battle, side, deployedRef) {
+  const deployedCard = getCard(deployedRef.instance.cardId);
+  if (deployedRef.lineId !== "frontline" || !isFrontlineContactUnit(deployedCard) || deployedCard.contactException) {
+    return;
+  }
+
+  const opponent = side === "player" ? "enemy" : "player";
+  if (deployedRef.instance.hidden && countAliveUnitsOnLine(battle, opponent, "frontline") > 0) {
+    exposeInstance(battle, deployedRef, "前线接敌", { ignoreDecoy: true });
+  }
+  if (deployedRef.instance.hidden) {
+    return;
+  }
+
+  const ambushers = battle.board[opponent].frontline.filter((instance) => {
+    const card = getCard(instance.cardId);
+    return instance.hidden && getCurrentPower(instance) > 0 && isFrontlineContactUnit(card) && !card.contactException;
+  });
+  if (!ambushers.length) {
+    return;
+  }
+
+  battle.log.push(`前线接敌：${deployedCard.name} 进入火线，触发 ${ambushers.length} 个隐蔽前线单位。`);
+  ambushers.slice().forEach((instance) => {
+    const liveTarget = findBoardInstance(battle, side, deployedRef.instance.uid);
+    if (!liveTarget) {
+      return;
+    }
+    const card = getCard(instance.cardId);
+    const sourceRef = { side: opponent, lineId: "frontline", instance };
+    const ambusherForcedExposed = exposeInstance(battle, sourceRef, "前线接敌", { ignoreDecoy: true });
+    const ambusherFired = resolveFrontlineContactFire(battle, opponent, sourceRef, side, liveTarget, { includeAmbushBonus: true });
+    let deployedFired = false;
+    if (ambusherForcedExposed) {
+      const liveDeployedRef = findBoardInstance(battle, side, deployedRef.instance.uid) || liveTarget;
+      const liveAmbusherRef = findBoardInstance(battle, opponent, instance.uid) || sourceRef;
+      deployedFired = resolveFrontlineContactFire(battle, side, liveDeployedRef, opponent, liveAmbusherRef, { exposeSource: true });
+    }
+    cleanupDestroyed(battle, deployedFired ? side : ambusherFired ? opponent : side, deployedFired ? deployedCard : ambusherFired ? card : deployedCard, deployedFired ? sourceRef : liveTarget);
+  });
+}
+
+function resolveFrontlineContactFire(battle, attackerSide, sourceRef, defenderSide, targetRef, options = {}) {
+  if (!sourceRef?.instance || !targetRef?.instance) {
+    return false;
+  }
+  const sourceCard = getCard(sourceRef.instance.cardId);
+  const ability = sourceCard.ability;
+  if (!ability || !["damage", "damageOrSelfBonus", "strike"].includes(ability.kind)) {
+    return false;
+  }
+  if (!canTargetForAbility(battle, attackerSide, targetRef, ability, sourceCard) || !matchesTargetRequirements(targetRef.instance, ability)) {
+    return false;
+  }
+  const amount = getDamageAmount(battle, attackerSide, ability, targetRef.instance, targetRef.lineId, sourceCard) + (options.includeAmbushBonus ? sourceCard.ambushBonus || 0 : 0);
+  if (options.includeAmbushBonus && sourceCard.ambushBonus) {
+    battle.log.push(`${sourceCard.name} 触发【前线伏击】，本次伤害 +${sourceCard.ambushBonus}。`);
+  }
+  dealDamage(battle, attackerSide, defenderSide, targetRef, amount, sourceCard, sourceRef);
+  if (options.exposeSource && ability.sourceExposes && !sourceRef.instance.exposed) {
+    exposeInstance(battle, sourceRef, "前线接敌开火", { ignoreDecoy: true });
+  }
+  return true;
+}
+
+function hasOwnTagOnLine(battle, side, lineId, tag) {
+  return battle.board[side][lineId].some((instance) => getCurrentPower(instance) > 0 && !instance.hidden && hasTag(instance, tag));
+}
+
+function hasOwnArtillery(battle, side) {
+  return battle.board[side].support.some((instance) => {
+    const card = getCard(instance.cardId);
+    return getCurrentPower(instance) > 0 && !instance.hidden && card.tags.some((tag) => ["榴弹炮", "火箭炮"].includes(tag));
+  });
+}
+
+function opponentControlsTag(battle, side, tag) {
+  const opponent = side === "player" ? "enemy" : "player";
+  return LINES.some((line) =>
+    battle.board[opponent][line.id].some((instance) => getCurrentPower(instance) > 0 && !instance.hidden && hasTag(instance, tag)),
+  );
+}
+
+function hasOwnAnyTagOnLine(battle, side, lineId, tags) {
+  return tags.some((tag) => hasOwnTagOnLine(battle, side, lineId, tag));
+}
+
+function hasOwnVisibleTag(battle, side, tag) {
+  return LINES.some((line) => hasOwnTagOnLine(battle, side, line.id, tag));
+}
+
+function countOwnVisibleCardOnLine(battle, side, lineId, cardId) {
+  return battle.board[side][lineId].filter((instance) => getCurrentPower(instance) > 0 && !instance.hidden && instance.cardId === cardId).length;
+}
+
+function canTargetForAbility(battle, actingSide, target, ability) {
+  if (target.instance.hidden && !ability.canRevealHidden) {
+    return false;
+  }
+  if (ability.publicOnly && target.instance.hidden) {
+    return false;
+  }
+  if (ability.requiresExposed && !target.instance.exposed) {
+    return false;
+  }
+  if (ability.requiresExposedOrAnyTag && !target.instance.exposed && !ability.requiresExposedOrAnyTag.some((tag) => hasTag(target.instance, tag))) {
+    return false;
+  }
+  if (target.lineId === "frontline") {
+    return true;
+  }
+  return target.instance.exposed || isSupportUncovered(battle, target.side) || ability.allowSupport || (ability.rows?.length === 1 && ability.rows[0] === "support");
+}
+
+function matchesTargetRequirements(instance, ability) {
+  if (ability.requiresAnyTag && !ability.requiresAnyTag.some((tag) => hasTag(instance, tag))) {
+    return false;
+  }
+  return true;
+}
+
+function findCallableUnit(battle, side, callerTags = []) {
+  const candidates = [];
+  LINES.forEach((line) => {
+    battle.board[side][line.id].forEach((instance) => {
+      const card = getCard(instance.cardId);
+      if (
+        getCurrentPower(instance) > 0 &&
+        !instance.hidden &&
+        !instance.exposed &&
+        card.fire &&
+        instance.calledAction !== battle.actionSerial &&
+        callerTags.some((tag) => card.tags.includes(tag))
+      ) {
+        candidates.push({ side, lineId: line.id, instance, card });
+      }
+    });
+  });
+  return candidates.sort((left, right) => getCurrentPower(right.instance) - getCurrentPower(left.instance))[0] || null;
+}
+
+function exposeInstance(battle, targetRef, sourceName, options = {}) {
+  if (!targetRef?.instance) {
+    return false;
+  }
+  if (targetRef.instance.decoy && !options.ignoreDecoy) {
+    targetRef.instance.decoy = false;
+    battle.log.push(`${getCard(targetRef.instance.cardId).name} 的假目标阵地吸收了 ${sourceName} 的侦查暴露。`);
+    playBlockedVfx(targetRef, "诱饵");
+    return false;
+  }
+  const wasHidden = targetRef.instance.hidden;
+  targetRef.instance.hidden = false;
+  targetRef.instance.exposed = true;
+  targetRef.instance.exposedAtAction = battle.actionSerial;
+  targetRef.instance.shield = false;
+  if (wasHidden) {
+    markCardFlip(targetRef.instance, "reveal");
+  }
+  const cardName = getCard(targetRef.instance.cardId).name;
+  battle.log.push(`${sourceName} 令 ${cardName}${wasHidden ? " 翻开并" : ""}【暴露】。`);
+  return true;
+}
+
+function markCardFlip(instance, direction) {
+  if (!instance) {
+    return;
+  }
+  instance.flipAnimation = direction;
+  instance.flipAnimationId = (instance.flipAnimationId || 0) + 1;
+  const animationId = instance.flipAnimationId;
+  window.setTimeout(() => {
+    if (instance.flipAnimationId !== animationId) {
+      return;
+    }
+    instance.flipAnimation = null;
+    if (state.screen === "battle") {
+      renderBoard();
+    }
+  }, 620);
+}
+
+function applyExposeMarkers(battle, actingSide, ability, targetRef, sourceCard) {
+  let markAmount = ability.markAmount || 0;
+  if (ability.markIfOwnTag && hasOwnVisibleTag(battle, actingSide, ability.markIfOwnTag)) {
+    markAmount = Math.max(markAmount, ability.markAmount || 1);
+  }
+  if (!markAmount) {
+    return;
+  }
+  targetRef.instance.markedDamageBonus = Math.max(targetRef.instance.markedDamageBonus || 0, markAmount);
+  battle.log.push(`${sourceCard.name} 标定 ${getCard(targetRef.instance.cardId).name}，下一次打击伤害 +${markAmount}。`);
+}
+
+function deployHandUnitWithTagAndActivate(battle, side, tag, sourceCard) {
+  if (!tag) {
+    return false;
+  }
+  const hand = battle.hands[side];
+  const index = hand.findIndex((instance) => {
+    const card = getCard(instance.cardId);
+    return card.type === "unit" && card.tags.includes(tag);
+  });
+  if (index === -1) {
+    battle.log.push(`${sourceCard.name} 完成火力指示，但手牌中没有可立即部署的【${tag}】。`);
+    return false;
+  }
+
+  const [instance] = hand.splice(index, 1);
+  const card = getCard(instance.cardId);
+  const lineId = getDeployLines(card)[0] || card.line;
+  instance.hidden = false;
+  battle.board[side][lineId].push(instance);
+  gameAudio.playCard(card, { action: "deploy", side, hidden: false });
+  battle.log.push(`${sourceCard.name} 引导 ${card.name} 立即部署到${getLine(lineId).name}。`);
+  applyDeploySelfBonuses(battle, side, instance, card);
+
+  const targets = getValidEffectTargets(battle, side, card.ability, card);
+  if (card.ability && targets.length) {
+    const result = resolveEffectOnTarget(battle, {
+      side,
+      sourceUid: instance.uid,
+      cardId: card.id,
+      ability: card.ability,
+      target: side === "enemy" ? chooseAiTarget(battle, card, targets, battle.aiDifficulty || "medium") : chooseBestTarget(battle, targets),
+    });
+    if (result === "pending-animation") {
+      return true;
+    }
+  } else if (card.ability) {
+    resolveNoTargetAbility(battle, side, instance, card);
+  }
+  return true;
+}
+
+function resolveCalledFire(battle, side, sourceCard, caller, target, fire) {
+  if (!caller?.instance || caller.instance.hidden || caller.instance.exposed) {
+    return;
+  }
+  caller.instance.calledAction = battle.actionSerial;
+  const callerCard = getCard(caller.instance.cardId);
+  gameAudio.playCard(callerCard, { action: "fire", ability: fire, side });
+  if (fire.kind === "areaDamage") {
+    getAreaDamageTargets(battle, side, fire, target).forEach((areaTarget, index) => {
+      if (areaTarget.instance.hidden && fire.canRevealHidden) {
+        exposeInstance(battle, areaTarget, callerCard.name);
+      }
+      const amount = getDamageAmount(battle, side, fire, areaTarget.instance, areaTarget.lineId, callerCard, { areaIndex: index });
+      dealDamage(battle, side, areaTarget.side, areaTarget, amount, callerCard, caller);
+    });
+  } else {
+    if (target.instance.hidden && fire.canRevealHidden) {
+      exposeInstance(battle, target, callerCard.name);
+    }
+    const amount = getDamageAmount(battle, side, fire, target.instance, target.lineId, callerCard);
+    dealDamage(battle, side, target.side, target, amount, callerCard, caller);
+  }
+  if (fire.sourceExposes !== false) {
+    exposeInstance(battle, caller, sourceCard.name, { ignoreDecoy: true });
+  }
+}
+
+function applySplashDamage(battle, attackerSide, primaryTarget, amount, sourceCard) {
+  const row = battle.board[primaryTarget.side][primaryTarget.lineId];
+  const splash = row.find((instance) => instance.uid !== primaryTarget.instance.uid && !instance.hidden);
+  if (!splash) {
+    return;
+  }
+  dealDamage(battle, attackerSide, primaryTarget.side, { side: primaryTarget.side, lineId: primaryTarget.lineId, instance: splash }, amount, sourceCard);
+}
+
+function normalizeTargetRef(battle, side, targetRefOrInstance) {
+  if (targetRefOrInstance?.instance) {
+    return targetRefOrInstance;
+  }
+  if (!targetRefOrInstance?.uid) {
+    return null;
+  }
+  return findBoardInstance(battle, side, targetRefOrInstance.uid);
+}
+
+function isSupportUncovered(battle, side) {
+  return countAliveUnitsOnLine(battle, side, "frontline") === 0 && countAliveUnitsOnLine(battle, side, "support") > 0;
+}
+
+function countAliveUnitsOnLine(battle, side, lineId) {
+  return battle.board[side][lineId].filter((instance) => getCurrentPower(instance) > 0).length;
+}
+
+function refreshIntelValues(battle) {
+  ["player", "enemy"].forEach((side) => {
+    battle.intel[side] = Math.min(3, getContinuousSum(battle, side, "intel"));
+  });
+}
+
+function clearSuppressionForSide(battle, side) {
+  LINES.forEach((line) => {
+    battle.board[side][line.id].forEach((instance) => {
+      instance.suppressed = false;
+    });
+  });
+}
+
+function decayExposureWindows(battle, actingSide) {
+  void battle;
+  void actingSide;
+}
+
+function triggerSupplyExhaustion(battle, side) {
+  if (battle.supplyExhausted) {
+    return;
+  }
+  battle.supplyExhausted = true;
+  battle.finalActions = { player: 1, enemy: 1 };
+  battle.finalTriggeredAtAction = battle.actionSerial;
+  gameAudio.play("system.supplyExhausted", { side });
+  battle.log.push(`${getSideName(battle, side)}需要抽牌但牌库为空，触发补给耗尽。双方各获得 1 个最终主行动。`);
+}
+
+function revealAllHidden(battle) {
+  ["player", "enemy"].forEach((side) => {
+    LINES.forEach((line) => {
+      battle.board[side][line.id].forEach((instance) => {
+        instance.hidden = false;
+      });
+    });
+  });
+}
+
+function getLineCollapseWinner(battle) {
+  for (const side of ["player", "enemy"]) {
+    const opponent = side === "player" ? "enemy" : "player";
+    if (!isSupportUncovered(battle, side)) {
+      continue;
+    }
+    const deficit = getTotalScore(battle, opponent) - getTotalScore(battle, side);
+    if (deficit >= 15) {
+      return opponent;
+    }
+  }
+  return null;
+}
+
+function findBoardInstance(battle, side, uid) {
+  for (const line of LINES) {
+    const instance = battle.board[side][line.id].find((item) => item.uid === uid);
+    if (instance) {
+      return { side, lineId: line.id, instance };
+    }
+  }
+  return null;
+}
+
+function moveHandCardToGrave(battle, side, uid) {
+  const hand = battle.hands[side];
+  const index = hand.findIndex((item) => item.uid === uid);
+  if (index === -1) {
+    return null;
+  }
+  const [instance] = hand.splice(index, 1);
+  battle.graves[side].push(instance);
+  playCardFlightBetweenElements(getCard(instance.cardId), side, getHandCardElement(side, uid), getPileElement(side, "grave"), { back: true, duration: 680 });
+  return instance;
+}
+
+function drawCards(battle, side, amount, options = {}) {
+  let drawn = 0;
+  for (let index = 0; index < amount; index += 1) {
+    const card = battle.decks[side].shift();
+    if (!card) {
+      if (options.triggerExhaustion !== false) {
+        triggerSupplyExhaustion(battle, side);
+      }
+      if (drawn && !options.silent) {
+        gameAudio.play(drawn > 1 ? "card.drawHand" : "card.draw", { count: drawn, side });
+      }
+      return drawn;
+    }
+    battle.hands[side].push(card);
+    if (!options.silent) {
+      const destination = side === "player" ? refs.hand : document.querySelector(".enemy-hand-strip");
+      playCardFlightBetweenElements(getCard(card.cardId), side, getPileElement(side, "deck"), destination, { back: true, duration: 620 });
+    }
+    drawn += 1;
+  }
+  if (drawn && !options.silent) {
+    gameAudio.play(drawn > 1 ? "card.drawHand" : "card.draw", { count: drawn, side });
+  }
+  return drawn;
+}
+
+function getCurrentPower(instance) {
+  const card = getCard(instance.cardId);
+  return Math.max(0, (card.power || 0) + (instance.bonus || 0) - instance.damage);
+}
+
+function getLineScore(battle, side, lineId) {
+  const raw = battle.board[side][lineId].reduce((sum, instance) => sum + getCurrentPower(instance), 0);
+  if (lineId === "support" && isSupportUncovered(battle, side)) {
+    return Math.floor(raw * 0.5);
+  }
+  return raw;
+}
+
+function getTotalScore(battle, side) {
+  return battle.scores?.[side] || 0;
+}
+
+function getBoardPowerTotal(battle, side) {
+  return LINES.reduce((sum, line) => sum + battle.board[side][line.id].reduce((lineSum, instance) => lineSum + getCurrentPower(instance), 0), 0);
+}
+
+function hasTag(instance, tag) {
+  return getCard(instance.cardId).tags.includes(tag);
+}
+
+function createEmptyLines(factory) {
+  return LINES.reduce((acc, line) => {
+    acc[line.id] = factory();
+    return acc;
+  }, {});
+}
+
+function canConcealCardFromHand(side, card) {
+  const battle = state.battle;
+  return Boolean(battle && canConcealCardForSide(battle, side, card));
+}
+
+function canConcealCardForSide(battle, side, card) {
+  if (!battle || card.type !== "unit") {
+    return false;
+  }
+  if (card.line !== "frontline" || !isGroundContactUnit(card) || card.contactException) {
+    return true;
+  }
+  const opponent = side === "player" ? "enemy" : "player";
+  return countAliveUnitsOnLine(battle, opponent, "frontline") === 0;
+}
+
+function isGroundContactUnit(card) {
+  return card.tags.includes("步兵") || card.tags.includes("装甲");
+}
+
+function isFrontlineContactUnit(card) {
+  return isGroundContactUnit(card) || card.tags.includes("直升机");
+}
+
+function isSelectedUnitAllowedOn(side, lineId) {
+  const battle = state.battle;
+  if (!battle || !state.selectedHandUid || side !== "player" || !canPlayerAct() || !canUseHandAction(battle, "player")) {
+    return false;
+  }
+  const instance = battle.hands.player.find((item) => item.uid === state.selectedHandUid);
+  if (!instance) {
+    return false;
+  }
+  const card = getCard(instance.cardId);
+  return card.type === "unit" && getDeployLines(card).includes(lineId);
+}
+
+function getDeployLines(card) {
+  return card.lines || [card.line];
+}
+
+function canPlayerAct() {
+  const battle = state.battle;
+  return Boolean(
+      battle &&
+      battle.phase === "battle" &&
+      battle.activeSide === "player" &&
+      !state.mulligan.active &&
+      !battle.turnTransition &&
+      !battle.aiThinking &&
+      !battle.actionAnimation &&
+      (!battle.finalActions || battle.finalActions.player > 0),
+  );
+}
+
+function canPlayerEndTurn() {
+  const battle = state.battle;
+  return Boolean(
+    battle &&
+      battle.phase === "battle" &&
+      battle.activeSide === "player" &&
+      !state.mulligan.active &&
+      !state.pending &&
+      !battle.turnTransition &&
+      !battle.aiThinking &&
+      !battle.actionAnimation,
+  );
+}
+
+function canUseHandAction(battle, side) {
+  return !getTurnActions(battle, side).handPlayed;
+}
+
+function markHandActionUsed(battle, side) {
+  getTurnActions(battle, side).handPlayed = true;
+}
+
+function canUseHiddenAction(battle, side) {
+  return canUseBoardAction(battle, side);
+}
+
+function markHiddenActionUsed(battle, side) {
+  markBoardActionUsed(battle, side);
+}
+
+function canUseBoardAction(battle, side) {
+  return !getTurnActions(battle, side).hiddenActivated;
+}
+
+function markBoardActionUsed(battle, side) {
+  getTurnActions(battle, side).hiddenActivated = true;
+}
+
+function openCodex() {
+  state.codexOpen = true;
+  renderCodex();
+}
+
+function closeCodex() {
+  state.codexOpen = false;
+  clearSpotlight();
+  renderCodex();
+}
+
+function openGuide() {
+  state.guideOpen = true;
+  state.deckBuilderOpen = false;
+  renderGuide();
+  renderDeckBuilder();
+}
+
+function closeGuide() {
+  state.guideOpen = false;
+  renderGuide();
+}
+
+function openDeckBuilder() {
+  if (state.screen !== "briefing") {
+    return;
+  }
+  state.deckBuilderOpen = true;
+  state.guideOpen = false;
+  renderGuide();
+  renderDeckBuilder();
+}
+
+function closeDeckBuilder() {
+  state.deckBuilderOpen = false;
+  clearSpotlight();
+  renderDeckBuilder();
+  renderDeckStatus();
+}
+
+function setDeckFaction(factionId) {
+  if (!FACTIONS[factionId]) {
+    return;
+  }
+  state.playerFaction = factionId;
+  state.codexFaction = factionId;
+  state.playerDeck = loadSavedDeck(factionId);
+  saveDeckState();
+  renderDeckStatus();
+  renderDeckBuilder();
+}
+
+function addDeckCard(cardId) {
+  const card = getCard(cardId);
+  if (!card || card.faction !== state.playerFaction || state.playerDeck.length >= DECK_RULES.size) {
+    gameAudio.play("ui.error");
+    return;
+  }
+  const count = state.playerDeck.filter((id) => id === cardId).length;
+  if (count >= getCopyLimit(card)) {
+    gameAudio.play("ui.error");
+    return;
+  }
+  updatePlayerDeck([...state.playerDeck, cardId]);
+}
+
+function removeDeckCard(cardId) {
+  const index = state.playerDeck.lastIndexOf(cardId);
+  if (index === -1) {
+    gameAudio.play("ui.error");
+    return;
+  }
+  const nextDeck = state.playerDeck.slice();
+  nextDeck.splice(index, 1);
+  updatePlayerDeck(nextDeck);
+}
+
+function resetPlayerDeck() {
+  updatePlayerDeck(getStarterDeckForFaction(state.playerFaction));
+}
+
+function clearPlayerDeck() {
+  updatePlayerDeck([]);
+}
+
+function autoFillPlayerDeck() {
+  const nextDeck = [];
+  const currentCounts = {};
+  const addIfAllowed = (cardId) => {
+    if (nextDeck.length >= DECK_RULES.size) {
+      return false;
+    }
+    const card = getCard(cardId);
+    if (!card || card.faction !== state.playerFaction) {
+      return false;
+    }
+    const count = currentCounts[cardId] || 0;
+    if (count >= getCopyLimit(card)) {
+      return false;
+    }
+    currentCounts[cardId] = count + 1;
+    nextDeck.push(cardId);
+    return true;
+  };
+
+  state.playerDeck.forEach(addIfAllowed);
+  [...getStarterDeckForFaction(state.playerFaction), ...getFactionCards(state.playerFaction).map((card) => card.id)].forEach(addIfAllowed);
+  updatePlayerDeck(nextDeck);
+}
+
+function updatePlayerDeck(nextDeck) {
+  state.playerDeck = sanitizeDeckIds(state.playerFaction, nextDeck);
+  saveDeckState();
+  gameAudio.play("ui.switch");
+  renderDeckStatus();
+  renderDeckBuilder();
+}
+
+function saveDeckState() {
+  try {
+    localStorage.setItem(`${DECK_STORAGE_PREFIX}.faction`, state.playerFaction);
+    localStorage.setItem(getDeckStorageKey(state.playerFaction), JSON.stringify(state.playerDeck));
+  } catch (error) {
+    // Local storage can be unavailable in restricted browser contexts.
+  }
+}
+
+function loadSavedDeckFaction() {
+  try {
+    const factionId = localStorage.getItem(`${DECK_STORAGE_PREFIX}.faction`);
+    return FACTIONS[factionId] ? factionId : "usa";
+  } catch (error) {
+    return "usa";
+  }
+}
+
+function loadSavedDeck(factionId) {
+  try {
+    const raw = localStorage.getItem(getDeckStorageKey(factionId));
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) {
+      const deck = sanitizeDeckIds(factionId, parsed);
+      if (validateDeck(deck, factionId).valid) {
+        return deck;
+      }
+    }
+  } catch (error) {
+    // Fall back to the tuned starter list.
+  }
+  return getStarterDeckForFaction(factionId);
+}
+
+function getDeckStorageKey(factionId) {
+  return `${DECK_STORAGE_PREFIX}.${factionId}`;
+}
+
+function getStarterDeckForFaction(factionId) {
+  return (factionId === "russia" ? STARTER_DECKS.enemy : STARTER_DECKS.player).slice();
+}
+
+function sanitizeDeckIds(factionId, cardIds) {
+  return cardIds.filter((cardId) => {
+    const card = CARD_LIBRARY[cardId];
+    return card && card.faction === factionId;
+  });
+}
+
+function getFactionCards(factionId) {
+  return Object.values(CARD_LIBRARY)
+    .filter((card) => card.faction === factionId)
+    .sort(sortDeckCards);
+}
+
+function sortDeckCards(left, right) {
+  const typeOrder = { unit: 0, tactic: 1, strategy: 2 };
+  const lineOrder = { frontline: 0, support: 1, instant: 2 };
+  return (
+    typeOrder[left.type] - typeOrder[right.type] ||
+    lineOrder[left.line] - lineOrder[right.line] ||
+    (left.power || 99) - (right.power || 99) ||
+    left.name.localeCompare(right.name, "zh-CN")
+  );
+}
+
+function validateDeck(deckIds, factionId) {
+  const errors = [];
+  const stats = {
+    total: deckIds.length,
+    units: 0,
+    tactics: 0,
+    strikeTactics: 0,
+    supportTactics: 0,
+    frontline: 0,
+    support: 0,
+    recon: 0,
+    airDefense: 0,
+  };
+  const counts = {};
+
+  deckIds.forEach((cardId) => {
+    const card = CARD_LIBRARY[cardId];
+    counts[cardId] = (counts[cardId] || 0) + 1;
+    if (!card) {
+      errors.push(`未知卡牌：${cardId}`);
+      return;
+    }
+    if (card.faction !== factionId) {
+      errors.push(`${card.name} 不属于当前阵营。`);
+    }
+    if (card.type === "unit") {
+      stats.units += 1;
+      if (canDeployToLine(card, "frontline")) {
+        stats.frontline += 1;
+      }
+      if (canDeployToLine(card, "support")) {
+        stats.support += 1;
+      }
+    } else {
+      stats.tactics += 1;
+      if (isStrikeTacticCard(card)) {
+        stats.strikeTactics += 1;
+      } else {
+        stats.supportTactics += 1;
+      }
+    }
+    if (isReconCard(card)) {
+      stats.recon += 1;
+    }
+    if (isAirDefenseCard(card)) {
+      stats.airDefense += 1;
+    }
+  });
+
+  Object.entries(counts).forEach(([cardId, count]) => {
+    const card = CARD_LIBRARY[cardId];
+    if (!card) {
+      return;
+    }
+    const limit = getCopyLimit(card);
+    if (count > limit) {
+      errors.push(`${card.name} 超过复制上限：${count}/${limit}。`);
+    }
+  });
+
+  if (stats.total !== DECK_RULES.size) {
+    errors.push(`卡组必须为 ${DECK_RULES.size} 张，目前 ${stats.total} 张。`);
+  }
+  if (stats.units < DECK_RULES.unitMin || stats.units > DECK_RULES.unitMax) {
+    errors.push(`单位牌需要 ${DECK_RULES.unitMin}-${DECK_RULES.unitMax} 张，目前 ${stats.units} 张。`);
+  }
+  if (stats.tactics < DECK_RULES.tacticMin || stats.tactics > DECK_RULES.tacticMax) {
+    errors.push(`战术牌需要 ${DECK_RULES.tacticMin} 张，目前 ${stats.tactics} 张。`);
+  }
+  if (stats.strikeTactics < DECK_RULES.strikeTacticMin || stats.strikeTactics > DECK_RULES.strikeTacticMax) {
+    errors.push(`当前规则不再使用打击战术牌，目前 ${stats.strikeTactics} 张。`);
+  }
+  if (stats.supportTactics < DECK_RULES.supportTacticMin || stats.supportTactics > DECK_RULES.supportTacticMax) {
+    errors.push(`支援战术牌需要 ${DECK_RULES.supportTacticMin} 张，目前 ${stats.supportTactics} 张。`);
+  }
+  if (stats.frontline < DECK_RULES.frontlineMin) {
+    errors.push(`前线可部署单位至少 ${DECK_RULES.frontlineMin} 张，目前 ${stats.frontline} 张。`);
+  }
+  if (stats.support < DECK_RULES.supportMin) {
+    errors.push(`支援可部署单位至少 ${DECK_RULES.supportMin} 张，目前 ${stats.support} 张。`);
+  }
+  if (stats.recon < DECK_RULES.reconMin) {
+    errors.push(`侦察/暴露链至少 ${DECK_RULES.reconMin} 张，目前 ${stats.recon} 张。`);
+  }
+  if (stats.airDefense < DECK_RULES.airDefenseMin) {
+    errors.push(`防空拦截单位至少 ${DECK_RULES.airDefenseMin} 张，目前 ${stats.airDefense} 张。`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    stats,
+    counts,
+  };
+}
+
+function getCopyLimit(card) {
+  return DECK_RULES.copyLimitByRarity[card.rarity] || 3;
+}
+
+function canDeployToLine(card, lineId) {
+  return card.type === "unit" && getDeployLines(card).includes(lineId);
+}
+
+function isReconCard(card) {
+  const kind = card.ability?.kind;
+  return ["expose", "exposeAndCallFire", "exposeDeployTag", "exposeAndSupply", "exposeOrDamage", "callFire"].includes(kind);
+}
+
+function isStrikeTacticCard(card) {
+  return card.type !== "unit" && card.tags.some((tag) => ["打击", "导弹", "战斗机", "轰炸机"].includes(tag));
+}
+
+function isSingleInterceptorStrikeCard(card) {
+  return card.tags.some((tag) => ["导弹", "战斗机", "轰炸机"].includes(tag));
+}
+
+function isAirDefenseCard(card) {
+  return Boolean(card.continuous?.intercept || card.tags.some((tag) => ["伴随防空", "重型防空"].includes(tag)));
+}
+
+function setAiDifficulty(difficulty) {
+  if (!AI_DIFFICULTY_LABELS[difficulty]) {
+    return;
+  }
+  state.aiDifficulty = difficulty;
+  updateDifficultyButtons();
+}
+
+function updateDifficultyButtons() {
+  refs.difficultyButtons.forEach((button) => {
+    const difficulty = button.dataset.action?.split(":")[1];
+    const isActive = difficulty === state.aiDifficulty;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function toggleLogPanel() {
+  state.logCollapsed = !state.logCollapsed;
+  renderLog();
+}
+
+function toggleBgm() {
+  state.bgmOn = !state.bgmOn;
+  if (state.bgmOn) {
+    playBgm();
+  } else {
+    refs.bgm?.pause();
+  }
+  renderScore();
+}
+
+function playBgm(forceNext = false) {
+  if (!refs.bgm || !state.bgmOn) {
+    return;
+  }
+  if (forceNext || !state.currentBgmTrack || refs.bgm.src !== new URL(state.currentBgmTrack, window.location.href).href) {
+    const nextTrack = pickRandomBgmTrack(state.currentBgmTrack);
+    state.currentBgmTrack = nextTrack;
+    refs.bgm.src = nextTrack;
+    refs.bgm.currentTime = 0;
+  }
+  refs.bgm.volume = 0.34;
+  refs.bgm.play().catch(() => {
+    state.bgmOn = false;
+    renderScore();
+  });
+}
+
+function handleBgmEnded() {
+  if (!state.bgmOn) {
+    return;
+  }
+  playBgm(true);
+}
+
+function pickRandomBgmTrack(previousTrack = null) {
+  const pool = BGM_PLAYLIST.filter((track) => track !== previousTrack);
+  const choices = pool.length ? pool : BGM_PLAYLIST;
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+function cancelIntent() {
+  if (state.pending?.kind === "supplyChoice") {
+    gameAudio.play("ui.error");
+    return;
+  }
+  state.pending = null;
+  state.selectedHandUid = null;
+  clearSpotlight();
+  clearDragState();
+  render();
+}
+
+function handleDragStart(event) {
+  const cardElement = event.target.closest("[data-hand-card]");
+  if (!cardElement) {
+    return;
+  }
+  if (!canPlayerAct() || state.pending) {
+    event.preventDefault();
+    return;
+  }
+  const uid = cardElement.dataset.handCard;
+  const instance = state.battle.hands.player.find((item) => item.uid === uid);
+  if (!instance) {
+    event.preventDefault();
+    return;
+  }
+  const card = getCard(instance.cardId);
+  const rect = cardElement.getBoundingClientRect();
+  state.draggingUid = uid;
+  state.selectedHandUid = uid;
+  state.dragMode = card.type === "unit" ? "unit" : "effect";
+  state.dragStart = {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+  state.dragTargets = card.type === "unit" ? [] : getValidEffectTargets(state.battle, "player", card.ability, card);
+  if (card.type !== "unit" && !state.dragTargets.length) {
+    clearDragState({ render: false });
+    event.preventDefault();
+    return;
+  }
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", uid);
+  event.dataTransfer.setData("application/x-war-card-uid", uid);
+  updateTargetingLine(state.dragStart);
+  renderBoard();
+}
+
+function handleDragMove(event) {
+  if (!state.draggingUid || !hasPointerPosition(event)) {
+    return;
+  }
+  updateTargetingLine(event, false);
+}
+
+function handleDragOver(event) {
+  if (!state.draggingUid) {
+    return;
+  }
+  const row = event.target.closest("[data-row]");
+  const boardTarget = event.target.closest("[data-board-card]");
+  clearDragHover();
+
+  let valid = false;
+  if (state.dragMode === "unit" && row && isSelectedUnitAllowedOn(row.dataset.side, row.dataset.row)) {
+    valid = true;
+    row.classList.add("is-drag-over");
+  } else if (state.dragMode === "effect" && boardTarget && isDragTarget(boardTarget.dataset.side, boardTarget.dataset.boardCard)) {
+    valid = true;
+    boardTarget.classList.add("is-drag-over");
+  }
+
+  if (valid) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+  updateTargetingLine(event, valid);
+}
+
+function handleDragLeave(event) {
+  const target = event.target.closest("[data-row],[data-board-card]");
+  if (target && !target.contains(event.relatedTarget)) {
+    target.classList.remove("is-drag-over");
+  }
+}
+
+function handleDrop(event) {
+  const row = event.target.closest("[data-row]");
+  const boardTarget = event.target.closest("[data-board-card]");
+  const uid = state.draggingUid;
+  if (!uid) {
+    clearDragState();
+    return;
+  }
+
+  if (state.dragMode === "unit" && row && isSelectedUnitAllowedOn(row.dataset.side, row.dataset.row)) {
+    event.preventDefault();
+    clearDragState({ render: false, preserveSelection: true });
+    state.selectedHandUid = uid;
+    playSelectedUnitToRow(row.dataset.side, row.dataset.row);
+    return;
+  }
+
+  if (state.dragMode === "effect" && boardTarget && isDragTarget(boardTarget.dataset.side, boardTarget.dataset.boardCard)) {
+    event.preventDefault();
+    const payload = createDraggedEffectPayload(uid, boardTarget.dataset.side, boardTarget.dataset.boardCard);
+    clearDragState({ render: false });
+    if (payload) {
+      const result = resolveEffectOnTarget(state.battle, payload);
+      if (result === "pending-animation") {
+        return;
+      }
+      finishAction("player");
+    } else {
+      render();
+    }
+    return;
+  }
+
+  clearDragState();
+}
+
+function clearDragState(options = {}) {
+  const hadDrag = Boolean(state.draggingUid || state.dragMode || state.dragTargets.length || state.dragStart);
+  const shouldRender = options.render ?? true;
+  const preserveSelection = options.preserveSelection ?? false;
+  state.draggingUid = null;
+  state.dragMode = null;
+  state.dragTargets = [];
+  state.dragStart = null;
+  if (hadDrag && !preserveSelection) {
+    state.selectedHandUid = null;
+  }
+  clearDragHover();
+  hideTargetingLine();
+  if (hadDrag && shouldRender && state.screen === "battle") {
+    render();
+  }
+}
+
+function clearDragHover() {
+  refs.board?.querySelectorAll(".is-drag-over").forEach((item) => item.classList.remove("is-drag-over"));
+}
+
+function isDragTarget(side, uid) {
+  return state.dragTargets.some((target) => target.side === side && target.uid === uid);
+}
+
+function createDraggedEffectPayload(uid, targetSide, targetUid) {
+  const battle = state.battle;
+  if (!battle || !isDragTarget(targetSide, targetUid)) {
+    return null;
+  }
+  const instance = battle.hands.player.find((item) => item.uid === uid);
+  if (!instance) {
+    return null;
+  }
+  const card = getCard(instance.cardId);
+  if (card.type === "unit") {
+    return null;
+  }
+  return {
+    side: "player",
+    handUid: uid,
+    cardId: card.id,
+    ability: card.ability,
+    target: { side: targetSide, uid: targetUid },
+  };
+}
+
+function updateTargetingLine(point, valid = false) {
+  if (!refs.targetingLine || !refs.targetingPath || !state.dragStart) {
+    return;
+  }
+  const end = normalizePointerPoint(point);
+  refs.targetingLine.hidden = false;
+  refs.targetingLine.classList.toggle("is-valid", valid);
+  refs.targetingLine.classList.toggle("is-invalid", !valid);
+  const start = state.dragStart;
+  const dx = end.x - start.x;
+  const lift = state.dragMode === "effect" ? -54 : -34;
+  const c1x = start.x + dx * 0.34;
+  const c2x = start.x + dx * 0.72;
+  const c1y = start.y + lift;
+  const c2y = end.y + lift;
+  refs.targetingPath.setAttribute("d", `M ${start.x} ${start.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${end.x} ${end.y}`);
+}
+
+function hideTargetingLine() {
+  refs.targetingLine?.classList.remove("is-valid", "is-invalid");
+  if (refs.targetingPath) {
+    refs.targetingPath.setAttribute("d", "");
+  }
+  if (refs.targetingLine) {
+    refs.targetingLine.hidden = true;
+  }
+}
+
+function normalizePointerPoint(point) {
+  if (typeof point?.x === "number" && typeof point?.y === "number") {
+    return point;
+  }
+  if (hasPointerPosition(point)) {
+    return { x: point.clientX, y: point.clientY };
+  }
+  return state.dragStart;
+}
+
+function hasPointerPosition(event) {
+  return Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY) && (event.clientX !== 0 || event.clientY !== 0);
+}
+
+function getIntentCopy(card) {
+  if (card.ability?.kind === "expose" || card.ability?.kind === "exposeOrDamage") {
+    return "选择一个目标令其【暴露】。V4.3 中暴露不会自然消失，需要牌面效果重新隐蔽。";
+  }
+  if (card.ability?.kind === "smoke") {
+    return "选择己方已暴露单位，移除暴露并重新进入【隐蔽】。";
+  }
+  if (card.ability?.kind === "callFire") {
+    return "选择敌方目标，调用己方远火单位开火；被调用单位会暴露。";
+  }
+  if (card.ability?.kind === "suppress") {
+    return "选择敌方隐蔽单位，使其下回合不能主动翻开并发动技能。";
+  }
+  if (card.ability?.kind === "decoy") {
+    return "选择己方支援单位，抵消敌方下一次侦查暴露。";
+  }
+  if (card.ability?.kind === "camouflage") {
+    return "选择己方未暴露单位，使其进入【隐蔽】。";
+  }
+  if (card.ability?.kind === "counterBattery") {
+    return "选择敌方暴露的支援区单位，调用远火进行反炮兵打击。";
+  }
+  if (card.ability?.kind === "damageBoost") {
+    return "选择一个已暴露支援区目标，为下一次打击追加伤害。";
+  }
+  return "选择一个合法目标结算伤害。支援区通常需要暴露、失去掩护或牌面允许才可被指定。";
+}
+
+function getPrimaryGlyph(card) {
+  const tags = card.tags;
+  if (tags.includes("装甲")) return "甲";
+  if (tags.includes("直升机")) return "旋";
+  if (tags.includes("无人机")) return "侦";
+  if (tags.includes("榴弹炮")) return "炮";
+  if (tags.includes("火箭炮")) return "箭";
+  if (tags.includes("重型防空") || tags.includes("伴随防空")) return "防";
+  if (tags.includes("战斗机")) return "空";
+  if (tags.includes("空战")) return "空";
+  if (tags.includes("远火")) return "火";
+  if (tags.includes("步兵")) return "兵";
+  if (tags.includes("战机")) return "空";
+  if (tags.includes("导弹")) return "弹";
+  if (tags.includes("烟幕") || tags.includes("电子战")) return "扰";
+  if (tags.includes("轰炸机")) return "轰";
+  return "兵";
+}
+
+function getSideName(battle, side) {
+  return getFaction(battle.factions[side]).shortName;
+}
+
+function getLineIconPath(lineId) {
+  return `./assets/cards/lane-${lineId === "support" ? "firesupport" : "frontline"}.png`;
+}
+
+function getFactionEmblemPath(factionId) {
+  return factionId === "usa" ? "./assets/cards/emblem-anchor.png" : "./assets/cards/emblem-star.png";
+}
+
+function getCardArtPosition(cardId) {
+  const tunedPositions = {
+    us_tomahawk: "center 48%",
+    us_b2_bombing: "center 48%",
+    ru_iskander: "center 45%",
+    ru_tu22m3: "center 47%",
+  };
+  return tunedPositions[cardId] || "center";
+}
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.();
+  } else {
+    document.documentElement.requestFullscreen?.();
+  }
+}
+
+function exposeDebugHooks() {
+  window.render_game_to_text = () => {
+    const battle = state.battle;
+    if (!battle) {
+      return JSON.stringify({ screen: state.screen, source: "/Users/michaelwu/Documents/战区卡牌游戏项目/战争卡牌游戏" });
+    }
+    return JSON.stringify({
+      screen: state.screen,
+      phase: battle.phase,
+      round: battle.round,
+      activeSide: battle.activeSide,
+      scores: {
+        player: getTotalScore(battle, "player"),
+        enemy: getTotalScore(battle, "enemy"),
+      },
+      hands: {
+        player: battle.hands.player.length,
+        enemy: battle.hands.enemy.length,
+      },
+      intel: battle.intel,
+      supplyExhausted: battle.supplyExhausted,
+      finalActions: battle.finalActions,
+      pending: state.pending?.kind || null,
+      rows: LINES.map((line) => ({
+        line: line.id,
+        player: battle.board.player[line.id].map((item) => serializeBoardInstance(item)),
+        enemy: battle.board.enemy[line.id].map((item) => serializeBoardInstance(item)),
+      })),
+    });
+  };
+
+  window.advanceTime = () => {
+    render();
+  };
+}
+
+function serializeBoardInstance(instance) {
+  const card = getCard(instance.cardId);
+  return {
+    name: card.name,
+    power: getCurrentPower(instance),
+    bonus: instance.bonus || 0,
+    damage: instance.damage,
+    hidden: instance.hidden,
+    exposed: instance.exposed,
+    fortified: instance.fortified,
+  };
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}

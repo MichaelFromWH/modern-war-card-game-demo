@@ -1,0 +1,9 @@
+assets/audio/sfx/local-reference/*
+!assets/audio/sfx/local-reference/README.md
+!assets/audio/sfx/local-reference/manifest.example.json
+
+.minimax/
+dist/
+dist.zip
+node_modules/
+npm-debug.log*
