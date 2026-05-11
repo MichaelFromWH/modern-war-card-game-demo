@@ -20,6 +20,7 @@ import {
   getSkillGlyph,
   getTagBadgePath,
   hasGeneratedCardImages,
+  hasLiveDetailOverlay,
   isModernUnitCard,
   renderRarityStars,
 } from "./card-design.js";
@@ -1095,6 +1096,7 @@ function renderWarCard(card, options = {}) {
   const fan = ((options.index || 0) - ((options.total || 1) - 1) / 2) * spread;
   const generated = hasGeneratedCardImages(card);
   const detailArtPath = options.preview ? getCardDetailImagePath(card) : "";
+  const liveDetailOverlay = Boolean(detailArtPath && hasLiveDetailOverlay(card));
   const artPath = detailArtPath || getCardArtPath(card);
   const modern = isModernUnitCard(card);
   const primaryTag = card.tags[0] || typeLabel;
@@ -1108,6 +1110,7 @@ function renderWarCard(card, options = {}) {
     modern ? "war-card--modern" : "",
     generated ? "war-card--generated-card" : "",
     detailArtPath ? "war-card--generated-detail" : "",
+    liveDetailOverlay ? "war-card--live-detail-overlay" : "",
     options.preview ? "war-card--detailed" : "war-card--simple",
     options.preview ? "war-card--preview" : "",
     options.selected ? "is-selected" : "",
@@ -1115,7 +1118,7 @@ function renderWarCard(card, options = {}) {
   ]
     .filter(Boolean)
     .join(" ");
-  const showPowerBadge = card.type === "unit" || !generated;
+  const showPowerBadge = card.type === "unit" ? (!detailArtPath || liveDetailOverlay) : !generated;
   const powerBadge = card.type === "unit" ? card.power : card.type === "tactic" ? "T" : "S";
   const renderedTags = card.tags.slice(0, 3).map((tag) => {
     const tagBadge = getTagBadgePath(tag);

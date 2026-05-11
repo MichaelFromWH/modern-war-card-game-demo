@@ -6175,66 +6175,64 @@ button:disabled {
   background-image: var(--card-art);
 }
 
-.war-card--generated-detail .war-card__body {
-  display: grid !important;
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__body {
+  display: block !important;
   position: absolute;
-  left: 18px;
-  right: 18px;
+  left: 86px;
+  right: 22px;
   bottom: 72px;
   z-index: 7;
-  min-height: 142px;
-  gap: 8px;
-  align-content: end;
+  height: 78px;
   padding: 0;
-  overflow: visible;
+  overflow: hidden;
   background: none;
+  color: #fff8e9;
+  text-align: left;
 }
 
-.war-card--generated-detail .war-card__skill {
-  display: grid !important;
-  min-height: 62px;
-  grid-template-columns: 54px minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill {
+  display: inline !important;
+  min-height: 0;
   margin: 0;
-  padding: 8px 15px 8px 8px;
+  padding: 0;
   border: 0;
   border-radius: 0;
   color: #fff8e9;
-  background: none;
-  box-shadow: none;
+  background: none !important;
+  box-shadow: none !important;
   backdrop-filter: none;
-  font-size: 0.86rem;
-  line-height: 1.3;
+  font-size: 0.57rem;
+  line-height: 1.23;
+  font-weight: 850;
 }
 
-.war-card--generated-detail .war-card__skill-icon {
-  visibility: hidden;
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill + .war-card__skill::before {
+  content: " ";
 }
 
-.war-card--generated-detail .war-card__skill-copy {
-  display: block;
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-icon {
+  display: none !important;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-copy {
+  display: inline;
   min-width: 0;
-  padding: 3px 6px;
+  padding: 0;
   color: #fff8e9;
   font-size: inherit;
   line-height: inherit;
-  font-weight: 800;
+  font-weight: inherit;
   background: transparent;
   box-shadow: none;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.8);
 }
 
-.war-card--generated-detail .war-card__skill-copy strong {
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-copy strong {
   display: inline;
   color: #ffffff;
   font-size: inherit;
   line-height: inherit;
   font-weight: 1000;
-}
-
-.war-card--generated-detail .war-card__body {
-  display: none !important;
 }
 
 @media (max-width: 760px) {
@@ -6301,10 +6299,6 @@ button:disabled {
 .card-spotlight .war-card--generated-card .war-card__power {
   right: 20px !important;
   top: 18px !important;
-}
-
-.war-card--generated-detail .war-card__power {
-  display: none !important;
 }
 
 .war-card--generated-detail .war-card__power strong,

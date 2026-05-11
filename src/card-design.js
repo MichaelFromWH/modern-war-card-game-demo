@@ -134,6 +134,12 @@ export const GENERATED_DETAIL_CARD_IDS = new Set([
   "ru_kalibr",
 ]);
 
+export const LIVE_DETAIL_OVERLAY_CARD_IDS = new Set([
+  "us_f35",
+  "us_f35a_sead",
+  "ru_su57_sead",
+]);
+
 export const CARD_FIRE_VIDEO_PATHS = {
   us_m1a2: `${CARD_FIRE_VIDEO_ROOT}/us_m1a2-fire.mp4`,
 };
@@ -235,6 +241,10 @@ export function getCardDetailImagePath(card) {
 export function hasGeneratedCardImages(card) {
   const generated = getGeneratedCardImages(card);
   return Boolean(generated?.art);
+}
+
+export function hasLiveDetailOverlay(card) {
+  return LIVE_DETAIL_OVERLAY_CARD_IDS.has(card?.id);
 }
 
 export function getCardFireVideoPath(card) {
