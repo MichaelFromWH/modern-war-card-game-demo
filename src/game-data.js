@@ -1,4 +1,4 @@
-// Base card pool with V4.3 lightweight-test balance overrides appended below. Keep exports stable for main.js.
+// Base card pool with layered balance overrides appended below. Keep exports stable for main.js.
 export const VICTORY_SCORE = 50;
 
 export const LINES = [
@@ -12,7 +12,7 @@ export const LINES = [
     "id": "support",
     "name": "支援区",
     "label": "支援",
-    "role": "远火、防空、无人机与支援协同；导弹、战斗机、轰炸机改为即时打击战术牌。"
+    "role": "远火、防空、无人机、巡航/弹道导弹、SEAD 战斗机与轰炸机协同。"
   }
 ];
 
@@ -918,28 +918,6 @@ export const CARD_LIBRARY = {
         "support"
       ],
       "hiddenOnly": true
-    }
-  },
-  "us_decoy_position": {
-    "id": "us_decoy_position",
-    "faction": "usa",
-    "name": "诱饵阵地",
-    "type": "tactic",
-    "line": "instant",
-    "power": null,
-    "rarity": "uncommon",
-    "specialization": "诱饵",
-    "tags": [
-      "战术",
-      "诱饵"
-    ],
-    "effect": "在支援区部署一个不占容量的隐蔽诱饵。敌方侦查或打击指定该诱饵时，弃置诱饵并取消本次暴露或伤害，不给分。",
-    "art": "us_smoke",
-    "ability": {
-      "kind": "decoy",
-      "rows": [
-        "support"
-      ]
     }
   },
   "ru_motostrelki": {
@@ -1925,28 +1903,6 @@ export const CARD_LIBRARY = {
         "support"
       ],
       "hiddenOnly": true
-    }
-  },
-  "ru_decoy_position": {
-    "id": "ru_decoy_position",
-    "faction": "russia",
-    "name": "诱饵阵地",
-    "type": "tactic",
-    "line": "instant",
-    "power": null,
-    "rarity": "uncommon",
-    "specialization": "诱饵",
-    "tags": [
-      "战术",
-      "诱饵"
-    ],
-    "effect": "在支援区部署一个不占容量的隐蔽假目标。敌方侦查或打击指定该目标时，弃置假目标并取消本次暴露或伤害，不给分。",
-    "art": "ru_smoke_position",
-    "ability": {
-      "kind": "decoy",
-      "rows": [
-        "support"
-      ]
     }
   }
 };
@@ -3028,17 +2984,725 @@ const V43_CARD_OVERRIDES = {
   }
 };
 
+const GROUND_TAGS = ["步兵", "装甲"];
+const REAR_EQUIPMENT_TAGS = ["榴弹炮", "火箭炮", "伴随防空", "重型防空", "无人机"];
+const LOW_AIR_TAGS = ["直升机", "无人机"];
+const HIGH_AIR_TAGS = ["战斗机", "轰炸机"];
+const MISSILE_TAGS = ["导弹", "巡航导弹", "弹道导弹", "SEAD导弹"];
+const GROUND_OR_REAR_EQUIPMENT_TAGS = [...GROUND_TAGS, ...REAR_EQUIPMENT_TAGS];
+const GROUND_OR_REAR_OR_LOW_AIR_TAGS = [...GROUND_TAGS, ...REAR_EQUIPMENT_TAGS, ...LOW_AIR_TAGS];
+
+const V07_CARD_OVERRIDES = {
+  "us_marine_rifle": {
+    "effect": "【地面压制】：对一个合法地面目标造成 2 点伤害；若目标为【步兵】，改为 3 点。【陆战协同】：若己方前线有【装甲】，本次伤害 +1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": GROUND_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 3 }],
+      "ownTagBonus": { "line": "frontline", "tag": "装甲", "amount": 1 },
+      "sourceExposes": true
+    }
+  },
+  "us_javelin_team": {
+    "effect": "【反甲伏击】：对一个合法地面目标造成 2 点伤害；若目标为【装甲】，改为 4 点；也可对【直升机】造成 2 点伤害。【前线伏击】：隐蔽部署后因前线接敌被动打击时，伤害 +1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": ["步兵", "装甲", "直升机"],
+      "bonuses": [{ "tag": "装甲", "amount": 4 }],
+      "sourceExposes": true
+    },
+    "ambushBonus": 1
+  },
+  "us_stinger_team": {
+    "effect": "【前线防空】：对一个合法低空目标造成 3 点伤害；若目标为【直升机】或【无人机】，改为 4 点。【单兵防空】：敌方【直升机】打击己方前线单位时，可暴露本单位，使该伤害 -1，一回合一次。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": LOW_AIR_TAGS,
+      "bonuses": [
+        { "tag": "直升机", "amount": 4 },
+        { "tag": "无人机", "amount": 4 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "reduceDamage": {
+        "amount": 1,
+        "targetLines": ["frontline"],
+        "sourceTags": ["直升机"],
+        "canReveal": true,
+        "sourceExposes": true
+      }
+    }
+  },
+  "us_rangers_target": {
+    "effect": "【渗透作战】：本单位不会因前线接敌而暴露。【坐标引导】：选择一个合法目标；若其隐蔽，使其暴露。若己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击，发动后该火力单位暴露；若没有可用火力单位，抽 1 张牌。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "allowExposedTargets": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "noCallerFallback": "draw",
+      "fallbackDraw": 1,
+      "sourceExposes": true
+    },
+    "contactException": true
+  },
+  "us_bradley": {
+    "effect": "【伴随火力】：对一个合法地面目标造成 3 点伤害；若目标为【步兵】，改为 4 点；也可对低空目标造成 2 点伤害。【步兵掩护】：己方【步兵】受到【榴弹炮】或【火箭炮】伤害时，伤害 -1，一回合一次。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": [...GROUND_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 4 },
+        { "tag": "直升机", "amount": 2 },
+        { "tag": "无人机", "amount": 2 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "reduceDamage": {
+        "amount": 1,
+        "targetTags": ["步兵"],
+        "sourceTags": ["榴弹炮", "火箭炮"]
+      }
+    }
+  },
+  "us_m1a2": {
+    "effect": "【装甲突击】：对一个合法地面或后排装备目标造成 4 点伤害；若目标为【装甲】，改为 5 点；也可对【直升机】造成 1 点伤害。【协同推进】：若己方前线有【步兵】，本次地面伤害 +1，上限 5。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "requiresAnyTag": [...GROUND_OR_REAR_EQUIPMENT_TAGS, "直升机"],
+      "bonuses": [
+        { "tag": "装甲", "amount": 5 },
+        { "tag": "直升机", "amount": 1 }
+      ],
+      "ownTagBonus": { "line": "frontline", "tag": "步兵", "amount": 1, "cap": 5, "targetTags": GROUND_OR_REAR_EQUIPMENT_TAGS },
+      "sourceExposes": true
+    }
+  },
+  "us_stryker": {
+    "effect": "【快速突击】：对一个合法地面或后排装备目标造成 2 点伤害；若目标为【步兵】，改为 3 点；也可对低空目标造成 1 点伤害。【机动掩护】：己方【步兵】受到【直升机】伤害时，伤害 -1，一回合一次。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": GROUND_OR_REAR_OR_LOW_AIR_TAGS,
+      "bonuses": [
+        { "tag": "步兵", "amount": 3 },
+        { "tag": "直升机", "amount": 1 },
+        { "tag": "无人机", "amount": 1 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "reduceDamage": {
+        "amount": 1,
+        "targetTags": ["步兵"],
+        "sourceTags": ["直升机"]
+      }
+    }
+  },
+  "us_apache": {
+    "effect": "【空中打击】：对一个合法地面、低空或后排装备目标造成 3 点伤害；若目标为【装甲】、【直升机】或【重型防空】，改为 5 点。【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": GROUND_OR_REAR_OR_LOW_AIR_TAGS,
+      "bonuses": [
+        { "tag": "装甲", "amount": 5 },
+        { "tag": "直升机", "amount": 5 },
+        { "tag": "重型防空", "amount": 5 }
+      ],
+      "sourceExposes": true
+    }
+  },
+  "us_m109": {
+    "effect": "【远程炮击】：对一个合法地面或后排装备目标造成 3 点伤害；若目标为【步兵】，改为 4 点。发动后暴露。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    }
+  },
+  "us_himars": {
+    "effect": "【火力覆盖】：选择一个合法区域，对其中最多两个合法地面或后排装备目标造成伤害；主目标 3 点，第二目标 1 点；若主目标为【步兵】，改为 4 点和 2 点。发动后暴露。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "primaryTagSecondaryAmount": { "tag": "步兵", "amount": 2 },
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "maxTargets": 2,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "primaryTagSecondaryAmount": { "tag": "步兵", "amount": 2 },
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "maxTargets": 2,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    }
+  },
+  "us_avenger": {
+    "effect": "【近程拦截】：对一个合法低空或暴露高空目标造成 2 点伤害；若目标为【直升机】或【无人机】，改为 3 点。【伴随防空】：敌方【战斗机】或【巡航导弹】打击造成的伤害 -1，一回合一次；不能拦截【弹道导弹】。触发后暴露。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS],
+      "requiresExposedForTags": HIGH_AIR_TAGS,
+      "bonuses": [
+        { "tag": "直升机", "amount": 3 },
+        { "tag": "无人机", "amount": 3 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 1,
+      "interceptTags": ["战斗机", "巡航导弹"],
+      "protectLines": ["frontline", "support"],
+      "sourceExposes": true
+    }
+  },
+  "us_patriot": {
+    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】、【巡航导弹】、【弹道导弹】或【SEAD导弹】打击造成的伤害 -3，一回合一次；触发后暴露。【雷达截击】：对一个暴露的高空或导弹目标造成 2 点伤害。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": [...HIGH_AIR_TAGS, ...MISSILE_TAGS],
+      "requiresExposed": true,
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 3,
+      "interceptTags": ["战斗机", "轰炸机", "巡航导弹", "弹道导弹", "SEAD导弹"],
+      "protectLines": ["frontline", "support"],
+      "sourceExposes": true
+    }
+  },
+  "us_reaper": {
+    "effect": "【无人侦扫】：选择一个合法目标；若其隐蔽，使其暴露。【火力校射】：若本单位本次成功暴露目标，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即调用其打击该目标，本次伤害 +1；若没有可用火力单位，抽 1 张牌。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "allowExposedTargets": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "calledFireBonus": 1,
+      "callFireRequiresFreshExpose": true,
+      "noCallerFallback": "draw",
+      "fallbackDraw": 1,
+      "sourceExposes": true
+    }
+  },
+  "us_atacms": {
+    "name": "ATACMS 战术弹道导弹",
+    "specialization": "弹道导弹点杀暴露单位",
+    "effect": "【弹道打击】：对一个暴露的合法目标造成 6 点伤害；若目标为后排装备，改为 7 点。只能被【重型防空】拦截。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 6,
+      "bonuses": [{ "tag": "榴弹炮", "amount": 7 }, { "tag": "火箭炮", "amount": 7 }, { "tag": "伴随防空", "amount": 7 }, { "tag": "重型防空", "amount": 7 }, { "tag": "无人机", "amount": 7 }],
+      "requiresExposed": true,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  },
+  "us_tomahawk": {
+    "power": 4,
+    "effect": "【巡航打击】：对一个暴露的合法目标造成 4 点伤害；若目标在支援区，改为 5 点。可被【伴随防空】或【重型防空】拦截。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "lineAmounts": { "support": 5 },
+      "requiresExposed": true,
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
+  },
+  "us_f35": {
+    "name": "F-22 制空战斗机",
+    "specialization": "制空与精确空袭",
+    "effect": "【精确空袭】：对一个暴露的合法目标造成 4 点伤害；若目标为【直升机】或高空目标，改为 6 点。可被防空单位拦截。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "requiresExposedOrAnyTag": ["直升机", ...HIGH_AIR_TAGS],
+      "bonuses": [
+        { "tag": "直升机", "amount": 6 },
+        { "tag": "战斗机", "amount": 6 },
+        { "tag": "轰炸机", "amount": 6 }
+      ],
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
+  },
+  "us_f35a_sead": {
+    "id": "us_f35a_sead",
+    "faction": "usa",
+    "name": "F-35A SEAD 战斗机",
+    "type": "unit",
+    "line": "support",
+    "power": 5,
+    "rarity": "epic",
+    "specialization": "反辐射压制、有限制空",
+    "tags": ["战斗机", "SEAD", "SEAD导弹"],
+    "effect": "【SEAD反辐射导弹】：对一个暴露的【重型防空】造成 5 点伤害。可被一个【重型防空】单位拦截。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
+    "art": "us_f35",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "requiresAnyTag": [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS, "重型防空"],
+      "requiresExposed": true,
+      "bonuses": [{ "tag": "重型防空", "amount": 5 }],
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"],
+      "interceptByTagsByTargetTag": [{ "tag": "重型防空", "interceptByTags": ["重型防空"] }]
+    }
+  },
+  "us_b2": {
+    "effect": "【战略轰炸】：选择一个合法区域，对其中最多两个暴露的地面或后排装备目标造成伤害，主目标 5 点，第二目标 3 点。可被一个【重型防空】单位拦截。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "secondaryAmount": 3,
+      "sameLineOnly": true,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "requiresExposed": true,
+      "maxTargets": 2,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  },
+  "us_smoke_screen": {
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点战力。",
+    "ability": {
+      "kind": "smoke",
+      "rows": ["frontline", "support"],
+      "hide": true,
+      "repairIfLine": { "line": "frontline", "amount": 1 }
+    }
+  },
+  "us_reposition": {
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在支援区，修复 1 点战力。",
+    "ability": {
+      "kind": "smoke",
+      "rows": ["frontline", "support"],
+      "hide": true,
+      "repairIfLine": { "line": "support", "amount": 1 }
+    }
+  },
+  "us_battlefield_repair": {
+    "effect": "修复己方一个单位 2 点战力；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "ability": {
+      "kind": "repair",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "drawAlternative": 2,
+      "keepAlternative": 1
+    }
+  },
+  "us_emergency_supply": {
+    "effect": "抽 3 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "ability": {
+      "kind": "supply",
+      "draw": 3,
+      "keep": 1,
+      "noTarget": true
+    }
+  },
+  "us_electronic_suppression": {
+    "effect": "指定敌方一个合法目标。若其隐蔽，该单位下回合不能主动发动技能；若其已暴露，改为其下一次造成伤害 -1。",
+    "ability": {
+      "kind": "suppress",
+      "rows": ["frontline", "support"],
+      "allowExposedTargets": true,
+      "damageDebuffIfExposed": 1
+    }
+  },
+  "ru_motostrelki": {
+    "effect": "【地面压制】：对一个合法地面目标造成 2 点伤害；若目标为【步兵】，改为 3 点。【炮火协同】：若己方支援区有【榴弹炮】或【火箭炮】，本次伤害 +1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": GROUND_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 3 }],
+      "artillerySynergyBonus": 1,
+      "sourceExposes": true
+    }
+  },
+  "ru_kornet_team": {
+    "effect": "【反甲伏击】：对一个合法地面目标造成 2 点伤害；若目标为【装甲】，改为 4 点；也可对【直升机】造成 2 点伤害。【前线伏击】：隐蔽部署后因前线接敌被动打击时，伤害 +1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": ["步兵", "装甲", "直升机"],
+      "bonuses": [{ "tag": "装甲", "amount": 4 }],
+      "sourceExposes": true
+    },
+    "ambushBonus": 1
+  },
+  "ru_spetsnaz_target": {
+    "effect": "【渗透作战】：本单位不会因前线接敌而暴露。【坐标引导】：选择一个合法目标；若其隐蔽，使其暴露。若己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击，发动后该火力单位暴露。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "allowExposedTargets": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "sourceExposes": true
+    },
+    "contactException": true
+  },
+  "ru_bmp3m": {
+    "effect": "【伴随火力】：对一个合法地面目标造成 3 点伤害；若目标为【步兵】，改为 4 点；也可对低空目标造成 2 点伤害。【步兵掩护】：己方【步兵】受到【榴弹炮】或【火箭炮】伤害时，伤害 -1，一回合一次。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": [...GROUND_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 4 },
+        { "tag": "直升机", "amount": 2 },
+        { "tag": "无人机", "amount": 2 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "reduceDamage": {
+        "amount": 1,
+        "targetTags": ["步兵"],
+        "sourceTags": ["榴弹炮", "火箭炮"]
+      }
+    }
+  },
+  "ru_t90m": {
+    "effect": "【装甲突击】：对一个合法地面或后排装备目标造成 4 点伤害；若目标为【装甲】，改为 5 点；也可对【直升机】造成 1 点伤害。【突破推进】：若己方前线有【步兵】，本次地面伤害 +1，上限 5。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "requiresAnyTag": [...GROUND_OR_REAR_EQUIPMENT_TAGS, "直升机"],
+      "bonuses": [
+        { "tag": "装甲", "amount": 5 },
+        { "tag": "直升机", "amount": 1 }
+      ],
+      "ownTagBonus": { "line": "frontline", "tag": "步兵", "amount": 1, "cap": 5, "targetTags": GROUND_OR_REAR_EQUIPMENT_TAGS },
+      "sourceExposes": true
+    }
+  },
+  "ru_bmpt": {
+    "effect": "【火力清剿】：对一个合法地面目标造成 2 点伤害；若目标为【步兵】，改为 4 点；也可对低空目标造成 2 点伤害。【装甲护送】：己方【装甲】受到【步兵】伤害时，伤害 -1，一回合一次。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": [...GROUND_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 4 },
+        { "tag": "直升机", "amount": 2 },
+        { "tag": "无人机", "amount": 2 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "reduceDamage": {
+        "amount": 1,
+        "targetTags": ["装甲"],
+        "sourceTags": ["步兵"]
+      }
+    }
+  },
+  "ru_ka52_unit": {
+    "effect": "【空中打击】：对一个合法地面、低空或后排装备目标造成 3 点伤害；若目标为【装甲】、【直升机】或【重型防空】，改为 5 点。【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": GROUND_OR_REAR_OR_LOW_AIR_TAGS,
+      "bonuses": [
+        { "tag": "装甲", "amount": 5 },
+        { "tag": "直升机", "amount": 5 },
+        { "tag": "重型防空", "amount": 5 }
+      ],
+      "sourceExposes": true
+    }
+  },
+  "ru_2s19": {
+    "effect": "【远程炮击】：对一个合法地面或后排装备目标造成 3 点伤害；若目标为【步兵】，改为 4 点。发动后暴露。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    }
+  },
+  "ru_tornado_s": {
+    "power": 4,
+    "effect": "【火力覆盖】：选择一个合法区域，对其中最多三个合法地面或后排装备目标造成伤害，主目标 3 点，其余目标各 1 点。发动后暴露。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "maxTargets": 3,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "maxTargets": 3,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    }
+  },
+  "ru_pantsir": {
+    "effect": "【野战防空】：对一个合法低空或巡航导弹目标造成 2 点伤害；若目标为【直升机】或【无人机】，改为 4 点。【伴随拦截】：敌方【战斗机】或【巡航导弹】打击造成的伤害 -2，一回合一次；不能拦截【弹道导弹】。触发后暴露。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": [...LOW_AIR_TAGS, "巡航导弹"],
+      "bonuses": [
+        { "tag": "直升机", "amount": 4 },
+        { "tag": "无人机", "amount": 4 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 2,
+      "interceptTags": ["战斗机", "巡航导弹"],
+      "protectLines": ["frontline", "support"],
+      "sourceExposes": true
+    }
+  },
+  "ru_buk_m3": {
+    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】、【巡航导弹】、【弹道导弹】或【SEAD导弹】打击造成的伤害 -2，一回合一次；己方前线与支援区均可受到保护。触发后暴露。【雷达截击】：对一个暴露的高空或导弹目标造成 2 点伤害。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": [...HIGH_AIR_TAGS, ...MISSILE_TAGS],
+      "requiresExposed": true,
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 2,
+      "interceptTags": ["战斗机", "轰炸机", "巡航导弹", "弹道导弹", "SEAD导弹"],
+      "protectLines": ["frontline", "support"],
+      "sourceExposes": true
+    }
+  },
+  "ru_orlan10": {
+    "effect": "【无人侦扫】：选择一个合法目标；若其隐蔽，使其暴露。【炮兵校射】：若本单位本次成功暴露目标，且己方有本回合未行动的【榴弹炮】，可立即调用其打击该目标，本次伤害 +1。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "allowExposedTargets": true,
+      "callerTags": ["榴弹炮"],
+      "calledFireBonus": 1,
+      "callFireRequiresFreshExpose": true,
+      "sourceExposes": true
+    }
+  },
+  "ru_kalibr": {
+    "power": 4,
+    "effect": "【巡航打击】：对一个暴露的合法目标造成 4 点伤害；若目标在前线，改为 5 点。可被【伴随防空】或【重型防空】拦截。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "lineAmounts": { "frontline": 5 },
+      "requiresExposed": true,
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
+  },
+  "ru_iskander": {
+    "power": 6,
+    "effect": "【弹道导弹】：对一个暴露的合法目标造成 6 点伤害；若目标在支援区，改为 7 点。只能被【重型防空】拦截。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 6,
+      "lineAmounts": { "support": 7 },
+      "requiresExposed": true,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  },
+  "ru_su35": {
+    "effect": "【精确空袭】：对一个暴露的合法目标造成 4 点伤害；若目标为【直升机】或高空目标，改为 6 点。可被防空单位拦截。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "requiresExposedOrAnyTag": ["直升机", ...HIGH_AIR_TAGS],
+      "bonuses": [
+        { "tag": "直升机", "amount": 6 },
+        { "tag": "战斗机", "amount": 6 },
+        { "tag": "轰炸机", "amount": 6 }
+      ],
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
+  },
+  "ru_su57_sead": {
+    "id": "ru_su57_sead",
+    "faction": "russia",
+    "name": "Su-57 SEAD 战斗机",
+    "type": "unit",
+    "line": "support",
+    "power": 5,
+    "rarity": "epic",
+    "specialization": "反辐射压制、有限制空",
+    "tags": ["战斗机", "SEAD", "SEAD导弹"],
+    "effect": "【SEAD反辐射导弹】：对一个暴露的【重型防空】造成 5 点伤害。可被一个【重型防空】单位拦截。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
+    "art": "ru_tu22m3",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "requiresAnyTag": [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS, "重型防空"],
+      "requiresExposed": true,
+      "bonuses": [{ "tag": "重型防空", "amount": 5 }],
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"],
+      "interceptByTagsByTargetTag": [{ "tag": "重型防空", "interceptByTags": ["重型防空"] }]
+    }
+  },
+  "ru_su34": {
+    "effect": "【对地空袭】：对一个暴露的合法地面或后排装备目标造成 5 点伤害。可被防空单位拦截。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "requiresAnyTag": GROUND_OR_REAR_EQUIPMENT_TAGS,
+      "requiresExposed": true,
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
+  },
+  "ru_smoke_decoys": {
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点战力。",
+    "ability": {
+      "kind": "smoke",
+      "rows": ["frontline", "support"],
+      "hide": true,
+      "repairIfLine": { "line": "frontline", "amount": 1 }
+    }
+  },
+  "ru_reposition": {
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在支援区，修复 1 点战力。",
+    "ability": {
+      "kind": "smoke",
+      "rows": ["frontline", "support"],
+      "hide": true,
+      "repairIfLine": { "line": "support", "amount": 1 }
+    }
+  },
+  "ru_ammo_supply": {
+    "effect": "抽 3 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "ability": {
+      "kind": "supply",
+      "draw": 3,
+      "keep": 1,
+      "noTarget": true
+    }
+  },
+  "ru_battlefield_repair": {
+    "effect": "修复己方一个单位 2 点战力；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "ability": {
+      "kind": "repair",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "drawAlternative": 2,
+      "keepAlternative": 1
+    }
+  },
+  "ru_electronic_suppression": {
+    "effect": "指定敌方一个合法目标。若其隐蔽，该单位下回合不能主动发动技能；若其已暴露，改为其下一次造成伤害 -1。",
+    "ability": {
+      "kind": "suppress",
+      "rows": ["frontline", "support"],
+      "allowExposedTargets": true,
+      "damageDebuffIfExposed": 1
+    }
+  }
+};
+
 Object.assign(CARD_LIBRARY, V43_CARD_OVERRIDES);
+Object.entries(V07_CARD_OVERRIDES).forEach(([cardId, patch]) => {
+  CARD_LIBRARY[cardId] = {
+    ...CARD_LIBRARY[cardId],
+    ...patch
+  };
+});
 delete CARD_LIBRARY.us_m88;
 
 const STRIKE_UNIT_RESTORE = {
-  "us_atacms": { "power": 5, "tags": ["导弹"] },
-  "us_tomahawk": { "power": 5, "tags": ["导弹"] },
+  "us_atacms": { "power": 5, "tags": ["导弹", "弹道导弹"] },
+  "us_tomahawk": { "power": 4, "tags": ["导弹", "巡航导弹"] },
   "us_f35": { "power": 6, "tags": ["战斗机"] },
   "us_f15e": { "power": 5, "tags": ["战斗机"] },
   "us_b2": { "power": 6, "tags": ["轰炸机"] },
-  "ru_kalibr": { "power": 5, "tags": ["导弹"] },
-  "ru_iskander": { "power": 6, "tags": ["导弹"] },
+  "ru_kalibr": { "power": 4, "tags": ["导弹", "巡航导弹"] },
+  "ru_iskander": { "power": 6, "tags": ["导弹", "弹道导弹"] },
   "ru_su35": { "power": 6, "tags": ["战斗机"] },
   "ru_su34": { "power": 5, "tags": ["战斗机"] },
   "ru_tu22m3": { "power": 6, "tags": ["轰炸机"] }
@@ -3060,6 +3724,61 @@ Object.entries(STRIKE_UNIT_RESTORE).forEach(([cardId, config]) => {
   }
 });
 
+const V07_ACTIVE_CARD_IDS = new Set([
+  "us_marine_rifle",
+  "us_javelin_team",
+  "us_stinger_team",
+  "us_rangers_target",
+  "us_bradley",
+  "us_m1a2",
+  "us_stryker",
+  "us_apache",
+  "us_m109",
+  "us_himars",
+  "us_avenger",
+  "us_patriot",
+  "us_reaper",
+  "us_atacms",
+  "us_tomahawk",
+  "us_f35",
+  "us_f35a_sead",
+  "us_b2",
+  "us_smoke_screen",
+  "us_reposition",
+  "us_battlefield_repair",
+  "us_emergency_supply",
+  "us_electronic_suppression",
+  "ru_motostrelki",
+  "ru_kornet_team",
+  "ru_spetsnaz_target",
+  "ru_bmp3m",
+  "ru_t90m",
+  "ru_bmpt",
+  "ru_ka52_unit",
+  "ru_2s19",
+  "ru_tornado_s",
+  "ru_pantsir",
+  "ru_buk_m3",
+  "ru_orlan10",
+  "ru_kalibr",
+  "ru_iskander",
+  "ru_su35",
+  "ru_su57_sead",
+  "ru_su34",
+  "ru_smoke_decoys",
+  "ru_reposition",
+  "ru_ammo_supply",
+  "ru_battlefield_repair",
+  "ru_electronic_suppression"
+]);
+
+Object.keys(CARD_LIBRARY).forEach((cardId) => {
+  const card = CARD_LIBRARY[cardId];
+  if ((card.faction === "usa" || card.faction === "russia") && !V07_ACTIVE_CARD_IDS.has(cardId)) {
+    delete CARD_LIBRARY[cardId];
+  }
+});
+
 export const STARTER_DECKS = {
   "player": [
     "us_marine_rifle",
@@ -3073,7 +3792,7 @@ export const STARTER_DECKS = {
     "us_m1a2",
     "us_stryker",
     "us_apache",
-    "us_apache",
+    "us_f35a_sead",
     "us_m109",
     "us_m109",
     "us_himars",
@@ -3104,7 +3823,7 @@ export const STARTER_DECKS = {
     "ru_bmp3m",
     "ru_t90m",
     "ru_bmpt",
-    "ru_bmpt",
+    "ru_su57_sead",
     "ru_ka52_unit",
     "ru_ka52_unit",
     "ru_2s19",
@@ -3122,7 +3841,7 @@ export const STARTER_DECKS = {
     "ru_reposition",
     "ru_ammo_supply",
     "ru_battlefield_repair",
-    "ru_decoy_position",
+    "ru_smoke_decoys",
     "ru_electronic_suppression"
   ]
 };

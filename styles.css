@@ -7148,3 +7148,173 @@ button:disabled {
     radial-gradient(circle at 50% 36%, rgba(255, 255, 255, 0.08), transparent 22%),
     linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 15%, transparent 82%, rgba(0, 0, 0, 0.76)) !important;
 }
+
+/* V0.4.1 breakthrough and contact feedback */
+.no-mans-land {
+  position: relative;
+  overflow: hidden;
+}
+
+.no-mans-land span,
+.no-mans-land strong,
+.no-mans-land small {
+  position: relative;
+  z-index: 1;
+  display: block;
+  line-height: 1;
+}
+
+.no-mans-land strong,
+.no-mans-land small {
+  display: none;
+}
+
+.no-mans-land.is-breakthrough-ready {
+  grid-template-columns: minmax(92px, auto) auto minmax(92px, auto);
+  column-gap: 12px;
+  min-height: 34px;
+  color: color-mix(in srgb, var(--breakthrough-accent) 74%, var(--paper));
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--breakthrough-accent) 30%, rgba(0, 0, 0, 0.72)) 24%, rgba(0, 0, 0, 0.68) 50%, color-mix(in srgb, var(--breakthrough-accent) 30%, rgba(0, 0, 0, 0.72)) 76%, transparent),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--breakthrough-accent) 18%, transparent) 0 2px, transparent 2px 18px);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--breakthrough-accent) 42%, transparent), 0 0 24px color-mix(in srgb, var(--breakthrough-accent) 20%, transparent);
+}
+
+.battle-board:has(.no-mans-land.is-breakthrough-ready) {
+  grid-template-rows: repeat(2, minmax(84px, 1fr)) minmax(34px, 42px) repeat(2, minmax(84px, 1fr));
+}
+
+.no-mans-land.is-breakthrough-ready::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  transform: translateX(-100%);
+  animation: breakthroughSweep 1.75s linear infinite;
+}
+
+.no-mans-land.is-breakthrough-ready strong,
+.no-mans-land.is-breakthrough-ready small {
+  display: block;
+}
+
+.no-mans-land.is-breakthrough-ready strong {
+  color: var(--paper);
+  font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+  font-size: 0.98rem;
+  font-weight: 900;
+}
+
+.no-mans-land.is-breakthrough-ready small {
+  color: rgba(246, 239, 221, 0.74);
+  font-size: 0.66rem;
+}
+
+.battle-line.is-breakthrough-source {
+  border-color: color-mix(in srgb, var(--breakthrough-accent) 50%, rgba(245, 240, 230, 0.18));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--breakthrough-accent) 36%, transparent),
+    inset 0 0 48px color-mix(in srgb, var(--breakthrough-accent) 12%, transparent);
+}
+
+.battle-line.is-breakthrough-target {
+  border-color: color-mix(in srgb, var(--breakthrough-accent) 68%, rgba(255, 220, 150, 0.26));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--breakthrough-accent) 20%, rgba(0, 0, 0, 0.56)), rgba(0, 0, 0, 0.08) 42%, color-mix(in srgb, var(--breakthrough-accent) 14%, rgba(0, 0, 0, 0.24))),
+    rgba(0, 0, 0, 0.2);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--breakthrough-accent) 44%, transparent),
+    inset 0 0 62px color-mix(in srgb, var(--breakthrough-accent) 18%, transparent),
+    0 0 30px color-mix(in srgb, var(--breakthrough-accent) 18%, transparent);
+}
+
+.battle-line.is-breakthrough-target .battle-line__score,
+.battle-line.is-breakthrough-source .battle-line__score {
+  border-color: color-mix(in srgb, var(--breakthrough-accent) 56%, rgba(245, 240, 230, 0.18));
+  color: color-mix(in srgb, var(--breakthrough-accent) 70%, var(--paper));
+}
+
+.board-card.is-contact-source,
+.board-card.is-contact-ambusher {
+  z-index: 14;
+}
+
+.board-card.is-contact-reveal {
+  animation: contactRevealPulse 720ms ease-out both;
+  box-shadow: 0 0 0 2px rgba(255, 230, 164, 0.46), 0 0 28px rgba(255, 150, 74, 0.32), 0 16px 30px rgba(0, 0, 0, 0.56);
+}
+
+.board-card.is-contact-fire {
+  animation: contactFireBrace 520ms ease-out both;
+  filter: brightness(1.28) saturate(1.16);
+}
+
+.board-card.is-contact-impact {
+  animation: contactImpactHold 820ms ease-out both;
+}
+
+.board-card.is-contact-source.is-contact-fire {
+  transform: translateY(-5px) scale(1.06);
+}
+
+.board-card.is-contact-ambusher.is-contact-fire {
+  transform: translateY(-4px) scale(1.05);
+}
+
+@keyframes breakthroughSweep {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  20%,
+  64% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes contactRevealPulse {
+  0% {
+    transform: translateY(0) scale(0.96);
+    filter: brightness(0.8);
+  }
+  42% {
+    transform: translateY(-8px) scale(1.08);
+    filter: brightness(1.5) saturate(1.18);
+  }
+  100% {
+    transform: translateY(-3px) scale(1.02);
+    filter: brightness(1.12);
+  }
+}
+
+@keyframes contactFireBrace {
+  0% {
+    transform: translateX(0) scale(1);
+  }
+  36% {
+    transform: translateX(-5px) scale(1.08);
+  }
+  100% {
+    transform: translateX(0) scale(1.03);
+  }
+}
+
+@keyframes contactImpactHold {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  24% {
+    transform: translateX(-3px);
+  }
+  48% {
+    transform: translateX(3px);
+  }
+  72% {
+    transform: translateX(-1px);
+  }
+}
