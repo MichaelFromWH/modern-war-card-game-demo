@@ -21,6 +21,7 @@ import {
   getTagBadgePath,
   hasGeneratedCardImages,
   hasLiveDetailOverlay,
+  hasLiveDetailPowerOverlay,
   isModernUnitCard,
   renderRarityStars,
 } from "./card-design.js";
@@ -693,6 +694,8 @@ function createBattle() {
     log: [
       "V0.4.1 规则：单位战力同时代表生命值和摧毁得分价值，先达到 50 点战场得分者获胜。",
       "巡航导弹、弹道导弹、SEAD 战斗机、轰炸机均为驻场单位，拥有战力、可被摧毁并提供得分。",
+      "巡航导弹仅能打击暴露地面目标或直升机，可被伴随/重型防空拦截；弹道导弹打击规则相同，但只能被重型防空拦截。",
+      "SEAD 导弹可指定敌方伴随/重型防空，包括隐蔽防空；若目标仍有拦截窗口，打击被抵消为暴露目标并消耗该窗口。",
       "每个单位每回合最多行动一次；部署单位可立即行动，但本回合不能再次作为场上行动单位，也不能执行前线突破。",
       "若己方回合开始时敌方前线为空，可用一个回合开始前已部署且未行动的前线单位突破，暴露并打击其可有效攻击的敌方隐蔽后排单位。",
     ],
@@ -1097,6 +1100,7 @@ function renderWarCard(card, options = {}) {
   const generated = hasGeneratedCardImages(card);
   const detailArtPath = options.preview ? getCardDetailImagePath(card) : "";
   const liveDetailOverlay = Boolean(detailArtPath && hasLiveDetailOverlay(card));
+  const livePowerOverlay = Boolean(detailArtPath && hasLiveDetailPowerOverlay(card));
   const artPath = detailArtPath || getCardArtPath(card);
   const modern = isModernUnitCard(card);
   const primaryTag = card.tags[0] || typeLabel;
@@ -1118,7 +1122,7 @@ function renderWarCard(card, options = {}) {
   ]
     .filter(Boolean)
     .join(" ");
-  const showPowerBadge = card.type === "unit" ? (!detailArtPath || liveDetailOverlay) : !generated;
+  const showPowerBadge = card.type === "unit" ? (!detailArtPath || livePowerOverlay) : !generated;
   const powerBadge = card.type === "unit" ? card.power : card.type === "tactic" ? "T" : "S";
   const renderedTags = card.tags.slice(0, 3).map((tag) => {
     const tagBadge = getTagBadgePath(tag);
@@ -1446,7 +1450,7 @@ function renderGuide() {
     {
       index: "04",
       title: "火力链",
-      body: "侦察单位先翻开目标，远火、巡航/弹道导弹、SEAD 战斗机和轰炸机作为驻场单位兑现伤害；伴随防空可拦巡航导弹，弹道与 SEAD 只能由重型防空拦截。",
+      body: "侦察单位先翻开目标，远火、导弹、SEAD 战斗机和轰炸机作为驻场单位兑现伤害；巡航/弹道导弹只能打击地面目标或直升机，巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截，SEAD 可点隐蔽防空并消耗其拦截窗口。",
     },
     {
       index: "05",
@@ -2166,7 +2170,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
   }
 
   if (ability.kind === "damage" || ability.kind === "damageOrSelfBonus" || ability.kind === "strike") {
-    if (target.instance.hidden && ability.canRevealHidden) {
+    if (target.instance.hidden && canRevealHiddenTargetForAbility(ability, target.instance)) {
       exposeInstance(battle, target, sourceCard.name);
     }
     const amount = getDamageAmount(battle, payload.side, ability, target.instance, target.lineId, sourceCard);
@@ -2182,7 +2186,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
   if (ability.kind === "areaDamage") {
     const areaTargets = getAreaDamageTargets(battle, payload.side, ability, target);
     areaTargets.forEach((areaTarget, index) => {
-      if (areaTarget.instance.hidden && ability.canRevealHidden) {
+      if (areaTarget.instance.hidden && canRevealHiddenTargetForAbility(ability, areaTarget.instance)) {
         exposeInstance(battle, areaTarget, sourceCard.name);
       }
       const amount = getDamageAmount(battle, payload.side, ability, areaTarget.instance, areaTarget.lineId, sourceCard, { areaIndex: index, primaryTarget: target.instance });
@@ -2416,7 +2420,11 @@ function dealDamage(battle, attackerSide, defenderSide, targetRefOrInstance, raw
   amount = applyOutgoingDamageDebuff(battle, amount, sourceRef, sourceCard);
   amount = applyOutgoingFireBoost(battle, attackerSide, amount, sourceCard);
   amount = applyDamageGuard(battle, defenderSide, amount, sourceCard);
+  const amountBeforeInterception = amount;
   amount = applyInterception(battle, defenderSide, targetRef.lineId, amount, sourceCard, sourceRef, targetRef);
+  if (amountBeforeInterception > 0 && amount <= 0 && canInterceptionCancelDamage(sourceCard, targetRef)) {
+    return;
+  }
   amount = applyContinuousDamageReduction(battle, defenderSide, targetRef, amount, sourceCard);
   amount = applyScreening(battle, defenderSide, targetRef, amount, sourceCard);
   if (amount <= 0) {
@@ -2802,6 +2810,11 @@ function applyInterception(battle, defenderSide, targetLineId, amount, sourceCar
     return amount;
   }
 
+  if (tryConsumeTargetInterceptionForSead(battle, defenderSide, targetLineId, sourceCard, targetRef)) {
+    gameAudio.play("defense.intercept", { sourceCard, reduction: amount });
+    return 0;
+  }
+
   const candidates = [];
   LINES.forEach((line) => {
     battle.board[defenderSide][line.id].forEach((instance) => {
@@ -2843,6 +2856,31 @@ function applyInterception(battle, defenderSide, targetLineId, amount, sourceCar
     gameAudio.play("defense.intercept", { sourceCard, reduction });
   }
   return Math.max(0, amount - reduction);
+}
+
+function canInterceptionCancelDamage(sourceCard, targetRef) {
+  return Boolean(
+    sourceCard?.ability?.cancelToZeroOnInterceptionForTags?.some((tag) => targetRef?.instance && hasTag(targetRef.instance, tag)),
+  );
+}
+
+function tryConsumeTargetInterceptionForSead(battle, defenderSide, targetLineId, sourceCard, targetRef) {
+  if (!canInterceptionCancelDamage(sourceCard, targetRef)) {
+    return false;
+  }
+  const instance = targetRef.instance;
+  const card = getCard(instance.cardId);
+  const intercept = card.continuous?.intercept;
+  const canProtectLine = !card.continuous?.protectLines || card.continuous.protectLines.includes(targetLineId);
+  const canIntercept = card.continuous?.interceptTags?.some((tag) => sourceCard.tags.includes(tag));
+  if (!intercept || !canProtectLine || !canIntercept || getCurrentPower(instance) <= 0 || instance.interceptAction === battle.actionSerial) {
+    return false;
+  }
+  instance.interceptAction = battle.actionSerial;
+  markUnitActed(battle, instance);
+  exposeInstance(battle, { side: defenderSide, lineId: targetRef.lineId, instance }, `${card.name} 拦截`, { ignoreDecoy: true });
+  battle.log.push(`${card.name} 抵消 ${sourceCard.name} 的 SEAD 导弹，仅暴露并消耗本回合拦截窗口。`);
+  return true;
 }
 
 function getAllowedInterceptorTags(ability, targetRef = null) {
@@ -4702,14 +4740,19 @@ function countOwnVisibleCardOnLine(battle, side, lineId, cardId) {
   return battle.board[side][lineId].filter((instance) => getCurrentPower(instance) > 0 && !instance.hidden && instance.cardId === cardId).length;
 }
 
+function canRevealHiddenTargetForAbility(ability, instance) {
+  return Boolean(ability?.canRevealHidden || ability?.canRevealHiddenForTags?.some((tag) => hasTag(instance, tag)));
+}
+
 function canTargetForAbility(battle, actingSide, target, ability) {
-  if (target.instance.hidden && !ability.canRevealHidden) {
+  const canRevealHiddenTarget = canRevealHiddenTargetForAbility(ability, target.instance);
+  if (target.instance.hidden && !canRevealHiddenTarget) {
     return false;
   }
   if (ability.publicOnly && target.instance.hidden) {
     return false;
   }
-  if (ability.requiresExposed && !target.instance.exposed) {
+  if (ability.requiresExposed && !target.instance.exposed && !canRevealHiddenTarget) {
     return false;
   }
   if (ability.requiresExposedOrAnyTag && !target.instance.exposed && !ability.requiresExposedOrAnyTag.some((tag) => hasTag(target.instance, tag))) {
@@ -4718,7 +4761,7 @@ function canTargetForAbility(battle, actingSide, target, ability) {
   if (target.lineId === "frontline") {
     return true;
   }
-  return target.instance.exposed || isSupportUncovered(battle, target.side) || ability.allowSupport || (ability.rows?.length === 1 && ability.rows[0] === "support");
+  return target.instance.exposed || canRevealHiddenTarget || isSupportUncovered(battle, target.side) || ability.allowSupport || (ability.rows?.length === 1 && ability.rows[0] === "support");
 }
 
 function matchesTargetRequirements(instance, ability) {

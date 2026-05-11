@@ -2989,6 +2989,8 @@ const REAR_EQUIPMENT_TAGS = ["榴弹炮", "火箭炮", "伴随防空", "重型�
 const LOW_AIR_TAGS = ["直升机", "无人机"];
 const HIGH_AIR_TAGS = ["战斗机", "轰炸机"];
 const MISSILE_TAGS = ["导弹", "巡航导弹", "弹道导弹", "SEAD导弹"];
+const AIR_DEFENSE_TAGS = ["伴随防空", "重型防空"];
+const MISSILE_STRIKE_TARGET_TAGS = [...GROUND_TAGS, "榴弹炮", "火箭炮", ...AIR_DEFENSE_TAGS, "直升机"];
 const GROUND_OR_REAR_EQUIPMENT_TAGS = [...GROUND_TAGS, ...REAR_EQUIPMENT_TAGS];
 const GROUND_OR_REAR_OR_LOW_AIR_TAGS = [...GROUND_TAGS, ...REAR_EQUIPMENT_TAGS, ...LOW_AIR_TAGS];
 
@@ -3175,7 +3177,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_avenger": {
-    "effect": "【近程拦截】：对一个合法低空或暴露高空目标造成 2 点伤害；若目标为【直升机】或【无人机】，改为 3 点。【伴随防空】：敌方【战斗机】或【巡航导弹】打击造成的伤害 -1，一回合一次；不能拦截【弹道导弹】。触发后暴露。",
+    "effect": "【近程拦截】：对一个合法低空或暴露高空目标造成 2 点伤害；若目标为【直升机】或【无人机】，改为 3 点。【伴随防空】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -1，一回合一次；不能拦截【弹道导弹】。触发后暴露。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3190,7 +3192,7 @@ const V07_CARD_OVERRIDES = {
     },
     "continuous": {
       "intercept": 1,
-      "interceptTags": ["战斗机", "巡航导弹"],
+      "interceptTags": ["战斗机", "巡航导弹", "SEAD导弹"],
       "protectLines": ["frontline", "support"],
       "sourceExposes": true
     }
@@ -3230,12 +3232,13 @@ const V07_CARD_OVERRIDES = {
   "us_atacms": {
     "name": "ATACMS 战术弹道导弹",
     "specialization": "弹道导弹点杀暴露单位",
-    "effect": "【弹道打击】：对一个暴露的合法目标造成 6 点伤害；若目标为后排装备，改为 7 点。只能被【重型防空】拦截。",
+    "effect": "【弹道打击】：对一个暴露的地面目标或【直升机】造成 6 点伤害；若目标为后排地面装备，改为 7 点。只能被【重型防空】拦截。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 6,
-      "bonuses": [{ "tag": "榴弹炮", "amount": 7 }, { "tag": "火箭炮", "amount": 7 }, { "tag": "伴随防空", "amount": 7 }, { "tag": "重型防空", "amount": 7 }, { "tag": "无人机", "amount": 7 }],
+      "requiresAnyTag": MISSILE_STRIKE_TARGET_TAGS,
+      "bonuses": [{ "tag": "榴弹炮", "amount": 7 }, { "tag": "火箭炮", "amount": 7 }, { "tag": "伴随防空", "amount": 7 }, { "tag": "重型防空", "amount": 7 }],
       "requiresExposed": true,
       "sourceExposes": true,
       "interceptByTags": ["重型防空"]
@@ -3243,12 +3246,13 @@ const V07_CARD_OVERRIDES = {
   },
   "us_tomahawk": {
     "power": 4,
-    "effect": "【巡航打击】：对一个暴露的合法目标造成 4 点伤害；若目标在支援区，改为 5 点。可被【伴随防空】或【重型防空】拦截。",
+    "effect": "【巡航打击】：对一个暴露的地面目标或【直升机】造成 4 点伤害；若目标在支援区，改为 5 点。可被【伴随防空】或【重型防空】拦截。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 4,
       "lineAmounts": { "support": 5 },
+      "requiresAnyTag": MISSILE_STRIKE_TARGET_TAGS,
       "requiresExposed": true,
       "sourceExposes": true,
       "interceptByTags": ["伴随防空", "重型防空"]
@@ -3282,18 +3286,23 @@ const V07_CARD_OVERRIDES = {
     "rarity": "epic",
     "specialization": "反辐射压制、有限制空",
     "tags": ["战斗机", "SEAD", "SEAD导弹"],
-    "effect": "【SEAD反辐射导弹】：对一个暴露的【重型防空】造成 5 点伤害。可被一个【重型防空】单位拦截。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
+    "effect": "【SEAD反辐射导弹】：指定敌方【伴随防空】或【重型防空】，含隐蔽单位，造成 5 点伤害；若目标仍有拦截窗口，改为仅暴露并消耗该窗口。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
     "art": "us_f35a_sead",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 4,
-      "requiresAnyTag": [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS, "重型防空"],
+      "requiresAnyTag": [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS, ...AIR_DEFENSE_TAGS],
       "requiresExposed": true,
-      "bonuses": [{ "tag": "重型防空", "amount": 5 }],
+      "canRevealHiddenForTags": AIR_DEFENSE_TAGS,
+      "bonuses": [{ "tag": "伴随防空", "amount": 5 }, { "tag": "重型防空", "amount": 5 }],
       "sourceExposes": true,
-      "interceptByTags": ["伴随防空", "重型防空"],
-      "interceptByTagsByTargetTag": [{ "tag": "重型防空", "interceptByTags": ["重型防空"] }]
+      "interceptByTags": AIR_DEFENSE_TAGS,
+      "interceptByTagsByTargetTag": [
+        { "tag": "伴随防空", "interceptByTags": AIR_DEFENSE_TAGS },
+        { "tag": "重型防空", "interceptByTags": AIR_DEFENSE_TAGS }
+      ],
+      "cancelToZeroOnInterceptionForTags": AIR_DEFENSE_TAGS
     }
   },
   "us_b2": {
@@ -3511,7 +3520,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_pantsir": {
-    "effect": "【野战防空】：对一个合法低空或巡航导弹目标造成 2 点伤害；若目标为【直升机】或【无人机】，改为 4 点。【伴随拦截】：敌方【战斗机】或【巡航导弹】打击造成的伤害 -2，一回合一次；不能拦截【弹道导弹】。触发后暴露。",
+    "effect": "【野战防空】：对一个合法低空或巡航导弹目标造成 2 点伤害；若目标为【直升机】或【无人机】，改为 4 点。【伴随拦截】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -2，一回合一次；不能拦截【弹道导弹】。触发后暴露。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3525,7 +3534,7 @@ const V07_CARD_OVERRIDES = {
     },
     "continuous": {
       "intercept": 2,
-      "interceptTags": ["战斗机", "巡航导弹"],
+      "interceptTags": ["战斗机", "巡航导弹", "SEAD导弹"],
       "protectLines": ["frontline", "support"],
       "sourceExposes": true
     }
@@ -3562,12 +3571,13 @@ const V07_CARD_OVERRIDES = {
   },
   "ru_kalibr": {
     "power": 4,
-    "effect": "【巡航打击】：对一个暴露的合法目标造成 4 点伤害；若目标在前线，改为 5 点。可被【伴随防空】或【重型防空】拦截。",
+    "effect": "【巡航打击】：对一个暴露的地面目标或【直升机】造成 4 点伤害；若目标在前线，改为 5 点。可被【伴随防空】或【重型防空】拦截。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 4,
       "lineAmounts": { "frontline": 5 },
+      "requiresAnyTag": MISSILE_STRIKE_TARGET_TAGS,
       "requiresExposed": true,
       "sourceExposes": true,
       "interceptByTags": ["伴随防空", "重型防空"]
@@ -3575,12 +3585,13 @@ const V07_CARD_OVERRIDES = {
   },
   "ru_iskander": {
     "power": 6,
-    "effect": "【弹道导弹】：对一个暴露的合法目标造成 6 点伤害；若目标在支援区，改为 7 点。只能被【重型防空】拦截。",
+    "effect": "【弹道导弹】：对一个暴露的地面目标或【直升机】造成 6 点伤害；若目标在支援区，改为 7 点。只能被【重型防空】拦截。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 6,
       "lineAmounts": { "support": 7 },
+      "requiresAnyTag": MISSILE_STRIKE_TARGET_TAGS,
       "requiresExposed": true,
       "sourceExposes": true,
       "interceptByTags": ["重型防空"]
@@ -3612,18 +3623,23 @@ const V07_CARD_OVERRIDES = {
     "rarity": "epic",
     "specialization": "反辐射压制、有限制空",
     "tags": ["战斗机", "SEAD", "SEAD导弹"],
-    "effect": "【SEAD反辐射导弹】：对一个暴露的【重型防空】造成 5 点伤害。可被一个【重型防空】单位拦截。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
+    "effect": "【SEAD反辐射导弹】：指定敌方【伴随防空】或【重型防空】，含隐蔽单位，造成 5 点伤害；若目标仍有拦截窗口，改为仅暴露并消耗该窗口。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
     "art": "ru_su57_sead",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 4,
-      "requiresAnyTag": [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS, "重型防空"],
+      "requiresAnyTag": [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS, ...AIR_DEFENSE_TAGS],
       "requiresExposed": true,
-      "bonuses": [{ "tag": "重型防空", "amount": 5 }],
+      "canRevealHiddenForTags": AIR_DEFENSE_TAGS,
+      "bonuses": [{ "tag": "伴随防空", "amount": 5 }, { "tag": "重型防空", "amount": 5 }],
       "sourceExposes": true,
-      "interceptByTags": ["伴随防空", "重型防空"],
-      "interceptByTagsByTargetTag": [{ "tag": "重型防空", "interceptByTags": ["重型防空"] }]
+      "interceptByTags": AIR_DEFENSE_TAGS,
+      "interceptByTagsByTargetTag": [
+        { "tag": "伴随防空", "interceptByTags": AIR_DEFENSE_TAGS },
+        { "tag": "重型防空", "interceptByTags": AIR_DEFENSE_TAGS }
+      ],
+      "cancelToZeroOnInterceptionForTags": AIR_DEFENSE_TAGS
     }
   },
   "ru_su34": {
