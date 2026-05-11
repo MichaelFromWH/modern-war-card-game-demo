@@ -3283,7 +3283,7 @@ const V07_CARD_OVERRIDES = {
     "specialization": "反辐射压制、有限制空",
     "tags": ["战斗机", "SEAD", "SEAD导弹"],
     "effect": "【SEAD反辐射导弹】：对一个暴露的【重型防空】造成 5 点伤害。可被一个【重型防空】单位拦截。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
-    "art": "us_f35",
+    "art": "us_f35a_sead",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3613,7 +3613,7 @@ const V07_CARD_OVERRIDES = {
     "specialization": "反辐射压制、有限制空",
     "tags": ["战斗机", "SEAD", "SEAD导弹"],
     "effect": "【SEAD反辐射导弹】：对一个暴露的【重型防空】造成 5 点伤害。可被一个【重型防空】单位拦截。【有限制空】：对一个暴露的低空或高空目标造成 4 点伤害。可被防空单位拦截。",
-    "art": "ru_tu22m3",
+    "art": "ru_su57_sead",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
