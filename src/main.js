@@ -173,6 +173,25 @@ const DECK_RULES = {
     legendary: 1,
   },
 };
+const UNIT_ATTRIBUTE_NOTES = {
+  步兵: "可打击地面目标；普通步兵默认不能打击直升机。",
+  反甲步兵: "可打击地面目标，擅长反装甲；部分反甲小组可对直升机造成低额伤害。",
+  防空步兵: "可打击低空单位，主要反制直升机和无人机。",
+  侦查步兵: "主要负责暴露隐蔽目标并引导远程火力，本体不承担常规伤害。",
+  装甲: "可打击地面目标；部分坦克和装甲车可对低空直升机造成低额伤害。",
+  直升机: "可打击地面与低空目标，并能威胁已暴露的后排装备。",
+  榴弹炮: "可打击前线地面目标，也可打击已暴露或被突破暴露的后排装备。",
+  火箭炮: "可进行多目标地面覆盖，也可覆盖已暴露或被突破暴露的后排装备。",
+  伴随防空: "可打击低空单位，并可削弱部分战斗机、巡航导弹或 SEAD 导弹打击。",
+  重型防空: "可打击高空单位，并可拦截所有类型导弹。",
+  无人机: "主要负责侦查、暴露和校射，默认不承担常规攻击。",
+  巡航导弹: "可打击地面目标和直升机，不能打击战斗机、轰炸机和无人机。",
+  弹道导弹: "可打击地面目标和直升机，不能打击战斗机、轰炸机和无人机。",
+  战斗机: "高空单位，可执行制空和精确打击；会被防空单位拦截。",
+  SEAD战斗机: "可压制伴随防空和重型防空，含隐蔽防空单位；没有防空目标时转入有限制空。",
+  轰炸机: "高空单位，擅长对地面和后排装备进行范围打击；会被重型防空拦截。",
+  战斗轰炸机: "高空单位，偏重对地打击，也会被防空单位拦截。",
+};
 const DECK_STORAGE_PREFIX = "warzone.customDeck.v1";
 const FACTION_PAIR = {
   usa: "russia",
@@ -323,6 +342,7 @@ function clearSpotlight() {
     return;
   }
   refs.spotlight.classList.remove("is-overlay-preview");
+  refs.spotlight.classList.remove("has-rule-aside");
   clearSpotlightLayout();
   refs.spotlight.hidden = true;
   refs.spotlight.innerHTML = "";
@@ -352,13 +372,14 @@ function positionDeckBuilderSpotlight() {
   const viewportHeight = viewport?.height ?? window.innerHeight;
   const gap = 24;
   const edge = 18;
-  const minWidth = 240;
-  const maxWidth = 312;
+  const hasRuleAside = refs.spotlight.classList.contains("has-rule-aside");
+  const minWidth = hasRuleAside ? 540 : 240;
+  const maxWidth = hasRuleAside ? 704 : 312;
   const sideSpace = viewportWidth - rect.right - gap - edge;
   const hasSideSpace = sideSpace >= minWidth;
   const width = hasSideSpace
     ? Math.min(maxWidth, sideSpace)
-    : Math.min(maxWidth, Math.max(220, viewportWidth - edge * 2));
+    : Math.min(maxWidth, Math.max(hasRuleAside ? 320 : 220, viewportWidth - edge * 2));
   const left = hasSideSpace ? rect.right + gap : Math.max(edge, viewportWidth - width - edge);
   const top = Math.max(edge, rect.top);
   const height = Math.min(468, Math.max(240, viewportHeight - top - edge));
@@ -377,7 +398,7 @@ function updateSpotlightPosition() {
 }
 
 function isSpotlightSourceHovered(cardId) {
-  return Array.from(document.querySelectorAll(".hand-rail [data-card-id], .battle-board [data-card-id], .deck-builder-overlay [data-card-id]")).some(
+  return Array.from(document.querySelectorAll(".hand-rail [data-card-id], .battle-board [data-card-id], .codex-overlay [data-card-id], .deck-builder-overlay [data-card-id]")).some(
     (element) => element.dataset.cardId === cardId && element.matches(":hover"),
   );
 }
@@ -654,7 +675,7 @@ function getTurnUiState(battle) {
       tone: battle.matchWinner || "neutral",
       eyebrow: "交火结束",
       title: result,
-      detail: "最终战力结算完成",
+      detail: "最终生命与得分结算完成",
     };
   }
   if (battle.turnTransition) {
@@ -756,8 +777,8 @@ function createBattle() {
       enemy: 0,
     },
     log: [
-      "V0.4.2 规则：单位战力同时代表生命值和摧毁得分价值，先达到 50 点战场得分者获胜。",
-      "巡航导弹、弹道导弹、SEAD 战斗机、轰炸机均为驻场单位，拥有战力、可被摧毁并提供得分。",
+      "V0.8 规则：单位拆分为攻击、生命和目标价值，摧毁后按目标价值获得战场得分。",
+      "巡航导弹、弹道导弹、SEAD 战斗机、轰炸机均为驻场单位，拥有生命、可被摧毁并提供得分。",
       "巡航导弹仅能打击暴露地面目标或直升机，可被伴随/重型防空拦截；弹道导弹打击规则相同，但只能被重型防空拦截。",
       "SEAD 导弹可指定敌方伴随/重型防空，包括隐蔽防空；若目标仍有拦截窗口，打击被抵消为暴露目标并消耗该窗口。",
       "每个单位每回合最多行动一次；部署单位可立即行动，但本回合不能再次作为场上行动单位，也不能执行前线突破。",
@@ -1188,7 +1209,7 @@ function renderWarCard(card, options = {}) {
     .filter(Boolean)
     .join(" ");
   const showPowerBadge = card.type === "unit" ? (!detailArtPath || livePowerOverlay) : !generated;
-  const powerBadge = card.type === "unit" ? card.power : card.type === "tactic" ? "T" : "S";
+  const powerBadge = card.type === "unit" ? getCardBaseAttack(card) : card.type === "tactic" ? "T" : "S";
   const renderedTags = displayTags.map((tag) => {
     const tagBadge = getTagBadgePath(tag);
     const style = tagBadge ? ` style="--tag-art:url('${tagBadge}')"` : "";
@@ -1215,6 +1236,7 @@ function renderWarCard(card, options = {}) {
         ${showPowerBadge ? `
           <div class="war-card__power">
             <strong>${powerBadge}</strong>
+            ${card.type === "unit" ? "<span>攻</span>" : ""}
           </div>
         ` : ""}
       <div class="war-card__titlebar">
@@ -1229,6 +1251,7 @@ function renderWarCard(card, options = {}) {
       <div class="war-card__tags">
         ${renderedTags}
       </div>
+      ${renderCardStats(card)}
       <div class="war-card__body">
         ${renderEffectParagraphs(card.effect, card)}
       </div>
@@ -1238,6 +1261,19 @@ function renderWarCard(card, options = {}) {
       </div>
       ${deployActions}
     </article>
+  `;
+}
+
+function renderCardStats(card) {
+  if (card.type !== "unit") {
+    return "";
+  }
+  return `
+    <div class="war-card__stats" aria-label="攻击、生命和目标价值">
+      <span><b>攻</b>${getCardBaseAttack(card)}</span>
+      <span><b>命</b>${getCardHealth(card)}</span>
+      <span><b>值</b>${getCardTargetValue(card)}</span>
+    </div>
   `;
 }
 
@@ -1260,6 +1296,74 @@ function getUnitDisplayTypeTag(card) {
     || tags[0]
     || TYPE_LABELS[card.type]
     || "单位";
+}
+
+function getCardBaseAttack(card) {
+  if (card.type !== "unit") {
+    return 0;
+  }
+  if (Number.isFinite(card.attack)) {
+    return card.attack;
+  }
+  if (Number.isFinite(card.baseAttack)) {
+    return card.baseAttack;
+  }
+  if (Number.isFinite(card.ability?.amount)) {
+    return card.ability.amount;
+  }
+  return 0;
+}
+
+function getCardHealth(card) {
+  if (card.type !== "unit") {
+    return 0;
+  }
+  if (Number.isFinite(card.health)) {
+    return card.health;
+  }
+  return card.power || 0;
+}
+
+function getCardTargetValue(card) {
+  if (card.type !== "unit") {
+    return 0;
+  }
+  if (Number.isFinite(card.targetValue)) {
+    return card.targetValue;
+  }
+  if (Number.isFinite(card.value)) {
+    return card.value;
+  }
+  return getCardHealth(card);
+}
+
+function getCardUnitAttribute(card) {
+  if (card.type !== "unit") {
+    return TYPE_LABELS[card.type] || "战术";
+  }
+  if (card.unitAttribute) {
+    return card.unitAttribute;
+  }
+  const tags = Array.isArray(card.tags) ? card.tags : [];
+  if (tags.includes("SEAD")) return "SEAD战斗机";
+  if (tags.includes("弹道导弹")) return "弹道导弹";
+  if (tags.includes("巡航导弹")) return "巡航导弹";
+  if (tags.includes("重型防空")) return "重型防空";
+  if (tags.includes("伴随防空")) return "伴随防空";
+  if (tags.includes("轰炸机")) return "轰炸机";
+  if (tags.includes("战斗机")) return "战斗机";
+  if (tags.includes("直升机")) return "直升机";
+  if (tags.includes("无人机")) return "无人机";
+  if (tags.includes("火箭炮")) return "火箭炮";
+  if (tags.includes("榴弹炮")) return "榴弹炮";
+  if (tags.includes("装甲")) return "装甲";
+  if (tags.includes("侦查")) return "侦查步兵";
+  if (tags.includes("步兵")) return "步兵";
+  return getUnitDisplayTypeTag(card);
+}
+
+function getCardAttributeNote(card) {
+  return card.ruleNote || UNIT_ATTRIBUTE_NOTES[getCardUnitAttribute(card)] || "按单位属性判定可打击目标，技能只负责伤害修正和特殊效果。";
 }
 
 function uniqueDisplayTags(items) {
@@ -1342,7 +1446,7 @@ function renderLog() {
   const battle = state.battle;
   const items = battle?.log.slice().reverse() || [
     "正确来源：/Users/michaelwu/Documents/战区卡牌游戏项目/战争卡牌游戏。",
-    "本原型使用 V0.4.1 三线卡牌机制与美俄首发 30 张预组。",
+    "本原型使用 V0.8 三线卡牌机制与美俄首发 30 张预组。",
   ];
   if (refs.logPanel) {
     refs.logPanel.hidden = state.screen !== "battle";
@@ -1361,6 +1465,14 @@ function renderInspector() {
     <div class="inspector-card" style="--accent:${getFaction(card.faction).accent}">
       <span>${escapeHtml(TYPE_LABELS[card.type])} / ${escapeHtml(RARITY_LABELS[card.rarity])}</span>
       <strong>${escapeHtml(card.name)}</strong>
+      ${card.type === "unit" ? `
+        <div class="inspector-card__stats">
+          <i>攻 ${getCardBaseAttack(card)}</i>
+          <i>命 ${getCardHealth(card)}</i>
+          <i>值 ${getCardTargetValue(card)}</i>
+        </div>
+        <small>【${escapeHtml(getCardUnitAttribute(card))}】${escapeHtml(getCardAttributeNote(card))}</small>
+      ` : ""}
       <p>${escapeHtml(card.effect)}</p>
       <div>
         ${getCardDisplayTags(card).map((tag) => `<i>${escapeHtml(tag)}</i>`).join("")}
@@ -1371,8 +1483,9 @@ function renderInspector() {
 
 function renderSpotlight() {
   const canShowInBattle = state.screen === "battle" && !state.deckBuilderOpen && !state.codexOpen && !state.guideOpen && (canPlayerAct() || state.mulligan.active);
+  const canShowInCodex = state.codexOpen && !state.guideOpen && !state.deckBuilderOpen;
   const canShowInDeckBuilder = state.deckBuilderOpen && !state.codexOpen && !state.guideOpen;
-  if (!state.hoveredCardId || state.pending || state.draggingUid || (!canShowInBattle && !canShowInDeckBuilder)) {
+  if (!state.hoveredCardId || state.pending || state.draggingUid || (!canShowInBattle && !canShowInCodex && !canShowInDeckBuilder)) {
     clearSpotlight();
     return;
   }
@@ -1383,12 +1496,65 @@ function renderSpotlight() {
   const card = getCard(state.hoveredCardId);
   refs.spotlight.hidden = false;
   refs.spotlight.classList.toggle("is-overlay-preview", canShowInDeckBuilder);
-  refs.spotlight.innerHTML = renderPreviewCard(card);
+  refs.spotlight.classList.toggle("has-rule-aside", card.type === "unit");
+  refs.spotlight.innerHTML = `
+    <div class="card-spotlight__stage">
+      ${renderPreviewCard(card)}
+      ${card.type === "unit" ? renderCardRuleAside(card) : ""}
+    </div>
+  `;
   if (canShowInDeckBuilder) {
     positionDeckBuilderSpotlight();
   } else {
     clearSpotlightLayout();
   }
+}
+
+function renderCardRuleAside(card) {
+  const attribute = getCardUnitAttribute(card);
+  const bullets = getCardRuleBullets(card);
+  return `
+    <aside class="card-rule-aside" aria-label="单位属性与规则说明">
+      <span>单位属性</span>
+      <strong>【${escapeHtml(attribute)}】</strong>
+      ${card.type === "unit" ? `
+        <div class="card-rule-aside__stats">
+          <i><b>攻</b>${getCardBaseAttack(card)}</i>
+          <i><b>命</b>${getCardHealth(card)}</i>
+          <i><b>值</b>${getCardTargetValue(card)}</i>
+        </div>
+      ` : ""}
+      <p>${escapeHtml(getCardAttributeNote(card))}</p>
+      ${bullets.length ? `<ul>${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+    </aside>
+  `;
+}
+
+function getCardRuleBullets(card) {
+  if (card.type !== "unit") {
+    return ["战术牌按卡面效果立即结算，结算后进入弃牌堆。"];
+  }
+  const attribute = getCardUnitAttribute(card);
+  const bullets = [];
+  if (card.line === "support") {
+    bullets.push("敌方前线有单位时，未暴露支援区单位不能被前线单位直接指定。");
+  }
+  if (card.ability?.sourceExposes || card.fire?.sourceExposes) {
+    bullets.push("主动发动技能后会暴露。");
+  }
+  if (["巡航导弹", "弹道导弹"].includes(attribute)) {
+    bullets.push(attribute === "弹道导弹" ? "只能被重型防空拦截。" : "可被伴随防空或重型防空拦截。");
+  }
+  if (attribute === "重型防空") {
+    bullets.push("可保护前线和支援区，并可处理高空与导弹威胁。");
+  }
+  if (attribute === "SEAD战斗机") {
+    bullets.push("SEAD 对防空单位是规则例外：可指定隐蔽防空单位。");
+  }
+  if (getCardBaseAttack(card) === 0) {
+    bullets.push("本单位的行动价值来自暴露、校射或引导，而不是直接伤害。");
+  }
+  return bullets.slice(0, 3);
 }
 
 function shouldConcealEnemyInfo(target) {
@@ -1538,7 +1704,7 @@ function renderGuide() {
     {
       index: "01",
       title: "胜利目标",
-      body: "摧毁敌方单位即可按其基础战力得分，率先达到 50 分获胜。若牌库耗尽，会进入终局行动并比较得分。",
+      body: "摧毁敌方单位即可按其目标价值得分，率先达到 50 分获胜。若牌库耗尽，会进入终局行动并比较得分。",
     },
     {
       index: "02",
@@ -1713,7 +1879,7 @@ function renderDeckBuilderCard(card, count) {
       <div class="deck-card__body">
         <div class="deck-card__title">
           <strong>${escapeHtml(card.name)}</strong>
-          <span>${card.type === "unit" ? card.power : "T"}</span>
+          <span>${card.type === "unit" ? `攻${getCardBaseAttack(card)} 命${getCardHealth(card)}` : "T"}</span>
         </div>
         <p>${escapeHtml(TYPE_LABELS[card.type])} / ${escapeHtml(line)} / ${escapeHtml(RARITY_LABELS[card.rarity] || card.rarity)}</p>
         <div class="deck-card__tags">${tags}</div>
@@ -2305,7 +2471,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
   }
 
   if (ability.kind === "damageBoost") {
-    battle.log.push(`${sourceCard.name} 的旧版火力指示效果已停用；V0.4.1 仅使用隐蔽与暴露状态。`);
+    battle.log.push(`${sourceCard.name} 的旧版火力指示效果已停用；V0.8 仅使用隐蔽与暴露状态。`);
     if (ability.sourceExposes && sourceRef) {
       exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
     }
@@ -3149,7 +3315,7 @@ function cleanupDestroyed(battle, actingSide, sourceCard, targetSnapshot) {
           playCardFlight(card, side, sourceRect, getPileElement(side, "grave")?.getBoundingClientRect(), { back: true, duration: 720 });
           destroyed.push({ side, lineId: line.id, instance });
           if (scorer) {
-            const points = card.power || 0;
+            const points = getCardTargetValue(card);
             battle.scores[scorer] += points;
             battle.log.push(`${getSideName(battle, scorer)}摧毁 ${card.name}，获得 ${points} 点战场得分。`);
           }
@@ -3898,7 +4064,7 @@ function getAiKnownTargetDamage(target) {
 function getAiTargetEstimatedValue(target) {
   const targetCard = getAiKnownTargetCard(target);
   if (targetCard) {
-    return targetCard.power || getCurrentPower(target.instance);
+    return getCardTargetValue(targetCard) || getCurrentPower(target.instance);
   }
   return target.lineId === "support" ? 4 : 3;
 }
@@ -4059,9 +4225,9 @@ function resolveBattleEndIfReady(battle) {
   clearBattleTimers(battle);
   gameAudio.play(battle.matchWinner === "draw" ? "system.draw" : battle.matchWinner === "player" ? "system.victory" : "system.defeat");
   if (battle.matchWinner === "draw") {
-    battle.log.push(`补给耗尽最终结算：美国 ${playerScore} : 俄罗斯 ${enemyScore}，场上战力 ${playerBoardPower} : ${enemyBoardPower}，整场平局。`);
+    battle.log.push(`补给耗尽最终结算：美国 ${playerScore} : 俄罗斯 ${enemyScore}，场上生命 ${playerBoardPower} : ${enemyBoardPower}，整场平局。`);
   } else {
-    battle.log.push(`补给耗尽最终结算：美国 ${playerScore} : 俄罗斯 ${enemyScore}，场上战力 ${playerBoardPower} : ${enemyBoardPower}，${getSideName(battle, battle.matchWinner)}获胜。`);
+    battle.log.push(`补给耗尽最终结算：美国 ${playerScore} : 俄罗斯 ${enemyScore}，场上生命 ${playerBoardPower} : ${enemyBoardPower}，${getSideName(battle, battle.matchWinner)}获胜。`);
   }
   return true;
 }
@@ -4464,7 +4630,7 @@ function resolveNoTargetEffect(battle, side, sourceInstance, card) {
   }
 
   if (ability.kind === "intelDeny") {
-    battle.log.push(`${card.name} 的旧版反引导效果已停用；V0.4.1 使用电子压制处理隐蔽和暴露目标。`);
+    battle.log.push(`${card.name} 的旧版反引导效果已停用；V0.8 使用电子压制处理隐蔽和暴露目标。`);
     drawIfOwnCardPresent(battle, side, ability.drawIfOwnCard, card);
   }
 
@@ -5285,7 +5451,7 @@ function drawCards(battle, side, amount, options = {}) {
 
 function getCurrentPower(instance) {
   const card = getCard(instance.cardId);
-  return Math.max(0, (card.power || 0) + (instance.bonus || 0) - instance.damage);
+  return Math.max(0, getCardHealth(card) + (instance.bonus || 0) - instance.damage);
 }
 
 function getLineScore(battle, side, lineId) {
@@ -6176,7 +6342,10 @@ function serializeBoardInstance(instance) {
   const card = getCard(instance.cardId);
   return {
     name: card.name,
-    power: getCurrentPower(instance),
+    attack: getCardBaseAttack(card),
+    health: getCurrentPower(instance),
+    value: getCardTargetValue(card),
+    attribute: getCardUnitAttribute(card),
     bonus: instance.bonus || 0,
     damage: instance.damage,
     hidden: instance.hidden,

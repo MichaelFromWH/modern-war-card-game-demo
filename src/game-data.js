@@ -2993,6 +2993,7 @@ const AIR_DEFENSE_TAGS = ["伴随防空", "重型防空"];
 const GROUND_SUPPORT_TAGS = ["榴弹炮", "火箭炮", ...AIR_DEFENSE_TAGS];
 const SURFACE_TARGET_TAGS = [...GROUND_UNIT_TAGS, ...GROUND_SUPPORT_TAGS, ...MISSILE_TARGET_TAGS];
 const SURFACE_OR_LOW_AIR_TAGS = [...SURFACE_TARGET_TAGS, ...LOW_AIR_TAGS];
+const MISSILE_LEGAL_TARGET_TAGS = [...SURFACE_TARGET_TAGS, "直升机"];
 const LOW_OR_HIGH_AIR_TAGS = [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS];
 
 const V07_CARD_OVERRIDES = {
@@ -3021,7 +3022,7 @@ const V07_CARD_OVERRIDES = {
     "ambushBonus": 1
   },
   "us_stinger_team": {
-    "effect": "【前线防空】：对一个低空目标造成 4 点伤害。\n【单兵防空】：敌方【直升机】打击己方前线单位时，可暴露本单位，使该伤害 -1，一回合一次。",
+    "effect": "【前线防空】：对一个低空目标造成 4 点伤害。\n【单兵防空】：敌方【直升机】打击己方前线单位时，可暴露本单位，使该伤害 -1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3054,7 +3055,7 @@ const V07_CARD_OVERRIDES = {
     "contactException": true
   },
   "us_bradley": {
-    "effect": "【伴随火力】：对一个地面目标造成 3 点伤害；若目标为【步兵】，伤害+1；也可对低空目标造成 2 点伤害。\n【步兵掩护】：己方【步兵】受到【榴弹炮】或【火箭炮】伤害时，伤害 -1，一回合一次。",
+    "effect": "【伴随火力】：对一个地面目标造成 3 点伤害；若目标为【步兵】，伤害+1；也可对低空目标造成 2 点伤害。\n【步兵掩护】：己方【步兵】受到【榴弹炮】或【火箭炮】伤害时，伤害 -1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3092,7 +3093,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_stryker": {
-    "effect": "【快速突击】：对一个地面目标造成 2 点伤害，若目标为【步兵】，伤害+1；也可对低空目标造成 1 点伤害。\n【机动掩护】：己方【步兵】受到【直升机】伤害时，伤害 -1，一回合一次。",
+    "effect": "【快速突击】：对一个地面目标造成 2 点伤害，若目标为【步兵】，伤害+1；也可对低空目标造成 1 点伤害。\n【机动掩护】：己方【步兵】受到【直升机】伤害时，伤害 -1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3175,7 +3176,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_avenger": {
-    "effect": "【近程拦截】：对一个低空或高空目标造成 2 点伤害，若目标为【直升机】或【无人机】，伤害+1。\n【伴随防空】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -1，一回合一次。",
+    "effect": "【近程拦截】：对一个低空或高空目标造成 2 点伤害，若目标为【直升机】或【无人机】，伤害+1。\n【伴随防空】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3195,7 +3196,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_patriot": {
-    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
+    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3229,26 +3230,26 @@ const V07_CARD_OVERRIDES = {
   "us_atacms": {
     "name": "ATACMS 战术弹道导弹",
     "specialization": "弹道导弹点杀地面与低空目标",
-    "effect": "【弹道打击】：对一个地面或低空目标造成 6 点伤害，若目标在支援区，伤害+1。",
+    "effect": "【弹道打击】：对一个地面或直升机目标造成 5 点伤害，若目标在支援区，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
-      "amount": 6,
-      "lineAmounts": { "support": 7 },
-      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "amount": 5,
+      "lineAmounts": { "support": 6 },
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
       "sourceExposes": true,
       "interceptByTags": ["重型防空"]
     }
   },
   "us_tomahawk": {
     "power": 4,
-    "effect": "【巡航打击】：对一个地面或低空目标造成 4 点伤害，若目标在支援区，伤害+1。",
+    "effect": "【巡航打击】：对一个地面或直升机目标造成 4 点伤害，若目标在支援区，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 4,
       "lineAmounts": { "support": 5 },
-      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
       "sourceExposes": true,
       "interceptByTags": ["伴随防空", "重型防空"]
     }
@@ -3320,7 +3321,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_smoke_screen": {
-    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点战力。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点生命。",
     "ability": {
       "kind": "smoke",
       "rows": ["frontline", "support"],
@@ -3329,7 +3330,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_reposition": {
-    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在支援区，修复 1 点战力。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在支援区，修复 1 点生命。",
     "ability": {
       "kind": "smoke",
       "rows": ["frontline", "support"],
@@ -3338,11 +3339,11 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_battlefield_repair": {
-    "effect": "修复己方一个单位全部战力；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "effect": "修复己方一个单位 2 点生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
     "ability": {
       "kind": "repair",
       "rows": ["frontline", "support"],
-      "full": true,
+      "amount": 2,
       "drawAlternative": 2,
       "keepAlternative": 1
     }
@@ -3404,7 +3405,7 @@ const V07_CARD_OVERRIDES = {
     "contactException": true
   },
   "ru_bmp3m": {
-    "effect": "【伴随火力】：对一个地面目标造成 3 点伤害，若目标为【步兵】，伤害+1；也可对低空目标造成 2 点伤害。\n【步兵掩护】：己方【步兵】受到【榴弹炮】或【火箭炮】伤害时，伤害 -1，一回合一次。",
+    "effect": "【伴随火力】：对一个地面目标造成 3 点伤害，若目标为【步兵】，伤害+1；也可对低空目标造成 2 点伤害。\n【步兵掩护】：己方【步兵】受到【榴弹炮】或【火箭炮】伤害时，伤害 -1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3442,7 +3443,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_bmpt": {
-    "effect": "【火力清剿】：对一个地面目标造成 2 点伤害，若目标为【步兵】，伤害+1；也可对低空目标造成 2 点伤害。\n【装甲护送】：己方【装甲】受到【步兵】伤害时，伤害 -1，一回合一次。",
+    "effect": "【火力清剿】：对一个地面目标造成 2 点伤害，若目标为【步兵】，伤害+1；也可对低空目标造成 2 点伤害。\n【装甲护送】：己方【装甲】受到【步兵】伤害时，伤害 -1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3522,12 +3523,16 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_pantsir": {
-    "effect": "【野战防空】：对一个低空目标造成 4 点伤害。\n【伴随拦截】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -2，一回合一次。",
+    "effect": "【野战防空】：对一个低空目标造成 2 点伤害；若目标为【直升机】或【无人机】，伤害+2。\n【伴随拦截】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -2。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
-      "amount": 4,
+      "amount": 2,
       "requiresAnyTag": LOW_AIR_TAGS,
+      "bonuses": [
+        { "tag": "直升机", "amount": 4 },
+        { "tag": "无人机", "amount": 4 }
+      ],
       "sourceExposes": true
     },
     "continuous": {
@@ -3538,7 +3543,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_buk_m3": {
-    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
+    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3571,26 +3576,26 @@ const V07_CARD_OVERRIDES = {
   },
   "ru_kalibr": {
     "power": 4,
-    "effect": "【巡航打击】：对一个地面或低空目标造成 4 点伤害，若目标在前线，伤害+1。",
+    "effect": "【巡航打击】：对一个地面或直升机目标造成 4 点伤害，若目标在前线，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 4,
       "lineAmounts": { "frontline": 5 },
-      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
       "sourceExposes": true,
       "interceptByTags": ["伴随防空", "重型防空"]
     }
   },
   "ru_iskander": {
     "power": 6,
-    "effect": "【弹道导弹】：对一个地面或低空目标造成 6 点伤害，若目标在支援区，伤害+1。",
+    "effect": "【弹道导弹】：对一个地面或直升机目标造成 5 点伤害，若目标在支援区，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
-      "amount": 6,
-      "lineAmounts": { "support": 7 },
-      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "amount": 5,
+      "lineAmounts": { "support": 6 },
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
       "sourceExposes": true,
       "interceptByTags": ["重型防空"]
     }
@@ -3657,7 +3662,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_smoke_decoys": {
-    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点战力。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点生命。",
     "ability": {
       "kind": "smoke",
       "rows": ["frontline", "support"],
@@ -3666,7 +3671,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_reposition": {
-    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在支援区，修复 1 点战力。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在支援区，修复 1 点生命。",
     "ability": {
       "kind": "smoke",
       "rows": ["frontline", "support"],
@@ -3684,11 +3689,11 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_battlefield_repair": {
-    "effect": "修复己方一个单位全部战力；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "effect": "修复己方一个单位 2 点生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
     "ability": {
       "kind": "repair",
       "rows": ["frontline", "support"],
-      "full": true,
+      "amount": 2,
       "drawAlternative": 2,
       "keepAlternative": 1
     }
@@ -3740,6 +3745,52 @@ Object.entries(STRIKE_UNIT_RESTORE).forEach(([cardId, config]) => {
   if (card.ability) {
     card.ability.sourceExposes = true;
   }
+});
+
+const V08_CARD_NUMBERS = {
+  "us_marine_rifle": { "attack": 2, "health": 4, "targetValue": 2, "unitAttribute": "步兵" },
+  "us_javelin_team": { "attack": 2, "health": 3, "targetValue": 2, "unitAttribute": "反甲步兵" },
+  "us_stinger_team": { "attack": 4, "health": 3, "targetValue": 2, "unitAttribute": "防空步兵" },
+  "us_rangers_target": { "attack": 0, "health": 3, "targetValue": 3, "unitAttribute": "侦查步兵" },
+  "us_bradley": { "attack": 3, "health": 5, "targetValue": 3, "unitAttribute": "装甲" },
+  "us_m1a2": { "attack": 4, "health": 7, "targetValue": 5, "unitAttribute": "装甲" },
+  "us_stryker": { "attack": 2, "health": 4, "targetValue": 2, "unitAttribute": "装甲" },
+  "us_apache": { "attack": 3, "health": 5, "targetValue": 4, "unitAttribute": "直升机" },
+  "us_m109": { "attack": 3, "health": 3, "targetValue": 3, "unitAttribute": "榴弹炮" },
+  "us_himars": { "attack": 3, "health": 3, "targetValue": 4, "unitAttribute": "火箭炮" },
+  "us_avenger": { "attack": 2, "health": 3, "targetValue": 2, "unitAttribute": "伴随防空" },
+  "us_patriot": { "attack": 2, "health": 3, "targetValue": 5, "unitAttribute": "重型防空" },
+  "us_reaper": { "attack": 0, "health": 2, "targetValue": 3, "unitAttribute": "无人机" },
+  "us_atacms": { "attack": 5, "health": 3, "targetValue": 5, "unitAttribute": "弹道导弹", "specialization": "弹道导弹点杀地面与直升机目标" },
+  "us_tomahawk": { "attack": 4, "health": 3, "targetValue": 4, "unitAttribute": "巡航导弹" },
+  "us_f35": { "attack": 4, "health": 6, "targetValue": 5, "unitAttribute": "战斗机" },
+  "us_f35a_sead": { "attack": 4, "health": 5, "targetValue": 5, "unitAttribute": "SEAD战斗机" },
+  "us_b2": { "attack": 5, "health": 5, "targetValue": 5, "unitAttribute": "轰炸机" },
+  "ru_motostrelki": { "attack": 2, "health": 4, "targetValue": 2, "unitAttribute": "步兵" },
+  "ru_kornet_team": { "attack": 2, "health": 3, "targetValue": 2, "unitAttribute": "反甲步兵" },
+  "ru_spetsnaz_target": { "attack": 0, "health": 3, "targetValue": 3, "unitAttribute": "侦查步兵" },
+  "ru_bmp3m": { "attack": 3, "health": 5, "targetValue": 3, "unitAttribute": "装甲" },
+  "ru_t90m": { "attack": 4, "health": 7, "targetValue": 5, "unitAttribute": "装甲" },
+  "ru_bmpt": { "attack": 2, "health": 5, "targetValue": 4, "unitAttribute": "装甲" },
+  "ru_ka52_unit": { "attack": 3, "health": 5, "targetValue": 4, "unitAttribute": "直升机" },
+  "ru_2s19": { "attack": 3, "health": 3, "targetValue": 3, "unitAttribute": "榴弹炮" },
+  "ru_tornado_s": { "attack": 3, "health": 3, "targetValue": 4, "unitAttribute": "火箭炮" },
+  "ru_pantsir": { "attack": 2, "health": 3, "targetValue": 4, "unitAttribute": "伴随防空" },
+  "ru_buk_m3": { "attack": 2, "health": 3, "targetValue": 4, "unitAttribute": "重型防空" },
+  "ru_orlan10": { "attack": 0, "health": 2, "targetValue": 2, "unitAttribute": "无人机" },
+  "ru_kalibr": { "attack": 4, "health": 3, "targetValue": 4, "unitAttribute": "巡航导弹" },
+  "ru_iskander": { "attack": 5, "health": 3, "targetValue": 5, "unitAttribute": "弹道导弹" },
+  "ru_su35": { "attack": 4, "health": 6, "targetValue": 5, "unitAttribute": "战斗机" },
+  "ru_su57_sead": { "attack": 4, "health": 5, "targetValue": 5, "unitAttribute": "SEAD战斗机" },
+  "ru_su34": { "attack": 5, "health": 5, "targetValue": 5, "unitAttribute": "战斗轰炸机" }
+};
+
+Object.entries(V08_CARD_NUMBERS).forEach(([cardId, numbers]) => {
+  const card = CARD_LIBRARY[cardId];
+  if (!card) {
+    return;
+  }
+  Object.assign(card, numbers, { power: numbers.health });
 });
 
 const V07_ACTIVE_CARD_IDS = new Set([
