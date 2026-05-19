@@ -431,6 +431,7 @@ button:disabled {
 .war-card__tags i {
   display: inline-flex;
   min-height: 18px;
+  flex: 0 0 auto;
   align-items: center;
   border: 1px solid rgba(232, 221, 196, 0.22);
   border-radius: 4px;
@@ -439,6 +440,7 @@ button:disabled {
   background: rgba(0, 0, 0, 0.32);
   font-size: 0.62rem;
   font-style: normal;
+  white-space: nowrap;
 }
 
 .hand-rail {
@@ -496,6 +498,10 @@ button:disabled {
   transform: translateX(-50%);
   pointer-events: none;
   filter: drop-shadow(0 28px 54px rgba(0, 0, 0, 0.72));
+}
+
+.card-spotlight.is-overlay-preview {
+  z-index: 70;
 }
 
 .card-spotlight .war-card {
@@ -667,6 +673,10 @@ button:disabled {
   margin-top: 6px;
 }
 
+.war-card__meta span {
+  white-space: nowrap;
+}
+
 .war-card__meta span:last-child {
   overflow: hidden;
   white-space: nowrap;
@@ -676,8 +686,9 @@ button:disabled {
 .war-card__tags {
   height: 36px;
   display: flex;
+  align-items: center;
   gap: 3px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   overflow: hidden;
   margin-top: 6px;
 }
@@ -5092,13 +5103,15 @@ button:disabled {
 
 .deck-card__tags {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  overflow: hidden;
 }
 
 .deck-card__tags i {
   min-height: 20px;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   border: 1px solid rgba(232, 221, 196, 0.16);
   border-radius: 4px;
@@ -5107,6 +5120,7 @@ button:disabled {
   background: rgba(255, 255, 255, 0.045);
   font-size: 0.66rem;
   font-style: normal;
+  white-space: nowrap;
 }
 
 .deck-card__controls {
@@ -7316,4 +7330,330 @@ button:disabled {
   72% {
     transform: translateX(-1px);
   }
+}
+
+/* Live detail card face: generated art is the background, all card text comes from CARD_LIBRARY. */
+.war-card--generated-detail.war-card--live-detail-overlay {
+  overflow: hidden;
+  border: 1px solid rgba(238, 206, 142, 0.38);
+  border-radius: 8px;
+  background: #080909;
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.64), inset 0 0 0 1px rgba(255, 238, 194, 0.12);
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__art {
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: cover !important;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(3, 4, 5, 0.7) 0%, rgba(3, 4, 5, 0.18) 27%, rgba(3, 4, 5, 0.08) 48%, rgba(3, 4, 5, 0.76) 100%),
+    radial-gradient(circle at 20% 12%, rgba(255, 226, 164, 0.12), transparent 34%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.42), transparent 36%, rgba(0, 0, 0, 0.24));
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__titlebar,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__titlebar {
+  display: block !important;
+  position: absolute;
+  left: 20px;
+  right: 104px;
+  top: 18px;
+  z-index: 8;
+  min-height: 104px;
+  padding: 0;
+  border: 0;
+  background: none !important;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__titlebar strong,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__titlebar strong {
+  display: block;
+  overflow: visible;
+  color: #fff6e5;
+  font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: 0;
+  text-shadow: 0 3px 7px rgba(0, 0, 0, 0.92), 0 0 18px rgba(255, 232, 178, 0.34);
+  -webkit-line-clamp: unset;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__meta {
+  display: flex !important;
+  flex-wrap: nowrap;
+  gap: 7px;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span {
+  min-height: 32px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 235, 190, 0.58);
+  border-radius: 5px;
+  color: #fff7e8;
+  background: linear-gradient(180deg, rgba(9, 12, 13, 0.78), rgba(9, 12, 13, 0.5));
+  box-shadow: inset 0 0 18px rgba(255, 226, 164, 0.08), 0 8px 15px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(4px);
+  font-size: 0.98rem;
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: 0;
+  white-space: nowrap;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.88);
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span::before {
+  content: "•";
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 20px;
+  border: 1px solid rgba(255, 236, 198, 0.52);
+  border-radius: 4px;
+  color: #f5d89b;
+  font-size: 0.92rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="前线"]::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="前线"]::before {
+  content: "⊕";
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="支援"]::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="支援"]::before {
+  content: "⌖";
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="即时结算"]::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="即时结算"]::before,
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="即时"]::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="即时"]::before {
+  content: "↯";
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="步兵"]::before { content: "兵"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="装甲"]::before { content: "甲"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="直升机"]::before { content: "旋"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="无人机"]::before { content: "侦"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="榴弹炮"]::before { content: "炮"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="火箭炮"]::before { content: "箭"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="导弹"]::before { content: "弹"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="巡航导弹"]::before { content: "巡"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="弹道导弹"]::before { content: "道"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="战斗机"]::before { content: "空"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="轰炸机"]::before { content: "轰"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="伴随防空"]::before { content: "防"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="重型防空"]::before { content: "盾"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="战术"]::before { content: "令"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="电子战"]::before { content: "扰"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="补给"]::before { content: "补"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="掩护"]::before { content: "烟"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="维修"]::before { content: "修"; }
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__meta span[data-meta-item="机动"]::before { content: "移"; }
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__power,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__power {
+  display: grid !important;
+  top: 18px;
+  right: 18px;
+  width: 74px;
+  height: 74px;
+  z-index: 9;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__power strong,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__power strong {
+  font-size: 3.7rem;
+  line-height: 0.9;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__tags,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__tags {
+  display: none !important;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__body,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__body {
+  display: grid !important;
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: auto;
+  bottom: 58px;
+  z-index: 8;
+  min-height: 154px;
+  height: auto !important;
+  align-content: end;
+  gap: 8px;
+  padding: 0;
+  overflow: visible !important;
+  border: 0;
+  background: none !important;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__skill {
+  max-height: none;
+  min-height: 66px;
+  height: auto;
+  display: grid !important;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  margin: 0;
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 235, 190, 0.58);
+  border-radius: 7px;
+  color: #fff8e9;
+  background:
+    linear-gradient(90deg, rgba(5, 7, 8, 0.84), rgba(5, 7, 8, 0.68) 74%, rgba(5, 7, 8, 0.44)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
+  box-shadow: inset 0 0 22px rgba(255, 226, 164, 0.08), 0 10px 24px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(5px);
+  font-size: 0.82rem;
+  line-height: 1.26;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill + .war-card__skill::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__skill + .war-card__skill::before {
+  display: none;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-icon,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-icon {
+  width: 48px;
+  height: 48px;
+  display: grid !important;
+  place-items: center;
+  border: 1px solid rgba(255, 234, 190, 0.56);
+  border-radius: 6px;
+  background:
+    var(--skill-icon) center / 78% 78% no-repeat,
+    radial-gradient(circle, rgba(255, 226, 164, 0.16), transparent 62%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-icon::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-icon::before {
+  content: attr(data-glyph);
+  color: #fff3d7;
+  font-family: "Noto Sans SC", sans-serif;
+  font-size: 1.38rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 12px rgba(255, 215, 140, 0.5);
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-icon[style]::before,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-icon[style]::before {
+  content: "";
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-copy,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-copy {
+  display: block;
+  min-width: 0;
+  max-height: none;
+  padding: 0;
+  overflow: visible;
+  color: #fff8e9;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  background: transparent;
+  box-shadow: none;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.92);
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-copy strong,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__skill-copy strong {
+  display: inline;
+  margin: 0;
+  color: #ffe2a6;
+  font-size: 0.92rem;
+  font-weight: 1000;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__footer,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__footer {
+  display: flex !important;
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 14px;
+  z-index: 8;
+  height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border: 0;
+  background: none !important;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__footer span,
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__footer em,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__footer span,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__footer em {
+  display: inline-flex !important;
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__stars img,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__stars img {
+  width: 106px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.68));
+}
+
+.war-card--generated-detail.war-card--live-detail-overlay .war-card__faction-mark,
+.card-spotlight .war-card--generated-detail.war-card--live-detail-overlay .war-card__faction-mark {
+  max-width: 178px;
+  justify-content: flex-end;
+  color: #f4dca8;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: right;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, 0.88);
+}
+
+.card-spotlight.is-overlay-preview {
+  left: var(--spotlight-left, calc(100vw - 336px));
+  top: var(--spotlight-top, 24px);
+  bottom: auto;
+  z-index: 70;
+  width: var(--spotlight-width, min(312px, calc(100vw - 48px)));
+  height: var(--spotlight-height, 468px);
+  transform: none;
+}
+
+.card-spotlight.is-overlay-preview .war-card,
+.card-spotlight.is-overlay-preview .war-card--generated-detail {
+  width: 100%;
+  height: 100%;
 }
