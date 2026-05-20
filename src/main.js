@@ -964,7 +964,9 @@ function renderLine(side, lineId) {
 
 function renderBoardCard(instance, side, lineId) {
   const card = getCard(instance.cardId);
-  const power = getCurrentPower(instance);
+  const attack = getCardBaseAttack(card);
+  const currentHealth = getCurrentPower(instance);
+  const maxHealth = getCardHealth(card);
   const targetable = isPendingTarget(side, instance.uid);
   const concealed = instance.hidden;
   const inspectable = !concealed || side === "player";
@@ -997,7 +999,9 @@ function renderBoardCard(instance, side, lineId) {
       title="${escapeHtml(stateTitle)}"
       style="--accent:${getFaction(card.faction).accent};--card-art:${artPath ? `url('${artPath}')` : "none"};--art-position:${getCardArtPosition(card.id)}"
     >
-      <div class="board-card__power">${concealed ? "" : power}</div>
+      <div class="board-card__power">${concealed ? "" : `<strong>${attack}</strong><span>战</span>`}</div>
+      ${!concealed && card.type === "unit" ? renderUnitHealthBadge(card, "board-card__health-badge", currentHealth, maxHealth) : ""}
+      ${!concealed && card.type === "unit" ? renderUnitValueBadge(card, "board-card__value-badge") : ""}
       ${fireVideoPath ? `<video class="board-card__fire-video" src="${escapeHtml(fireVideoPath)}" playsinline preload="none"></video>` : ""}
       <div class="board-card__art ${artPath ? "" : "is-empty"}" data-glyph="${escapeHtml(getPrimaryGlyph(card))}">
         ${artPath ? "" : `<span>${escapeHtml(TYPE_LABELS[card.type])}</span>`}
@@ -1210,6 +1214,8 @@ function renderWarCard(card, options = {}) {
     .join(" ");
   const showPowerBadge = card.type === "unit" ? (!detailArtPath || livePowerOverlay) : !generated;
   const powerBadge = card.type === "unit" ? getCardBaseAttack(card) : card.type === "tactic" ? "T" : "S";
+  const footerStarsLabel = card.type === "unit" ? `目标价值 ${getCardTargetValue(card)} 星` : "";
+  const footerStars = card.type === "unit" ? renderUnitValueStars(card) : "";
   const renderedTags = displayTags.map((tag) => {
     const tagBadge = getTagBadgePath(tag);
     const style = tagBadge ? ` style="--tag-art:url('${tagBadge}')"` : "";
@@ -1236,15 +1242,18 @@ function renderWarCard(card, options = {}) {
         ${showPowerBadge ? `
           <div class="war-card__power">
             <strong>${powerBadge}</strong>
-            ${card.type === "unit" ? "<span>攻</span>" : ""}
+            ${card.type === "unit" ? "<span>战</span>" : ""}
           </div>
         ` : ""}
+      ${card.type === "unit" ? renderUnitHealthBadge(card) : ""}
+      ${card.type === "unit" ? renderUnitValueBadge(card) : ""}
       <div class="war-card__titlebar">
         <strong>${escapeHtml(card.name)}</strong>
         <div class="war-card__meta">
           ${metaItems.map((item) => `<span data-meta-item="${escapeHtml(item)}">${escapeHtml(item)}</span>`).join("")}
         </div>
       </div>
+      ${card.type === "unit" ? renderUnitHudStrip(card, glyph) : ""}
       <div class="war-card__art ${artPath ? "" : "is-empty"}" data-glyph="${escapeHtml(glyph)}">
         ${artPath ? "" : "<span>插画待补</span>"}
       </div>
@@ -1256,7 +1265,7 @@ function renderWarCard(card, options = {}) {
         ${renderEffectParagraphs(card.effect, card)}
       </div>
       <div class="war-card__footer">
-        <span class="war-card__stars" aria-label="${escapeHtml(RARITY_LABELS[card.rarity] || card.rarity)}">${renderRarityStars(card)}</span>
+        ${card.type === "unit" ? `<span class="war-card__stars war-card__value-stars" aria-label="${escapeHtml(footerStarsLabel)}">${footerStars}</span>` : ""}
         <em class="war-card__faction-mark" ${factionMarkPath ? `style="--faction-mark:url('${factionMarkPath}')"` : ""} aria-label="${escapeHtml(faction.shortName)}">${escapeHtml(card.specialization)}</em>
       </div>
       ${deployActions}
@@ -1264,15 +1273,72 @@ function renderWarCard(card, options = {}) {
   `;
 }
 
+function renderUnitHudStrip(card, glyph = getPrimaryGlyph(card)) {
+  if (card.type !== "unit") {
+    return "";
+  }
+  const attribute = getCardUnitAttribute(card);
+  return `
+    <div class="war-card__unit-hud" aria-label="战力 ${getCardBaseAttack(card)}，单位属性 ${attribute}，生命 ${getCardHealth(card)}">
+      <span class="war-card__hud-stat is-attack">
+        <i aria-hidden="true">◎</i>
+        <b>${getCardBaseAttack(card)}</b>
+      </span>
+      <span class="war-card__hud-unit">
+        <i aria-hidden="true">${escapeHtml(glyph)}</i>
+        <b>${escapeHtml(attribute)}</b>
+      </span>
+      <span class="war-card__hud-stat is-health">
+        <i aria-hidden="true">盾</i>
+        <b>${getCardHealth(card)}</b>
+      </span>
+    </div>
+  `;
+}
+
+function renderUnitValueBadge(card, className = "war-card__value-badge") {
+  if (card.type !== "unit") {
+    return "";
+  }
+  const value = getCardTargetValue(card);
+  return `
+    <div class="${className}" aria-label="目标价值 ${value} 星">
+      <span aria-hidden="true">★</span>
+      <b>${value}</b>
+    </div>
+  `;
+}
+
+function renderUnitHealthBadge(card, className = "war-card__health-badge", currentHealth = getCardHealth(card), maxHealth = getCardHealth(card)) {
+  if (card.type !== "unit") {
+    return "";
+  }
+  const damagedClass = currentHealth < maxHealth ? " is-damaged" : "";
+  const healthLabel = currentHealth === maxHealth
+    ? `生命 ${currentHealth}`
+    : `生命 ${currentHealth}/${maxHealth}`;
+  return `
+    <div class="${className}${damagedClass}" aria-label="${escapeHtml(healthLabel)}">
+      <span>命</span>
+      <b>${currentHealth}</b>
+    </div>
+  `;
+}
+
+function renderUnitValueStars(card) {
+  const value = Math.max(0, Math.min(5, Math.round(getCardTargetValue(card))));
+  return Array.from({ length: 5 }, (_, index) => `<i class="${index < value ? "is-lit" : ""}" aria-hidden="true">★</i>`).join("");
+}
+
 function renderCardStats(card) {
   if (card.type !== "unit") {
     return "";
   }
   return `
-    <div class="war-card__stats" aria-label="攻击、生命和目标价值">
-      <span><b>攻</b>${getCardBaseAttack(card)}</span>
+    <div class="war-card__stats" aria-label="战力、生命和目标价值">
+      <span><b>战</b>${getCardBaseAttack(card)}</span>
       <span><b>命</b>${getCardHealth(card)}</span>
-      <span><b>值</b>${getCardTargetValue(card)}</span>
+      <span class="is-value-star"><b>★</b>${getCardTargetValue(card)}</span>
     </div>
   `;
 }
@@ -1467,9 +1533,9 @@ function renderInspector() {
       <strong>${escapeHtml(card.name)}</strong>
       ${card.type === "unit" ? `
         <div class="inspector-card__stats">
-          <i>攻 ${getCardBaseAttack(card)}</i>
+          <i>战 ${getCardBaseAttack(card)}</i>
           <i>命 ${getCardHealth(card)}</i>
-          <i>值 ${getCardTargetValue(card)}</i>
+          <i class="is-value-star">★ ${getCardTargetValue(card)}</i>
         </div>
         <small>【${escapeHtml(getCardUnitAttribute(card))}】${escapeHtml(getCardAttributeNote(card))}</small>
       ` : ""}
@@ -1519,9 +1585,9 @@ function renderCardRuleAside(card) {
       <strong>【${escapeHtml(attribute)}】</strong>
       ${card.type === "unit" ? `
         <div class="card-rule-aside__stats">
-          <i><b>攻</b>${getCardBaseAttack(card)}</i>
+          <i><b>战</b>${getCardBaseAttack(card)}</i>
           <i><b>命</b>${getCardHealth(card)}</i>
-          <i><b>值</b>${getCardTargetValue(card)}</i>
+          <i class="is-value-star"><b>★</b>${getCardTargetValue(card)}</i>
         </div>
       ` : ""}
       <p>${escapeHtml(getCardAttributeNote(card))}</p>
@@ -1879,7 +1945,7 @@ function renderDeckBuilderCard(card, count) {
       <div class="deck-card__body">
         <div class="deck-card__title">
           <strong>${escapeHtml(card.name)}</strong>
-          <span>${card.type === "unit" ? `攻${getCardBaseAttack(card)} 命${getCardHealth(card)}` : "T"}</span>
+          <span>${card.type === "unit" ? `战${getCardBaseAttack(card)} 命${getCardHealth(card)}` : "T"}</span>
         </div>
         <p>${escapeHtml(TYPE_LABELS[card.type])} / ${escapeHtml(line)} / ${escapeHtml(RARITY_LABELS[card.rarity] || card.rarity)}</p>
         <div class="deck-card__tags">${tags}</div>
