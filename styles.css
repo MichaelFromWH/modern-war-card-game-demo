@@ -3219,6 +3219,42 @@ button:disabled {
   margin-top: 14px;
 }
 
+.online-start-button {
+  border-color: rgba(112, 203, 152, 0.62);
+  color: #06100c;
+  background: linear-gradient(180deg, #e6d083, #72cb98);
+  box-shadow: 0 10px 28px rgba(45, 126, 82, 0.22);
+}
+
+.online-match-start {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  border: 1px solid rgba(112, 203, 152, 0.38);
+  border-left-width: 3px;
+  border-radius: 6px;
+  padding: 12px 14px;
+  color: rgba(246, 239, 221, 0.78);
+  background: linear-gradient(90deg, rgba(27, 82, 56, 0.34), rgba(9, 20, 18, 0.52));
+}
+
+.online-match-start strong {
+  flex: 0 0 auto;
+  color: #e9f9df;
+  font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+  font-size: 1.08rem;
+  letter-spacing: 0;
+}
+
+.online-match-start span {
+  min-width: 0;
+  color: rgba(246, 239, 221, 0.68);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .online-callout {
   margin-top: 12px;
   border-left: 2px solid rgba(102, 174, 220, 0.58);
@@ -3542,6 +3578,11 @@ button:disabled {
 
   .online-slots {
     grid-template-columns: 1fr;
+  }
+
+  .online-match-start {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .home-final {

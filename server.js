@@ -50,6 +50,14 @@ const server = createServer((request, response) => {
     return;
   }
 
+  if (pathname === "/favicon.ico") {
+    response.writeHead(204, {
+      "Cache-Control": "public, max-age=86400",
+    });
+    response.end();
+    return;
+  }
+
   const filePath = resolvePath(request.url || "/");
 
   if (!existsSync(filePath) || statSync(filePath).isDirectory()) {

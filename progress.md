@@ -59,3 +59,30 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Set default Render workspace to `Michael Woo` (`tea-d87a1ul7vvec738r6d60`).
   - Initial Blueprint validation failed with `need_payment_info` because omitted `plan` defaults to a paid `starter` service; updated `render.yaml` to use `plan: free`.
   - Direct `render services create --plan free ...` also returned HTTP 402 `Payment information is required`; deployment is blocked until a payment method is added at Render Billing, even though the service is configured as a Free instance.
+- Aliyun MVP deployment:
+  - Deployed the Node service to ECS `i-bp11vwoo8y1cg1f3v8nn` at public IP `47.110.241.244`.
+  - Installed Node.js 20 and PM2 on Alibaba Cloud Linux 3.
+  - App path on the server: `/opt/war-card-game`.
+  - PM2 process name: `war-card-game`.
+  - Service listens on public HTTP port 80.
+  - Security group `sg-bp160ny2tx67pnbamog8` allows inbound TCP 80 from `0.0.0.0/0`.
+  - Verified `http://47.110.241.244/healthz` and two WebSocket clients through the public IP.
+- Online lobby UX issue found after deployment:
+  - Users could create/join a room and both become ready, but the UI intentionally stopped at `match_start` with no way forward.
+  - This is because the project currently has the Phase 2 room layer only; true 1v1 battle sync still requires the Phase 3/4 server-authoritative battle engine.
+- Implemented stopgap online battle entry:
+  - Added an `进入战场` button after both players are ready and the server creates a match seed.
+  - Clicking it starts the existing battle screen in `online-preview` mode with the room seed and opponent faction summary.
+  - The UI and battle log explicitly state this is a local battle preview; hand play, targeting, and turn resolution are not yet synchronized to the opponent.
+  - Added seeded deck shuffling support for battle creation so the preview can consume the room seed.
+  - Disabled automatic fetch of optional local SFX `manifest.json` unless `?localSfx=1` or `localStorage.warCardLocalSfx = "1"` is set, preventing a default 404 console error during tests and public play.
+- Verification for stopgap online entry:
+  - `node --check src/main.js`, `node --check src/audio.js`, and `node --check server.js` pass.
+  - `develop-web-game` Playwright smoke check produced no console error files.
+  - Custom two-browser Playwright flow passed on localhost: create room, join room, both ready, both see the same Seed, `进入战场` enables, and both clients enter `screen: battle` with `mode: online-preview`.
+  - Reviewed screenshots in `output/online-two-player-flow-verify/host-ready.png` and `output/online-two-player-flow-verify/host-battle.png`.
+- Next real 1v1 TODO:
+  - Extract a pure battle engine from `src/main.js` into a reusable module.
+  - Move match creation, draw, action validation, and resolution to `server.js` or a server-side engine module.
+  - Send only per-player snapshots to avoid leaking hands and hidden units.
+  - Replace the `online-preview` button behavior with true server-authoritative battle entry.

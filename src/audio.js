@@ -4,6 +4,7 @@ const ENHANCED_ROOT = "./assets/audio/sfx/enhanced";
 const FREE_ROOT = "./assets/audio/sfx/free/deadsounds";
 const LOCAL_ROOT = "./assets/audio/sfx/local-reference";
 const LOCAL_MANIFEST_URL = `${LOCAL_ROOT}/manifest.json`;
+const LOCAL_MANIFEST_ENABLED_KEY = "warCardLocalSfx";
 
 const SAMPLE_EVENTS = {
   "ui.hover": [`${SAMPLE_ROOT}/ui/ui_hover_radar.ogg`],
@@ -114,7 +115,7 @@ class GameAudio {
   }
 
   loadLocalManifest() {
-    if (typeof fetch !== "function") {
+    if (typeof fetch !== "function" || !this.shouldLoadLocalManifest()) {
       return;
     }
 
@@ -137,6 +138,18 @@ class GameAudio {
         this.preloadUrls([...this.localEvents.values()].flat());
       })
       .catch(() => {});
+  }
+
+  shouldLoadLocalManifest() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (["1", "true", "yes"].includes((params.get("localSfx") || "").toLowerCase())) {
+        return true;
+      }
+      return window.localStorage?.getItem(LOCAL_MANIFEST_ENABLED_KEY) === "1";
+    } catch (error) {
+      return false;
+    }
   }
 
   normalizeLocalUrl(path) {

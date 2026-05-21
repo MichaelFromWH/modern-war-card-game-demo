@@ -503,6 +503,8 @@ function handleAction(action) {
     void joinOnlineRoom();
   } else if (action === "online-toggle-ready") {
     toggleOnlineReady();
+  } else if (action === "online-start-battle") {
+    startOnlineBattlePreview();
   } else if (action === "online-leave-room") {
     leaveOnlineRoom();
   } else if (action === "online-copy-code") {
@@ -520,7 +522,7 @@ function handleAction(action) {
   }
 }
 
-function startBattle() {
+function startBattle(options = {}) {
   const validation = validateDeck(state.playerDeck, state.playerFaction);
   if (!validation.valid) {
     gameAudio.play("ui.error");
@@ -528,8 +530,15 @@ function startBattle() {
     render();
     return;
   }
-  state.battle = createBattle();
-  state.battle.log.push(`AI 难度：${AI_DIFFICULTY_LABELS[state.aiDifficulty]}。`);
+  state.battle = createBattle(options);
+  if (options.mode === "online-preview") {
+    const seedText = options.seed ? `Seed ${options.seed}` : "未指定 Seed";
+    const opponentText = options.opponentName ? `对手：${options.opponentName}。` : "";
+    state.battle.log.push(`线上房间 ${options.roomCode || state.online.roomCode || "未知"} 已生成 ${seedText}。${opponentText}`);
+    state.battle.log.push("当前进入本地战斗预演：房间、准备和 Seed 已同步；出牌、目标和回合结算还未接入服务器权威同步。");
+  } else {
+    state.battle.log.push(`AI 难度：${AI_DIFFICULTY_LABELS[state.aiDifficulty]}。`);
+  }
   state.battle.log.push(`玩家卡组：${getFaction(state.playerFaction).shortName}自定义编成，${state.playerDeck.length} 张。`);
   state.screen = "battle";
   state.selectedHandUid = null;
@@ -768,13 +777,17 @@ function getTurnUiState(battle) {
   };
 }
 
-function createBattle() {
-  const playerFaction = state.playerFaction;
-  const enemyFaction = FACTION_PAIR[playerFaction] || "russia";
+function createBattle(options = {}) {
+  const playerFaction = options.playerFaction || state.playerFaction;
+  const requestedEnemyFaction = options.enemyFaction;
+  const enemyFaction = getFaction(requestedEnemyFaction) ? requestedEnemyFaction : FACTION_PAIR[playerFaction] || "russia";
+  const rng = options.seed ? createSeededRandom(`${options.seed}:${playerFaction}:${enemyFaction}`) : Math.random;
   const battle = {
     round: 1,
     actionSerial: 1,
     phase: "battle",
+    mode: options.mode || "ai",
+    onlineMatch: options.onlineMatch || null,
     activeSide: "player",
     factions: {
       player: playerFaction,
@@ -798,8 +811,8 @@ function createBattle() {
       enemy: 0,
     },
     decks: {
-      player: createDeckFromList(state.playerDeck),
-      enemy: createDeckFromList(getStarterDeckForFaction(enemyFaction)),
+      player: createDeckFromList(options.playerDeck || state.playerDeck, rng),
+      enemy: createDeckFromList(options.enemyDeck || getStarterDeckForFaction(enemyFaction), rng),
     },
     hands: {
       player: [],
@@ -850,16 +863,31 @@ function createBattle() {
   return battle;
 }
 
-function createDeckFromList(cardIds) {
-  return shuffleInstances(cardIds.map((cardId) => createInstance(cardId)));
+function createDeckFromList(cardIds, rng = Math.random) {
+  return shuffleInstances(cardIds.map((cardId) => createInstance(cardId)), rng);
 }
 
-function shuffleInstances(items) {
+function shuffleInstances(items, rng = Math.random) {
   for (let index = items.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const swapIndex = Math.floor(rng() * (index + 1));
     [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
   return items;
+}
+
+function createSeededRandom(seed) {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return () => {
+    hash += 0x6d2b79f5;
+    let value = hash;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 function createInstance(cardId) {
@@ -1914,15 +1942,18 @@ function renderOnlinePanel() {
   const enemySlot = online.players.find((player) => player.side === "enemy");
   const createDisabled = online.status === "connecting" || inRoom;
   const joinDisabled = online.status === "connecting" || inRoom;
-  const readyDisabled = !inRoom || online.players.length < 2;
+  const readyDisabled = !inRoom || online.players.length < 2 || online.matchReady;
+  const canStartBattle = inRoom && online.matchReady && Boolean(online.match);
+  const matchSeed = online.match?.seed || "";
+  const readyLabel = online.matchReady ? "已准备" : online.ready ? "取消准备" : "准备";
   const statusText = getOnlineStatusText();
 
   refs.onlinePanel.innerHTML = `
     <div class="online-panel__header">
       <div>
-        <span>ONLINE 1V1 / PHASE 2</span>
+        <span>ONLINE 1V1 / LOBBY</span>
         <strong>邀请朋友进入同一战区房间</strong>
-        <p>当前版本先完成房间连接和准备流程；真正战斗同步会在服务端权威引擎完成后接入。</p>
+        <p>双方准备后先进入战斗预演；真人回合同步需要下一步接入服务端权威战斗引擎。</p>
       </div>
       <i class="online-status online-status--${escapeHtml(online.status)}">${escapeHtml(statusText)}</i>
     </div>
@@ -1953,13 +1984,23 @@ function renderOnlinePanel() {
         </div>
         <div class="online-room-actions">
           <button class="primary-button" type="button" data-action="online-toggle-ready" ${readyDisabled ? "disabled" : ""}>
-            ${online.ready ? "取消准备" : "准备"}
+            ${readyLabel}
+          </button>
+          <button class="primary-button online-start-button" type="button" data-action="online-start-battle" ${canStartBattle ? "" : "disabled"}>
+            进入战场
           </button>
           <button class="small-button" type="button" data-action="online-leave-room" ${connected ? "" : "disabled"}>离开/断开</button>
         </div>
       </section>
     </div>
-    ${online.matchReady ? `<div class="online-callout is-ready">双方已准备，服务器已生成开局 Seed。下一阶段会接入服务端发牌和真人回合。</div>` : ""}
+    ${
+      online.matchReady
+        ? `<div class="online-match-start">
+            <strong>对局已锁定${matchSeed ? ` · Seed ${escapeHtml(matchSeed)}` : ""}</strong>
+            <span>点击“进入战场”开始本地战斗预演；当前版本不会把出牌和目标选择同步给对方。</span>
+          </div>`
+        : ""
+    }
     ${online.error ? `<div class="online-callout is-error">${escapeHtml(online.error)} <button type="button" data-action="online-clear-error">关闭</button></div>` : ""}
     ${online.lastEvent ? `<div class="online-callout">${escapeHtml(online.lastEvent)}</div>` : ""}
   `;
@@ -6212,6 +6253,34 @@ function toggleOnlineReady() {
   renderOnlinePanel();
 }
 
+function startOnlineBattlePreview() {
+  if (!state.online.matchReady || !state.online.match) {
+    state.online.error = "双方准备完成后才能进入战场。";
+    renderOnlinePanel();
+    return;
+  }
+
+  const opponent = getOnlineOpponent();
+  const opponentFaction = opponent?.loadout?.faction && getFaction(opponent.loadout.faction) ? opponent.loadout.faction : FACTION_PAIR[state.playerFaction];
+  startBattle({
+    mode: "online-preview",
+    seed: state.online.match.seed || state.online.roomCode,
+    roomCode: state.online.roomCode,
+    opponentName: opponent?.name || "对手",
+    enemyFaction: opponentFaction,
+    onlineMatch: {
+      id: state.online.match.id,
+      seed: state.online.match.seed,
+      roomCode: state.online.roomCode,
+      side: state.online.side,
+    },
+  });
+}
+
+function getOnlineOpponent() {
+  return state.online.players.find((player) => player.id !== state.online.clientId) || null;
+}
+
 function leaveOnlineRoom() {
   if (state.online.socket?.readyState === WebSocket.OPEN && state.online.roomCode) {
     sendOnlineMessage({ type: "leave_room" });
@@ -6347,7 +6416,7 @@ function handleOnlineMessage(raw) {
     state.online.matchReady = true;
     state.online.match = message.match || state.online.match;
     const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
-    state.online.lastEvent = `双方已准备，服务器已锁定开局信息。${seed}`;
+    state.online.lastEvent = `双方已准备，服务器已锁定开局信息。${seed} 点击进入战场开始本地预演。`;
     renderOnlinePanel();
     return;
   }
@@ -6356,7 +6425,7 @@ function handleOnlineMessage(raw) {
     state.online.matchReady = true;
     state.online.match = message.match || state.online.match;
     const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
-    state.online.lastEvent = `真人对局房间已就绪。${seed} 下一阶段接入服务端战斗结算。`;
+    state.online.lastEvent = `真人对局房间已就绪。${seed} 点击进入战场开始本地预演。`;
     renderOnlinePanel();
     return;
   }
@@ -6435,7 +6504,7 @@ function getInitialOnlineRoomCode() {
 
 function getOnlineStatusText() {
   if (state.online.matchReady) {
-    return "双方已准备";
+    return "可进入战场";
   }
   if (state.online.roomCode) {
     return `房间 ${state.online.roomCode}`;
@@ -6815,6 +6884,8 @@ function exposeDebugHooks() {
     return JSON.stringify({
       screen: state.screen,
       phase: battle.phase,
+      mode: battle.mode,
+      onlineMatch: battle.onlineMatch,
       round: battle.round,
       activeSide: battle.activeSide,
       scores: {
