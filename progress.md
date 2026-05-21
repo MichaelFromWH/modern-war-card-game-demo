@@ -60,13 +60,14 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Initial Blueprint validation failed with `need_payment_info` because omitted `plan` defaults to a paid `starter` service; updated `render.yaml` to use `plan: free`.
   - Direct `render services create --plan free ...` also returned HTTP 402 `Payment information is required`; deployment is blocked until a payment method is added at Render Billing, even though the service is configured as a Free instance.
 - Aliyun MVP deployment:
-  - Deployed the Node service to ECS `i-bp11vwoo8y1cg1f3v8nn` at public IP `47.110.241.244`.
+  - Deployed the Node service to ECS `i-bp11vwoo8y1cg1f3v8nn`; current public IP is `121.41.9.156`.
+  - Previous public IP `47.110.241.244` was replaced on 2026-05-21 after the server returned `200 OK` from ECS but responses failed to reach the local network.
   - Installed Node.js 20 and PM2 on Alibaba Cloud Linux 3.
   - App path on the server: `/opt/war-card-game`.
   - PM2 process name: `war-card-game`.
   - Service listens on public HTTP port 80.
   - Security group `sg-bp160ny2tx67pnbamog8` allows inbound TCP 80 from `0.0.0.0/0`.
-  - Verified `http://47.110.241.244/healthz` and two WebSocket clients through the public IP.
+  - Verified `http://121.41.9.156/healthz`, `http://121.41.9.156/`, and `ws://121.41.9.156/ws` through the public IP.
 - Online lobby UX issue found after deployment:
   - Users could create/join a room and both become ready, but the UI intentionally stopped at `match_start` with no way forward.
   - This is because the project currently has the Phase 2 room layer only; true 1v1 battle sync still requires the Phase 3/4 server-authoritative battle engine.
