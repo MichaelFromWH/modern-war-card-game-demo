@@ -235,8 +235,8 @@ export function getGeneratedCardImages(card) {
     return null;
   }
   return {
-    art: GENERATED_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-art.png` : "",
-    detail: GENERATED_DETAIL_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-detail.png` : "",
+    art: GENERATED_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-art.jpg` : "",
+    detail: GENERATED_DETAIL_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-detail.jpg` : "",
   };
 }
 

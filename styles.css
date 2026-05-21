@@ -635,7 +635,7 @@ button:disabled {
   position: absolute;
   inset: auto 0 0;
   height: 34px;
-  background-image: url("./assets/board/battle-stage-generated-v1.png");
+  background-image: url("./assets/board/battle-stage-generated-v1.jpg");
   background-size: 520px auto;
   background-position: center 58%;
   opacity: 0.38;
@@ -1566,7 +1566,7 @@ button:disabled {
 }
 
 .war-card__art::after {
-  background-image: url("./assets/ui/battlefield-ruins.png");
+  background-image: url("./assets/ui/battlefield-ruins.jpg");
   background-size: 380px auto;
   opacity: 0.28;
 }
@@ -2054,11 +2054,11 @@ button:disabled {
 }
 
 .commander-hud__portrait--player {
-  --portrait: url("./assets/ui/commander-usa.png");
+  --portrait: url("./assets/ui/commander-usa.jpg");
 }
 
 .commander-hud__portrait--enemy {
-  --portrait: url("./assets/ui/commander-russia.png");
+  --portrait: url("./assets/ui/commander-russia.jpg");
 }
 
 @media (max-width: 1320px) {
@@ -3416,7 +3416,7 @@ button:disabled {
   padding: clamp(20px, 4vw, 44px);
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.7)),
-    url("./assets/board/battle-stage.png") center / cover;
+    url("./assets/board/battle-stage.jpg") center / cover;
   border-left: 2px solid rgba(210, 179, 110, 0.58);
 }
 

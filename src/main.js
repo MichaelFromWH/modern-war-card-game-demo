@@ -243,6 +243,7 @@ const state = {
     ready: false,
     matchReady: false,
     match: null,
+    battleSnapshot: null,
     error: "",
     name: loadOnlineName(),
     joinCode: getInitialOnlineRoomCode(),
@@ -614,6 +615,14 @@ function skipMulligan() {
 function completeMulligan(selectedUids = []) {
   const battle = state.battle;
   if (!battle || !state.mulligan.active) {
+    return;
+  }
+
+  if (isOnlineAuthoritativeBattle()) {
+    sendOnlineBattleAction({
+      kind: "mulligan",
+      selectedUids: selectedUids.slice(0, MULLIGAN_LIMIT),
+    });
     return;
   }
 
@@ -1041,7 +1050,7 @@ function renderLine(side, lineId) {
 }
 
 function renderBoardCard(instance, side, lineId) {
-  const card = getCard(instance.cardId);
+  const card = getVisibleCardForInstance(instance, side);
   const attack = getCardBaseAttack(card);
   const currentHealth = getCurrentPower(instance);
   const maxHealth = getCardHealth(card);
@@ -1432,6 +1441,25 @@ function getCardDisplayTags(card) {
   ]).slice(0, 2);
 }
 
+function getVisibleCardForInstance(instance, side = "player") {
+  if (!instance?.masked) {
+    return getCard(instance.cardId);
+  }
+  const factionId = state.battle?.factions?.[side] || "usa";
+  return {
+    id: `${factionId}_masked_contact`,
+    faction: factionId,
+    name: "隐蔽单位",
+    type: "unit",
+    line: "frontline",
+    power: 0,
+    rarity: "common",
+    specialization: "情报未知",
+    tags: ["隐蔽"],
+    effect: "敌方隐蔽单位，详细信息由服务器保密，暴露后显示。",
+  };
+}
+
 function getUnitDisplayTypeTag(card) {
   const tags = Array.isArray(card.tags) ? card.tags : [];
   return UNIT_DISPLAY_PLATFORM_TAGS.find((tag) => tags.includes(tag))
@@ -1697,7 +1725,7 @@ function shouldConcealEnemyInfo(target) {
 
 function renderIntentTargetButton(target) {
   const concealed = shouldConcealEnemyInfo(target);
-  const targetCard = getCard(target.instance.cardId);
+  const targetCard = getVisibleCardForInstance(target.instance, target.side);
   const side = target.side === "player" ? "我方" : "敌方";
   const power = getCurrentPower(target.instance);
   const artPath = concealed ? "./assets/ui/card-back-frame.png" : getCardArtPath(targetCard);
@@ -1951,9 +1979,9 @@ function renderOnlinePanel() {
   refs.onlinePanel.innerHTML = `
     <div class="online-panel__header">
       <div>
-        <span>ONLINE 1V1 / LOBBY</span>
+        <span>ONLINE 1V1 / SERVER AUTHORITY</span>
         <strong>邀请朋友进入同一战区房间</strong>
-        <p>双方准备后先进入战斗预演；真人回合同步需要下一步接入服务端权威战斗引擎。</p>
+        <p>双方准备后进入服务器权威战斗；发牌、调度、部署、目标与回合移交由服务器统一裁决。</p>
       </div>
       <i class="online-status online-status--${escapeHtml(online.status)}">${escapeHtml(statusText)}</i>
     </div>
@@ -1997,7 +2025,7 @@ function renderOnlinePanel() {
       online.matchReady
         ? `<div class="online-match-start">
             <strong>对局已锁定${matchSeed ? ` · Seed ${escapeHtml(matchSeed)}` : ""}</strong>
-            <span>点击“进入战场”开始本地战斗预演；当前版本不会把出牌和目标选择同步给对方。</span>
+            <span>点击“进入战场”接入服务器快照；当前版本先覆盖核心回合与主要技能裁决。</span>
           </div>`
         : ""
     }
@@ -2147,6 +2175,25 @@ function selectHandCard(uid, options = {}) {
   state.selectedHandUid = uid;
   state.pending = null;
 
+  if (isOnlineAuthoritativeBattle()) {
+    if (card.type === "unit") {
+      sendOnlineBattleAction({
+        kind: "play_unit",
+        handUid: uid,
+        lineId: card.line,
+        hidden: Boolean(options.conceal),
+      });
+    } else {
+      sendOnlineBattleAction({
+        kind: "play_tactic",
+        handUid: uid,
+      });
+    }
+    state.selectedHandUid = null;
+    render();
+    return;
+  }
+
   if (card.type === "unit") {
     playUnitFromHand(battle, "player", uid, card.line, { hidden: Boolean(options.conceal) });
     return;
@@ -2216,6 +2263,18 @@ function playSelectedUnitToRow(side, lineId) {
   }
   const card = getCard(instance.cardId);
   if (card.type !== "unit" || !getDeployLines(card).includes(lineId)) {
+    return;
+  }
+
+  if (isOnlineAuthoritativeBattle()) {
+    sendOnlineBattleAction({
+      kind: "play_unit",
+      handUid: instance.uid,
+      lineId,
+      hidden: false,
+    });
+    state.selectedHandUid = null;
+    render();
     return;
   }
 
@@ -2411,6 +2470,27 @@ function handleBoardTarget(side, uid) {
   }
 
   if (state.pending?.kind === "supplyChoice") {
+    return;
+  }
+
+  if (isOnlineAuthoritativeBattle()) {
+    if (state.pending) {
+      if (!isPendingTarget(side, uid)) {
+        return;
+      }
+      sendOnlineBattleAction({
+        kind: "choose_target",
+        targetSide: side,
+        targetUid: uid,
+      });
+      return;
+    }
+    if (side === "player" && canPlayerAct()) {
+      sendOnlineBattleAction({
+        kind: "activate_unit",
+        sourceUid: uid,
+      });
+    }
     return;
   }
 
@@ -3664,6 +3744,11 @@ function passTurn(side) {
     return;
   }
 
+  if (isOnlineAuthoritativeBattle()) {
+    sendOnlineBattleAction({ kind: "pass_turn" });
+    return;
+  }
+
   refreshIntelValues(battle);
   gameAudio.play("system.pass", { side });
   battle.log.push(`${getSideName(battle, side)}结束回合，移交指挥权。`);
@@ -3676,6 +3761,9 @@ function surrenderBattle() {
   const battle = state.battle;
   if (!battle) {
     return;
+  }
+  if (isOnlineAuthoritativeBattle()) {
+    sendOnlineBattleAction({ kind: "surrender" });
   }
   clearBattleTimers(battle);
   clearSpotlight();
@@ -5682,6 +5770,9 @@ function drawCards(battle, side, amount, options = {}) {
 }
 
 function getCurrentPower(instance) {
+  if (instance?.masked) {
+    return Number.isFinite(instance.power) ? instance.power : 0;
+  }
   const card = getCard(instance.cardId);
   return Math.max(0, getCardHealth(card) + (instance.bonus || 0) - instance.damage);
 }
@@ -6260,25 +6351,76 @@ function startOnlineBattlePreview() {
     return;
   }
 
-  const opponent = getOnlineOpponent();
-  const opponentFaction = opponent?.loadout?.faction && getFaction(opponent.loadout.faction) ? opponent.loadout.faction : FACTION_PAIR[state.playerFaction];
-  startBattle({
-    mode: "online-preview",
-    seed: state.online.match.seed || state.online.roomCode,
-    roomCode: state.online.roomCode,
-    opponentName: opponent?.name || "对手",
-    enemyFaction: opponentFaction,
-    onlineMatch: {
-      id: state.online.match.id,
-      seed: state.online.match.seed,
-      roomCode: state.online.roomCode,
-      side: state.online.side,
-    },
-  });
+  if (state.online.battleSnapshot) {
+    enterOnlineAuthoritativeBattle(state.online.battleSnapshot);
+    return;
+  }
+
+  state.online.lastEvent = "正在向服务器请求权威战斗快照...";
+  sendOnlineMessage({ type: "battle_enter" });
+  renderOnlinePanel();
 }
 
 function getOnlineOpponent() {
   return state.online.players.find((player) => player.id !== state.online.clientId) || null;
+}
+
+function enterOnlineAuthoritativeBattle(snapshot) {
+  if (!snapshot?.battle) {
+    state.online.error = "服务器战斗快照尚未准备好。";
+    renderOnlinePanel();
+    return;
+  }
+  state.battle = hydrateOnlineBattle(snapshot.battle);
+  state.screen = "battle";
+  state.selectedHandUid = null;
+  state.hoveredCardId = null;
+  state.pending = snapshot.pending || null;
+  state.mulligan = snapshot.mulligan || { active: false, selectedUids: [] };
+  state.guideOpen = false;
+  state.deckBuilderOpen = false;
+  state.bgmOn = true;
+  playBgm(true);
+  gameAudio.play("system.start");
+  render();
+}
+
+function hydrateOnlineBattle(battle) {
+  return {
+    ...battle,
+    aiTimer: null,
+    turnTimer: null,
+    turnTransition: null,
+    aiThinking: false,
+    actionAnimation: null,
+  };
+}
+
+function applyOnlineBattleSnapshot(snapshot) {
+  state.online.battleSnapshot = snapshot;
+  if (state.screen !== "battle" || state.battle?.mode !== "online-authoritative") {
+    renderOnlinePanel();
+    return;
+  }
+  state.battle = hydrateOnlineBattle(snapshot.battle);
+  state.pending = snapshot.pending || null;
+  state.mulligan = snapshot.mulligan || { active: false, selectedUids: [] };
+  state.selectedHandUid = null;
+  render();
+}
+
+function isOnlineAuthoritativeBattle() {
+  return state.battle?.mode === "online-authoritative";
+}
+
+function sendOnlineBattleAction(action) {
+  if (!isOnlineAuthoritativeBattle()) {
+    return false;
+  }
+  return sendOnlineMessage({
+    type: "battle_action",
+    action,
+  });
 }
 
 function leaveOnlineRoom() {
@@ -6295,6 +6437,7 @@ function leaveOnlineRoom() {
     ready: false,
     matchReady: false,
     match: null,
+    battleSnapshot: null,
     lastEvent: "已离开线上房间。",
   });
   renderOnlinePanel();
@@ -6367,6 +6510,8 @@ function ensureOnlineSocket() {
         state.online.players = [];
         state.online.ready = false;
         state.online.matchReady = false;
+        state.online.match = null;
+        state.online.battleSnapshot = null;
         renderOnlinePanel();
       }
     });
@@ -6394,6 +6539,8 @@ function handleOnlineMessage(raw) {
     state.online.side = message.side || null;
     state.online.ready = false;
     state.online.matchReady = false;
+    state.online.match = null;
+    state.online.battleSnapshot = null;
     state.online.status = "connected";
     state.online.lastEvent = message.type === "room_created" ? "房间已创建，复制房间码发给朋友。" : "已加入房间。";
     renderOnlinePanel();
@@ -6416,7 +6563,7 @@ function handleOnlineMessage(raw) {
     state.online.matchReady = true;
     state.online.match = message.match || state.online.match;
     const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
-    state.online.lastEvent = `双方已准备，服务器已锁定开局信息。${seed} 点击进入战场开始本地预演。`;
+    state.online.lastEvent = `双方已准备，服务器已创建权威对局。${seed} 点击进入战场。`;
     renderOnlinePanel();
     return;
   }
@@ -6425,8 +6572,13 @@ function handleOnlineMessage(raw) {
     state.online.matchReady = true;
     state.online.match = message.match || state.online.match;
     const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
-    state.online.lastEvent = `真人对局房间已就绪。${seed} 点击进入战场开始本地预演。`;
+    state.online.lastEvent = `真人对局房间已就绪。${seed} 点击进入战场接入服务器快照。`;
     renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "battle_snapshot") {
+    applyOnlineBattleSnapshot(message);
     return;
   }
 
@@ -6450,6 +6602,11 @@ function handleOnlineMessage(raw) {
 
   if (message.type === "error") {
     state.online.error = message.message || "线上房间发生错误。";
+    if (isOnlineAuthoritativeBattle()) {
+      state.battle.log.push(state.online.error);
+      render();
+      return;
+    }
     renderOnlinePanel();
   }
 }
@@ -6472,6 +6629,7 @@ function resetOnlineRoomState() {
     ready: false,
     matchReady: false,
     match: null,
+    battleSnapshot: null,
     error: "",
   });
 }
@@ -6899,11 +7057,12 @@ function exposeDebugHooks() {
       intel: battle.intel,
       supplyExhausted: battle.supplyExhausted,
       finalActions: battle.finalActions,
+      mulliganActive: state.mulligan.active,
       pending: state.pending?.kind || null,
       rows: LINES.map((line) => ({
         line: line.id,
-        player: battle.board.player[line.id].map((item) => serializeBoardInstance(item)),
-        enemy: battle.board.enemy[line.id].map((item) => serializeBoardInstance(item)),
+        player: battle.board.player[line.id].map((item) => serializeBoardInstance(item, "player")),
+        enemy: battle.board.enemy[line.id].map((item) => serializeBoardInstance(item, "enemy")),
       })),
     });
   };
@@ -6913,8 +7072,8 @@ function exposeDebugHooks() {
   };
 }
 
-function serializeBoardInstance(instance) {
-  const card = getCard(instance.cardId);
+function serializeBoardInstance(instance, side = "player") {
+  const card = getVisibleCardForInstance(instance, side);
   return {
     name: card.name,
     attack: getCardBaseAttack(card),

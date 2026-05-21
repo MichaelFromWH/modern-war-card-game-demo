@@ -81,8 +81,22 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - `develop-web-game` Playwright smoke check produced no console error files.
   - Custom two-browser Playwright flow passed on localhost: create room, join room, both ready, both see the same Seed, `进入战场` enables, and both clients enter `screen: battle` with `mode: online-preview`.
   - Reviewed screenshots in `output/online-two-player-flow-verify/host-ready.png` and `output/online-two-player-flow-verify/host-battle.png`.
+- Implemented server-authoritative 1v1 MVP:
+  - Added `src/online-battle-engine.js` for server-owned shuffling, hands, mulligan, hand deployment, target selection, major ability resolution, scoring, surrender, and turn passing.
+  - `server.js` now creates an authoritative battle when both players are ready, sends each side a per-player `battle_snapshot`, accepts `battle_action`, and broadcasts updated snapshots after every accepted/rejected action.
+  - `src/main.js` now enters `online-authoritative` mode from server snapshots. Mulligan, hand play, target selection, board activation, pass turn, and surrender route to the server instead of mutating local state.
+  - Hidden enemy units and enemy hands are masked in snapshots; the client renders only the viewer's legal information.
+- Optimized card/image loading:
+  - Converted generated card PNGs from 1024x1536 PNG to 512x768 JPEG and switched `card-design.js` generated paths to `.jpg`.
+  - Resized/compressed `assets/card-art-v2`, legacy `assets/card-art`, common card UI badges/icons, board backgrounds, commander portraits, and core UI frames.
+  - `assets/generated-cards` reduced from about 282MB to about 14MB; `assets/card-art-v2` reduced from about 7.0MB to about 2.3MB.
+  - `server.js` now serves `/assets/` with `Cache-Control: public, max-age=31536000, immutable`; HTML stays `no-cache`, JS/CSS use short 5-minute cache.
+- Verification for authoritative MVP:
+  - `node --check src/main.js`, `src/card-design.js`, `src/online-battle-engine.js`, and `server.js` pass.
+  - WebSocket-level test confirms create/join/ready -> authoritative snapshots -> mulligan -> deploy -> pass turn.
+  - `develop-web-game` Playwright smoke check on localhost produced no console error files.
+  - Two-browser Playwright flow passed on localhost: both enter `online-authoritative`, both skip mulligan, host deploys a unit, guest receives the matching enemy board snapshot.
 - Next real 1v1 TODO:
-  - Extract a pure battle engine from `src/main.js` into a reusable module.
-  - Move match creation, draw, action validation, and resolution to `server.js` or a server-side engine module.
-  - Send only per-player snapshots to avoid leaking hands and hidden units.
-  - Replace the `online-preview` button behavior with true server-authoritative battle entry.
+  - Continue parity work between the simplified server engine and the richer local AI engine: interception windows, frontline contact chains, detailed VFX timing, and every edge case from the local rule implementation.
+  - Add reconnection/rejoin support so a refreshed browser can resume the same side in an active room.
+  - Add versioned asset filenames or a manifest if long-lived asset cache needs precise invalidation in future releases.

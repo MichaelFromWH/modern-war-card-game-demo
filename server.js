@@ -2,6 +2,11 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
+import {
+  applyBattleAction,
+  createAuthoritativeBattle,
+  createBattleSnapshot,
+} from "./src/online-battle-engine.js";
 
 const rootDir = resolve(process.cwd(), process.env.ROOT_DIR || ".");
 const port = Number(process.env.PORT || 3000);
@@ -68,9 +73,15 @@ const server = createServer((request, response) => {
 
   const stats = statSync(filePath);
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
+  const cacheControl = pathname.startsWith("/assets/")
+    ? "public, max-age=31536000, immutable"
+    : type.startsWith("text/html")
+      ? "no-cache"
+      : "public, max-age=300";
   response.writeHead(200, {
     "Content-Type": type,
     "Content-Length": stats.size,
+    "Cache-Control": cacheControl,
   });
 
   if (request.method === "HEAD") {
@@ -191,6 +202,16 @@ function handleSocketMessage(client, raw) {
     return;
   }
 
+  if (message.type === "battle_enter") {
+    sendBattleSnapshotToClient(client);
+    return;
+  }
+
+  if (message.type === "battle_action") {
+    handleBattleAction(client, message.action);
+    return;
+  }
+
   if (message.type === "game_action") {
     forwardGameAction(client, message);
     return;
@@ -214,6 +235,7 @@ function createRoomForClient(client, message) {
     clients: new Map(),
     events: [],
     match: null,
+    battle: null,
   };
 
   rooms.set(room.code, room);
@@ -261,6 +283,8 @@ function leaveRoom(client) {
   if (room) {
     room.clients.delete(client.id);
     room.updatedAt = Date.now();
+    room.match = null;
+    room.battle = null;
     broadcastRoomState(room);
     if (!room.clients.size) {
       rooms.delete(room.code);
@@ -284,12 +308,18 @@ function setReady(client, ready, loadout) {
   client.loadout = ready ? sanitizeLoadout(loadout) : null;
   if (!ready) {
     room.match = null;
+    room.battle = null;
   }
   room.updatedAt = Date.now();
   broadcastRoomState(room);
 
   if (room.clients.size === 2 && [...room.clients.values()].every((item) => item.ready)) {
     room.match ||= createRoomMatch(room);
+    room.battle ||= createAuthoritativeBattle({
+      roomCode: room.code,
+      match: room.match,
+      players: [...room.clients.values()],
+    });
     const payload = {
       roomCode: room.code,
       match: room.match,
@@ -297,7 +327,27 @@ function setReady(client, ready, loadout) {
     };
     broadcast(room, "match_ready", payload);
     broadcast(room, "match_start", payload);
+    broadcastBattleSnapshots(room);
   }
+}
+
+function handleBattleAction(client, action) {
+  const room = getClientRoom(client);
+  if (!room) {
+    sendError(client, "not_in_room", "Join a room before sending battle actions.");
+    return;
+  }
+  if (!room.battle) {
+    sendError(client, "battle_not_ready", "The battle is not ready yet.");
+    return;
+  }
+
+  const result = applyBattleAction(room.battle, client.side, action);
+  room.updatedAt = Date.now();
+  if (!result.ok) {
+    sendError(client, "battle_action_rejected", result.error || "Battle action was rejected.");
+  }
+  broadcastBattleSnapshots(room);
 }
 
 function forwardGameAction(client, message) {
@@ -359,7 +409,26 @@ function broadcastRoomState(room) {
       ownSide: client.side,
       players: getRoomPlayers(room),
       match: room.match,
+      battleStatus: room.battle?.status || null,
     });
+  }
+}
+
+function sendBattleSnapshotToClient(client) {
+  const room = getClientRoom(client);
+  if (!room?.battle) {
+    sendError(client, "battle_not_ready", "The battle is not ready yet.");
+    return;
+  }
+  send(client, "battle_snapshot", createBattleSnapshot(room.battle, client.side));
+}
+
+function broadcastBattleSnapshots(room) {
+  if (!room?.battle) {
+    return;
+  }
+  for (const client of room.clients.values()) {
+    send(client, "battle_snapshot", createBattleSnapshot(room.battle, client.side));
   }
 }
 
