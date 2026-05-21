@@ -119,3 +119,5 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Fixed card hover/detail during opponent turns and pending states by removing the `canPlayerAct()` spotlight gate and restoring pointer events on hand cards.
   - Added WebSocket connect timeouts and online-exit cleanup so a completed/abandoned session can reconnect instead of staying at “连接中”.
   - Verification passed: `node --check` for `src/online-battle-engine.js`, `src/main.js`, and `server.js`; direct authoritative-engine smoke for mulligan/tactic/supply/contact/air-defense/name mapping; WebSocket room reconnect smoke; Playwright single-page battle smoke; Playwright two-page authoritative flow; Playwright opponent-turn hover check.
+  - Deployed the changed runtime files to ECS `/opt/war-card-game` and marked `.deployed-version` as `923bf7b`; PM2 `war-card-game` restarted online and local server health passed.
+  - Network note: Alibaba security group and Linux firewall are open for port 80. If `http://121.41.9.156/` shows 502 or online room service stays connecting on a tester machine, check local proxy settings first; `127.0.0.1:7897` intercepted this IP during deployment verification.

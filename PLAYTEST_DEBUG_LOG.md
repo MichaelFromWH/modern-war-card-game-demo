@@ -53,3 +53,12 @@
 - Playwright 单页 smoke 通过：本地进入战斗、开局调度、悬停详情。
 - Playwright 双页联机通过：双方进入 `online-authoritative`，双方都有调度，A 调度后 B 仍可调度，玩家名按本地视角显示。
 - Playwright 对方回合 hover 复测通过：后手在对方回合仍能悬停手牌查看详情。
+
+部署记录：
+
+- 本次修复已推送到 GitHub `main`，提交 `923bf7b Fix online playtest rule and UX issues`。
+- ECS 服务器无法稳定从 GitHub 拉取代码，报 `OpenSSL SSL_connect: SSL_ERROR_SYSCALL`；改用本地打包 7 个变更文件并通过 Workbench 终端覆盖部署。
+- 线上运行目录 `/opt/war-card-game` 已写入 `.deployed-version = 923bf7b`；PM2 进程 `war-card-game` 重启后为 `online`。
+- 服务器内部验证通过：`node --check src/online-battle-engine.js`、`node --check src/main.js`、`node --check server.js`，以及 `http://127.0.0.1/healthz`。
+- 阿里云安全组 `sg-bp160ny2tx67pnbamog8` 已确认放行入方向 `TCP:80/80`，来源 `0.0.0.0/0`；系统 `firewalld` 未运行，进程监听 `0.0.0.0:80`。
+- Chrome 能重新加载 `http://121.41.9.156/` 页面；但本机命令行和 Chrome 在开启本地代理 `127.0.0.1:7897` 时可能出现 `HTTP 502` 或 WebSocket 握手超时。遇到该现象优先将 `121.41.9.156` 加入代理直连/绕过规则，或临时关闭代理后再测试。
