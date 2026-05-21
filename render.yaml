@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: modern-war-card-game-demo
+    runtime: node
+    repo: https://github.com/MichaelFromWH/modern-war-card-game-demo
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ROOM_TTL_MS
+        value: "21600000"

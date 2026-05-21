@@ -39,6 +39,7 @@ const refs = {
   guide: document.querySelector("#guide-overlay"),
   deckBuilder: document.querySelector("#deck-builder-overlay"),
   deckStatus: document.querySelector("#deck-status"),
+  onlinePanel: document.querySelector("#online-panel"),
   bgm: document.querySelector("#battle-bgm"),
   pass: document.querySelector("#pass-button"),
   endTurn: document.querySelector("#end-turn-button"),
@@ -232,6 +233,20 @@ const state = {
   bgmOn: false,
   currentBgmTrack: null,
   aiDifficulty: "medium",
+  online: {
+    socket: null,
+    status: "idle",
+    clientId: null,
+    roomCode: "",
+    side: null,
+    players: [],
+    ready: false,
+    matchReady: false,
+    error: "",
+    name: loadOnlineName(),
+    joinCode: getInitialOnlineRoomCode(),
+    lastEvent: getInitialOnlineRoomCode() ? "已从邀请链接识别房间码，点击加入房间即可进入。" : "",
+  },
   mulligan: {
     active: false,
     selectedUids: [],
@@ -246,6 +261,9 @@ function bootstrap() {
   bindEvents();
   updateDifficultyButtons();
   render();
+  if (state.online.joinCode) {
+    window.setTimeout(() => focusOnlinePanel(), 420);
+  }
   exposeDebugHooks();
 }
 
@@ -253,6 +271,7 @@ function bindEvents() {
   window.addEventListener("pointerdown", () => gameAudio.unlock(), { once: true, passive: true });
   window.addEventListener("keydown", () => gameAudio.unlock(), { once: true });
   document.addEventListener("click", handleClick);
+  document.addEventListener("input", handleInput);
   document.addEventListener("mouseover", handleHover);
   document.addEventListener("mouseout", handleHoverOut);
   document.addEventListener("dragstart", handleDragStart);
@@ -280,6 +299,20 @@ function bindEvents() {
       toggleFullscreen();
     }
   });
+}
+
+function handleInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+  if (target.id === "online-player-name") {
+    state.online.name = target.value.slice(0, 32);
+    saveOnlineName(state.online.name);
+  } else if (target.id === "online-room-code") {
+    state.online.joinCode = target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    target.value = state.online.joinCode;
+  }
 }
 
 function handleClick(event) {
@@ -461,6 +494,21 @@ function handleAction(action) {
   } else if (action === "toggle-log") {
     gameAudio.play("ui.switch");
     toggleLogPanel();
+  } else if (action === "online-focus") {
+    focusOnlinePanel();
+  } else if (action === "online-create-room") {
+    void createOnlineRoom();
+  } else if (action === "online-join-room") {
+    void joinOnlineRoom();
+  } else if (action === "online-toggle-ready") {
+    toggleOnlineReady();
+  } else if (action === "online-leave-room") {
+    leaveOnlineRoom();
+  } else if (action === "online-copy-code") {
+    void copyOnlineRoomCode();
+  } else if (action === "online-clear-error") {
+    state.online.error = "";
+    renderOnlinePanel();
   } else if (action.startsWith("play-hidden:")) {
     selectHandCard(action.split(":")[1], { conceal: true });
   } else if (action.startsWith("play-open:")) {
@@ -856,6 +904,7 @@ function render() {
   refs.app.dataset.mulligan = state.mulligan.active ? "true" : "false";
   refs.briefing.hidden = state.screen !== "briefing";
   renderDeckStatus();
+  renderOnlinePanel();
   renderBoard();
   renderHand();
   renderScore();
@@ -1853,6 +1902,86 @@ function renderDeckStatus() {
 
 function renderDeckMetric(label, value, valid) {
   return `<i class="${valid ? "is-valid" : "is-invalid"}"><span>${escapeHtml(label)}</span>${escapeHtml(value)}</i>`;
+}
+
+function renderOnlinePanel() {
+  if (!refs.onlinePanel) {
+    return;
+  }
+  if (state.screen !== "briefing") {
+    refs.onlinePanel.innerHTML = "";
+    return;
+  }
+
+  const online = state.online;
+  const inRoom = Boolean(online.roomCode);
+  const connected = online.status === "connected" || inRoom;
+  const playerSlot = online.players.find((player) => player.side === "player");
+  const enemySlot = online.players.find((player) => player.side === "enemy");
+  const createDisabled = online.status === "connecting" || inRoom;
+  const joinDisabled = online.status === "connecting" || inRoom;
+  const readyDisabled = !inRoom || online.players.length < 2;
+  const statusText = getOnlineStatusText();
+
+  refs.onlinePanel.innerHTML = `
+    <div class="online-panel__header">
+      <div>
+        <span>ONLINE 1V1 / PHASE 2</span>
+        <strong>邀请朋友进入同一战区房间</strong>
+        <p>当前版本先完成房间连接和准备流程；真正战斗同步会在服务端权威引擎完成后接入。</p>
+      </div>
+      <i class="online-status online-status--${escapeHtml(online.status)}">${escapeHtml(statusText)}</i>
+    </div>
+    <div class="online-panel__body">
+      <section class="online-card online-card--controls">
+        <label>
+          <span>你的代号</span>
+          <input id="online-player-name" type="text" value="${escapeHtml(online.name)}" maxlength="32" autocomplete="nickname" placeholder="Michael" />
+        </label>
+        <div class="online-actions">
+          <button class="primary-button" type="button" data-action="online-create-room" ${createDisabled ? "disabled" : ""}>创建房间</button>
+          <label>
+            <span>房间码</span>
+            <input id="online-room-code" type="text" value="${escapeHtml(online.joinCode)}" maxlength="8" autocomplete="off" placeholder="ABC123" ${inRoom ? "disabled" : ""} />
+          </label>
+          <button class="small-button" type="button" data-action="online-join-room" ${joinDisabled ? "disabled" : ""}>加入房间</button>
+        </div>
+      </section>
+      <section class="online-card online-card--room ${inRoom ? "is-active" : ""}">
+        <div class="online-room-code">
+          <span>当前房间</span>
+          <strong>${inRoom ? escapeHtml(online.roomCode) : "未创建"}</strong>
+          <button class="small-button" type="button" data-action="online-copy-code" ${inRoom ? "" : "disabled"}>复制邀请链接</button>
+        </div>
+        <div class="online-slots">
+          ${renderOnlineSlot("player", playerSlot)}
+          ${renderOnlineSlot("enemy", enemySlot)}
+        </div>
+        <div class="online-room-actions">
+          <button class="primary-button" type="button" data-action="online-toggle-ready" ${readyDisabled ? "disabled" : ""}>
+            ${online.ready ? "取消准备" : "准备"}
+          </button>
+          <button class="small-button" type="button" data-action="online-leave-room" ${connected ? "" : "disabled"}>离开/断开</button>
+        </div>
+      </section>
+    </div>
+    ${online.matchReady ? `<div class="online-callout is-ready">双方已准备。下一阶段会接入服务端发牌和真人回合。</div>` : ""}
+    ${online.error ? `<div class="online-callout is-error">${escapeHtml(online.error)} <button type="button" data-action="online-clear-error">关闭</button></div>` : ""}
+    ${online.lastEvent ? `<div class="online-callout">${escapeHtml(online.lastEvent)}</div>` : ""}
+  `;
+}
+
+function renderOnlineSlot(side, player) {
+  const label = side === "player" ? "房主" : "挑战者";
+  const occupied = Boolean(player);
+  const self = occupied && player.id === state.online.clientId;
+  return `
+    <div class="online-slot ${occupied ? "is-occupied" : ""} ${player?.ready ? "is-ready" : ""}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${occupied ? escapeHtml(player.name) : "等待加入"}</strong>
+      <i>${occupied ? `${self ? "你 · " : ""}${player.ready ? "已准备" : "未准备"}` : "空位"}</i>
+    </div>
+  `;
 }
 
 function renderDeckBuilder() {
@@ -6028,6 +6157,296 @@ function updateDifficultyButtons() {
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
+}
+
+function focusOnlinePanel() {
+  refs.onlinePanel?.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => {
+    document.querySelector("#online-player-name")?.focus();
+  }, 260);
+}
+
+async function createOnlineRoom() {
+  const socket = await ensureOnlineSocket();
+  if (!socket) {
+    return;
+  }
+  resetOnlineRoomState();
+  sendOnlineMessage({
+    type: "create_room",
+    name: state.online.name,
+  });
+  state.online.lastEvent = "正在创建房间...";
+  renderOnlinePanel();
+}
+
+async function joinOnlineRoom() {
+  if (!state.online.joinCode) {
+    state.online.error = "请输入朋友发来的房间码。";
+    renderOnlinePanel();
+    return;
+  }
+  const socket = await ensureOnlineSocket();
+  if (!socket) {
+    return;
+  }
+  resetOnlineRoomState();
+  sendOnlineMessage({
+    type: "join_room",
+    roomCode: state.online.joinCode,
+    name: state.online.name,
+  });
+  state.online.lastEvent = `正在加入房间 ${state.online.joinCode}...`;
+  renderOnlinePanel();
+}
+
+function toggleOnlineReady() {
+  if (!state.online.roomCode) {
+    return;
+  }
+  state.online.ready = !state.online.ready;
+  sendOnlineMessage({
+    type: "ready",
+    ready: state.online.ready,
+  });
+  renderOnlinePanel();
+}
+
+function leaveOnlineRoom() {
+  if (state.online.socket?.readyState === WebSocket.OPEN && state.online.roomCode) {
+    sendOnlineMessage({ type: "leave_room" });
+  }
+  state.online.socket?.close();
+  state.online.socket = null;
+  Object.assign(state.online, {
+    status: "idle",
+    roomCode: "",
+    side: null,
+    players: [],
+    ready: false,
+    matchReady: false,
+    lastEvent: "已离开线上房间。",
+  });
+  renderOnlinePanel();
+}
+
+async function copyOnlineRoomCode() {
+  if (!state.online.roomCode) {
+    return;
+  }
+  const inviteUrl = getOnlineInviteUrl(state.online.roomCode);
+  try {
+    await navigator.clipboard.writeText(inviteUrl);
+    state.online.lastEvent = `邀请链接已复制，房间码 ${state.online.roomCode}。`;
+  } catch {
+    state.online.lastEvent = `邀请链接：${inviteUrl}`;
+  }
+  renderOnlinePanel();
+}
+
+function ensureOnlineSocket() {
+  const existing = state.online.socket;
+  if (existing?.readyState === WebSocket.OPEN) {
+    return Promise.resolve(existing);
+  }
+  if (existing?.readyState === WebSocket.CONNECTING) {
+    return new Promise((resolve) => {
+      existing.addEventListener("open", () => resolve(existing), { once: true });
+      existing.addEventListener("error", () => resolve(null), { once: true });
+    });
+  }
+
+  state.online.status = "connecting";
+  state.online.error = "";
+  state.online.lastEvent = "正在连接线上房间服务...";
+  renderOnlinePanel();
+
+  return new Promise((resolve) => {
+    const socket = new WebSocket(getOnlineSocketUrl());
+    state.online.socket = socket;
+
+    socket.addEventListener("open", () => {
+      state.online.status = "connected";
+      state.online.error = "";
+      state.online.lastEvent = "已连接线上房间服务。";
+      renderOnlinePanel();
+      resolve(socket);
+    }, { once: true });
+
+    socket.addEventListener("message", (event) => {
+      handleOnlineMessage(event.data);
+    });
+
+    socket.addEventListener("error", () => {
+      state.online.status = "error";
+      state.online.error = "无法连接线上房间服务。确认当前页面由 Node 服务启动，而不是直接打开 HTML 文件。";
+      state.online.lastEvent = "";
+      renderOnlinePanel();
+      resolve(null);
+    }, { once: true });
+
+    socket.addEventListener("close", () => {
+      if (state.online.socket === socket) {
+        state.online.socket = null;
+        if (state.online.status !== "idle") {
+          state.online.status = "disconnected";
+          state.online.lastEvent = "线上连接已断开。";
+        }
+        state.online.roomCode = "";
+        state.online.side = null;
+        state.online.players = [];
+        state.online.ready = false;
+        state.online.matchReady = false;
+        renderOnlinePanel();
+      }
+    });
+  });
+}
+
+function handleOnlineMessage(raw) {
+  let message;
+  try {
+    message = JSON.parse(String(raw));
+  } catch {
+    state.online.error = "收到无法解析的房间消息。";
+    renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "connected") {
+    state.online.clientId = message.clientId || null;
+    state.online.status = "connected";
+    return;
+  }
+
+  if (message.type === "room_created" || message.type === "room_joined") {
+    state.online.roomCode = message.roomCode || "";
+    state.online.side = message.side || null;
+    state.online.ready = false;
+    state.online.matchReady = false;
+    state.online.status = "connected";
+    state.online.lastEvent = message.type === "room_created" ? "房间已创建，复制房间码发给朋友。" : "已加入房间。";
+    renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "room_state") {
+    state.online.roomCode = message.roomCode || state.online.roomCode;
+    state.online.side = message.ownSide || state.online.side;
+    state.online.players = Array.isArray(message.players) ? message.players : [];
+    const self = state.online.players.find((player) => player.id === state.online.clientId);
+    state.online.ready = Boolean(self?.ready);
+    state.online.status = "connected";
+    renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "match_ready") {
+    state.online.matchReady = true;
+    state.online.lastEvent = "双方已准备，下一阶段将进入真人对局开局。";
+    renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "room_closed") {
+    state.online.roomCode = "";
+    state.online.players = [];
+    state.online.ready = false;
+    state.online.matchReady = false;
+    state.online.lastEvent = "房间已关闭。";
+    renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "left_room") {
+    resetOnlineRoomState();
+    state.online.lastEvent = "已离开房间。";
+    renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "error") {
+    state.online.error = message.message || "线上房间发生错误。";
+    renderOnlinePanel();
+  }
+}
+
+function sendOnlineMessage(message) {
+  if (state.online.socket?.readyState !== WebSocket.OPEN) {
+    state.online.error = "线上连接尚未建立。";
+    renderOnlinePanel();
+    return false;
+  }
+  state.online.socket.send(JSON.stringify(message));
+  return true;
+}
+
+function resetOnlineRoomState() {
+  Object.assign(state.online, {
+    roomCode: "",
+    side: null,
+    players: [],
+    ready: false,
+    matchReady: false,
+    error: "",
+  });
+}
+
+function getOnlineSocketUrl() {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws`;
+}
+
+function getOnlineInviteUrl(roomCode) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", roomCode);
+  return url.toString();
+}
+
+function getInitialOnlineRoomCode() {
+  try {
+    return new URL(window.location.href).searchParams.get("room")?.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "";
+  } catch {
+    return "";
+  }
+}
+
+function getOnlineStatusText() {
+  if (state.online.matchReady) {
+    return "双方已准备";
+  }
+  if (state.online.roomCode) {
+    return `房间 ${state.online.roomCode}`;
+  }
+  if (state.online.status === "connecting") {
+    return "连接中";
+  }
+  if (state.online.status === "connected") {
+    return "已连接";
+  }
+  if (state.online.status === "error") {
+    return "连接失败";
+  }
+  if (state.online.status === "disconnected") {
+    return "已断开";
+  }
+  return "未连接";
+}
+
+function loadOnlineName() {
+  try {
+    return localStorage.getItem("warzone.onlineName") || "Michael";
+  } catch {
+    return "Michael";
+  }
+}
+
+function saveOnlineName(name) {
+  try {
+    localStorage.setItem("warzone.onlineName", name || "Player");
+  } catch {
+    // Local storage can be unavailable in restricted browser contexts.
+  }
 }
 
 function toggleLogPanel() {
