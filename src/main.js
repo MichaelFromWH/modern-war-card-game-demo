@@ -242,6 +242,7 @@ const state = {
     players: [],
     ready: false,
     matchReady: false,
+    match: null,
     error: "",
     name: loadOnlineName(),
     joinCode: getInitialOnlineRoomCode(),
@@ -1965,7 +1966,7 @@ function renderOnlinePanel() {
         </div>
       </section>
     </div>
-    ${online.matchReady ? `<div class="online-callout is-ready">双方已准备。下一阶段会接入服务端发牌和真人回合。</div>` : ""}
+    ${online.matchReady ? `<div class="online-callout is-ready">双方已准备，服务器已生成开局 Seed。下一阶段会接入服务端发牌和真人回合。</div>` : ""}
     ${online.error ? `<div class="online-callout is-error">${escapeHtml(online.error)} <button type="button" data-action="online-clear-error">关闭</button></div>` : ""}
     ${online.lastEvent ? `<div class="online-callout">${escapeHtml(online.lastEvent)}</div>` : ""}
   `;
@@ -1975,11 +1976,16 @@ function renderOnlineSlot(side, player) {
   const label = side === "player" ? "房主" : "挑战者";
   const occupied = Boolean(player);
   const self = occupied && player.id === state.online.clientId;
+  const loadout = player?.loadout;
+  const faction = loadout?.faction ? getFaction(loadout.faction)?.shortName : "";
+  const deckSize = Number.isFinite(loadout?.deckSize) ? `${loadout.deckSize} 张` : "";
+  const loadoutText = [faction, deckSize].filter(Boolean).join(" · ");
+  const readyText = occupied ? `${self ? "你 · " : ""}${player.ready ? "已准备" : "未准备"}` : "空位";
   return `
     <div class="online-slot ${occupied ? "is-occupied" : ""} ${player?.ready ? "is-ready" : ""}">
       <span>${escapeHtml(label)}</span>
       <strong>${occupied ? escapeHtml(player.name) : "等待加入"}</strong>
-      <i>${occupied ? `${self ? "你 · " : ""}${player.ready ? "已准备" : "未准备"}` : "空位"}</i>
+      <i>${escapeHtml(occupied && loadoutText ? `${readyText} · ${loadoutText}` : readyText)}</i>
     </div>
   `;
 }
@@ -6208,6 +6214,7 @@ function toggleOnlineReady() {
   sendOnlineMessage({
     type: "ready",
     ready: state.online.ready,
+    loadout: getOnlineLoadout(),
   });
   renderOnlinePanel();
 }
@@ -6225,6 +6232,7 @@ function leaveOnlineRoom() {
     players: [],
     ready: false,
     matchReady: false,
+    match: null,
     lastEvent: "已离开线上房间。",
   });
   renderOnlinePanel();
@@ -6334,6 +6342,7 @@ function handleOnlineMessage(raw) {
     state.online.roomCode = message.roomCode || state.online.roomCode;
     state.online.side = message.ownSide || state.online.side;
     state.online.players = Array.isArray(message.players) ? message.players : [];
+    state.online.match = message.match || state.online.match;
     const self = state.online.players.find((player) => player.id === state.online.clientId);
     state.online.ready = Boolean(self?.ready);
     state.online.status = "connected";
@@ -6343,7 +6352,18 @@ function handleOnlineMessage(raw) {
 
   if (message.type === "match_ready") {
     state.online.matchReady = true;
-    state.online.lastEvent = "双方已准备，下一阶段将进入真人对局开局。";
+    state.online.match = message.match || state.online.match;
+    const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
+    state.online.lastEvent = `双方已准备，服务器已锁定开局信息。${seed}`;
+    renderOnlinePanel();
+    return;
+  }
+
+  if (message.type === "match_start") {
+    state.online.matchReady = true;
+    state.online.match = message.match || state.online.match;
+    const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
+    state.online.lastEvent = `真人对局房间已就绪。${seed} 下一阶段接入服务端战斗结算。`;
     renderOnlinePanel();
     return;
   }
@@ -6353,6 +6373,7 @@ function handleOnlineMessage(raw) {
     state.online.players = [];
     state.online.ready = false;
     state.online.matchReady = false;
+    state.online.match = null;
     state.online.lastEvent = "房间已关闭。";
     renderOnlinePanel();
     return;
@@ -6388,8 +6409,16 @@ function resetOnlineRoomState() {
     players: [],
     ready: false,
     matchReady: false,
+    match: null,
     error: "",
   });
+}
+
+function getOnlineLoadout() {
+  return {
+    faction: state.playerFaction,
+    deck: state.playerDeck.slice(0, DECK_RULES.size),
+  };
 }
 
 function getOnlineSocketUrl() {

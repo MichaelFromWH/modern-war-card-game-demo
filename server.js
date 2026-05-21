@@ -95,6 +95,7 @@ wss.on("connection", (ws) => {
     side: null,
     name: "Player",
     ready: false,
+    loadout: null,
     alive: true,
   };
 
@@ -178,7 +179,7 @@ function handleSocketMessage(client, raw) {
   }
 
   if (message.type === "ready") {
-    setReady(client, Boolean(message.ready));
+    setReady(client, Boolean(message.ready), message.loadout);
     return;
   }
 
@@ -204,6 +205,7 @@ function createRoomForClient(client, message) {
     updatedAt: Date.now(),
     clients: new Map(),
     events: [],
+    match: null,
   };
 
   rooms.set(room.code, room);
@@ -236,6 +238,7 @@ function attachClientToRoom(room, client, side, name) {
   client.roomCode = room.code;
   client.side = side;
   client.ready = false;
+  client.loadout = null;
   client.name = sanitizeName(name);
   room.clients.set(client.id, client);
   room.updatedAt = Date.now();
@@ -259,9 +262,10 @@ function leaveRoom(client) {
   client.roomCode = null;
   client.side = null;
   client.ready = false;
+  client.loadout = null;
 }
 
-function setReady(client, ready) {
+function setReady(client, ready, loadout) {
   const room = getClientRoom(client);
   if (!room) {
     sendError(client, "not_in_room", "Join a room before setting ready state.");
@@ -269,14 +273,22 @@ function setReady(client, ready) {
   }
 
   client.ready = ready;
+  client.loadout = ready ? sanitizeLoadout(loadout) : null;
+  if (!ready) {
+    room.match = null;
+  }
   room.updatedAt = Date.now();
   broadcastRoomState(room);
 
   if (room.clients.size === 2 && [...room.clients.values()].every((item) => item.ready)) {
-    broadcast(room, "match_ready", {
+    room.match ||= createRoomMatch(room);
+    const payload = {
       roomCode: room.code,
+      match: room.match,
       sides: getRoomPlayers(room),
-    });
+    };
+    broadcast(room, "match_ready", payload);
+    broadcast(room, "match_start", payload);
   }
 }
 
@@ -338,6 +350,7 @@ function broadcastRoomState(room) {
       roomCode: room.code,
       ownSide: client.side,
       players: getRoomPlayers(room),
+      match: room.match,
     });
   }
 }
@@ -348,6 +361,7 @@ function getRoomPlayers(room) {
     side: client.side,
     name: client.name,
     ready: client.ready,
+    loadout: summarizeLoadout(client.loadout),
   }));
 }
 
@@ -380,6 +394,7 @@ function pruneRooms() {
         client.roomCode = null;
         client.side = null;
         client.ready = false;
+        client.loadout = null;
       }
       rooms.delete(code);
     }
@@ -405,6 +420,48 @@ function normalizeRoomCode(value) {
 function sanitizeName(value) {
   const name = String(value || "").replace(/\s+/g, " ").trim().slice(0, 32);
   return name || "Player";
+}
+
+function sanitizeLoadout(loadout) {
+  const fallback = {
+    faction: "usa",
+    deck: [],
+  };
+  if (!loadout || typeof loadout !== "object") {
+    return fallback;
+  }
+  const faction = ["usa", "russia"].includes(loadout.faction) ? loadout.faction : fallback.faction;
+  const deck = Array.isArray(loadout.deck)
+    ? loadout.deck
+        .map((cardId) => String(cardId || "").trim())
+        .filter(Boolean)
+        .slice(0, 30)
+    : [];
+  return { faction, deck };
+}
+
+function summarizeLoadout(loadout) {
+  if (!loadout) {
+    return null;
+  }
+  return {
+    faction: loadout.faction,
+    deckSize: loadout.deck.length,
+  };
+}
+
+function createRoomMatch(room) {
+  return {
+    id: `${room.code}-${Date.now().toString(36)}`,
+    seed: createMatchSeed(),
+    createdAt: Date.now(),
+    status: "ready",
+    players: getRoomPlayers(room),
+  };
+}
+
+function createMatchSeed() {
+  return Math.random().toString(36).slice(2, 10).toUpperCase();
 }
 
 function resolvePath(urlPath) {

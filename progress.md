@@ -36,3 +36,15 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Copy now uses a URL with `?room=<code>`.
   - Opening a link with `?room=AB12CD` auto-fills the room code and scrolls/focuses the online panel.
   - Browser check confirmed the invite room code auto-fill behavior.
+- Git:
+  - Local commit `53b3edd Add online 1v1 lobby foundation` created.
+  - Push to GitHub failed because local Git/gh is not authenticated: `fatal: could not read Username for 'https://github.com': Device not configured`.
+- Implemented match-start handoff foundation:
+  - Client now sends selected faction and current 30-card deck as loadout when toggling ready.
+  - Server stores full loadouts privately, broadcasts only faction/deck size summaries.
+  - When both players are ready, server creates a match id and seed, then broadcasts `match_ready` and `match_start`.
+  - Frontend records `match` and shows the generated seed in the online panel.
+- Verification:
+  - Restarted local server on port 3000.
+  - WebSocket script confirms create/join/ready now produces `match_start` with seed and loadout summaries.
+  - `/healthz` returns rooms/sockets to 0 after test clients close.
