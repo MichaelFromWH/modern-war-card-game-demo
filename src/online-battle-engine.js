@@ -24,6 +24,8 @@ export function createAuthoritativeBattle({ roomCode, match, players }) {
     sides: {},
     factions: {},
     passed: createSideMap(false),
+    effectSerial: 0,
+    effects: [],
     turnActions: {
       player: createTurnActionState(),
       enemy: createTurnActionState(),
@@ -86,6 +88,8 @@ export function applyBattleAction(battle, side, action = {}) {
       return applyActivateUnit(battle, side, action);
     case "choose_target":
       return applyChooseTarget(battle, side, action);
+    case "choose_supply":
+      return applyChooseSupply(battle, side, action);
     case "pass_turn":
       return applyPassTurn(battle, side);
     case "surrender":
@@ -124,6 +128,10 @@ export function createBattleSnapshot(battle, viewerSide) {
         player: battle.factions[viewerSide],
         enemy: battle.factions[opponentSide],
       },
+      players: {
+        player: normalizePlayerForViewer(battle, viewerSide),
+        enemy: normalizePlayerForViewer(battle, opponentSide),
+      },
       passed: mapSideObject(battle.passed, viewerSide),
       turnActions: mapSideObject(battle.turnActions, viewerSide),
       intel: { player: 0, enemy: 0 },
@@ -153,6 +161,7 @@ export function createBattleSnapshot(battle, viewerSide) {
       turnTransition: null,
       aiThinking: false,
       actionAnimation: null,
+      effects: normalizeEffectsForViewer(battle.effects.slice(-24), viewerSide),
       matchWinner: battle.matchWinner ? mapSideForViewer(battle.matchWinner, viewerSide) : null,
       supplyExhausted: battle.supplyExhausted,
       finalActions: battle.finalActions ? mapSideObject(battle.finalActions, viewerSide) : null,
@@ -203,8 +212,8 @@ function applyPlayUnit(battle, side, action) {
   if (battle.pending) {
     return { ok: false, error: "请先完成当前目标选择。" };
   }
-  if (getTurnActions(battle, side).handPlayed) {
-    return { ok: false, error: "本回合已经打出过一张手牌。" };
+  if (getTurnActions(battle, side).unitPlayed || getTurnActions(battle, side).handPlayed) {
+    return { ok: false, error: "本回合已经部署过一张单位牌。" };
   }
 
   const handIndex = battle.hands[side].findIndex((item) => item.uid === action.handUid);
@@ -230,7 +239,7 @@ function applyPlayUnit(battle, side, action) {
   instance.deployedAtAction = battle.actionSerial;
   instance.actedAction = null;
   battle.board[side][lineId].push(instance);
-  markHandActionUsed(battle, side);
+  markUnitDeploymentUsed(battle, side);
   battle.log.push(instance.hidden
     ? `${getSideName(battle, side)}在${getLineName(lineId)}隐蔽部署了一个单位。`
     : `${getSideName(battle, side)}部署 ${card.name} 到${getLineName(lineId)}。`);
@@ -238,6 +247,10 @@ function applyPlayUnit(battle, side, action) {
   const sourceRef = { side, lineId, uid: instance.uid, instance };
   resolveFrontlineContact(battle, side, sourceRef);
   enforceHighAirExposure(battle);
+  if (battle.pending) {
+    resolveBattleEndIfReady(battle);
+    return { ok: true };
+  }
 
   if (!concealedDeploy && !instance.hidden && instance.actedAction !== battle.actionSerial && findBoardInstance(battle, side, instance.uid)) {
     maybeOpenPendingOrResolve(battle, side, instance.uid, card.ability, "boardEffect");
@@ -252,8 +265,8 @@ function applyPlayTactic(battle, side, action) {
   if (battle.pending) {
     return { ok: false, error: "请先完成当前目标选择。" };
   }
-  if (getTurnActions(battle, side).handPlayed) {
-    return { ok: false, error: "本回合已经打出过一张手牌。" };
+  if (getTurnActions(battle, side).tacticPlayed) {
+    return { ok: false, error: "本回合已经打出过一张战术牌。" };
   }
 
   const handIndex = battle.hands[side].findIndex((item) => item.uid === action.handUid);
@@ -270,9 +283,9 @@ function applyPlayTactic(battle, side, action) {
   if (card.ability?.noTarget || card.ability?.kind === "supply") {
     battle.hands[side].splice(handIndex, 1);
     battle.graves[side].push(instance);
-    markHandActionUsed(battle, side);
-    resolveNoTargetAbility(battle, side, card.ability, card);
+    markTacticActionUsed(battle, side);
     battle.log.push(`${getSideName(battle, side)}打出 ${card.name}。`);
+    resolveNoTargetAbility(battle, side, card.ability, card);
     resolveBattleEndIfReady(battle);
     return { ok: true };
   }
@@ -321,6 +334,12 @@ function applyActivateUnit(battle, side, action) {
   if (!card?.ability) {
     return { ok: false, error: "该单位没有可主动发动的技能。" };
   }
+  if (!isNoTargetAbility(card.ability)) {
+    const previewTargets = getValidEffectTargets(battle, side, card.ability, card, { sourceRef: source, asActingSource: true });
+    if (!previewTargets.length) {
+      return { ok: false, error: `${card.name} 当前没有合法目标。` };
+    }
+  }
 
   markBoardActionUsed(battle, side);
   markUnitActed(battle, source.instance);
@@ -347,6 +366,9 @@ function applyChooseTarget(battle, side, action) {
   if (!battle.pending || battle.pending.side !== side) {
     return { ok: false, error: "当前没有等待你选择的目标。" };
   }
+  if (battle.pending.kind === "supplyChoice") {
+    return applyChooseSupply(battle, side, action);
+  }
   const targetSide = mapViewerSideToServer(action.targetSide, side);
   const target = battle.pending.targets.find((item) => item.side === targetSide && item.uid === action.targetUid);
   if (!target) {
@@ -363,11 +385,43 @@ function applyChooseTarget(battle, side, action) {
     }
     const [instance] = battle.hands[side].splice(handIndex, 1);
     battle.graves[side].push(instance);
-    markHandActionUsed(battle, side);
+    markTacticActionUsed(battle, side);
     battle.log.push(`${getSideName(battle, side)}打出 ${getCard(pending.cardId).name}。`);
   }
 
+  if (pending.kind === "frontlineContact") {
+    const sourceRef = findBoardInstance(battle, side, pending.sourceUid);
+    if (sourceRef) {
+      resolveFrontlineContactFire(battle, side, sourceRef, target.side, target);
+      cleanupDestroyed(battle, side);
+      enforceHighAirExposure(battle);
+    }
+    resolveBattleEndIfReady(battle);
+    return { ok: true };
+  }
+
   resolveEffectOnTarget(battle, side, pending, target);
+  resolveBattleEndIfReady(battle);
+  return { ok: true };
+}
+
+function applyChooseSupply(battle, side, action) {
+  const pending = battle.pending;
+  const selectedUids = Array.isArray(action.selectedUids)
+    ? action.selectedUids
+    : action.targetUid
+      ? [action.targetUid]
+      : [];
+  const keepAmount = Math.max(1, pending.keepAmount || pending.ability?.keep || 1);
+  const selected = selectedUids
+    .map((uid) => pending.drawn.find((instance) => instance.uid === uid))
+    .filter(Boolean)
+    .slice(0, keepAmount);
+  if (!selected.length) {
+    return { ok: false, error: "请选择要保留的补给牌。" };
+  }
+  battle.pending = null;
+  completeSupplyChoice(battle, side, getCard(pending.cardId), pending.drawn, selected);
   resolveBattleEndIfReady(battle);
   return { ok: true };
 }
@@ -376,7 +430,11 @@ function applyPassTurn(battle, side) {
   const ready = assertCanAct(battle, side);
   if (!ready.ok) return ready;
   if (battle.pending) {
-    return { ok: false, error: "请先完成当前目标选择。" };
+    if (canClearStalePending(battle, battle.pending)) {
+      battle.pending = null;
+    } else {
+      return { ok: false, error: "请先完成当前目标选择。" };
+    }
   }
 
   clearSuppressionForSide(battle, side);
@@ -518,14 +576,70 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
 
 function resolveNoTargetAbility(battle, side, ability = {}, sourceCard = null) {
   if (ability.kind === "supply") {
-    const drawn = drawCards(battle, side, ability.draw || 1);
-    const keep = ability.keep || drawn;
-    if (drawn > keep) {
-      const overflow = battle.hands[side].splice(-Math.max(0, drawn - keep));
-      battle.decks[side].push(...overflow);
-    }
-    battle.log.push(`${sourceCard?.name || "补给"} 为 ${getSideName(battle, side)}调度 ${drawn} 张，保留 ${Math.min(keep, drawn)} 张。`);
+    return startSupplyChoice(battle, side, ability, sourceCard);
   }
+}
+
+function isNoTargetAbility(ability = {}) {
+  return Boolean(ability.noTarget || ability.kind === "supply");
+}
+
+function startSupplyChoice(battle, side, ability = {}, sourceCard = null) {
+  const drawAmount = ability.draw || 1;
+  const keepAmount = ability.keep || drawAmount;
+  const drawn = [];
+  for (let index = 0; index < drawAmount; index += 1) {
+    const card = battle.decks[side].shift();
+    if (!card) {
+      battle.supplyExhausted = true;
+      battle.log.push(`${getSideName(battle, side)}补给耗尽。`);
+      break;
+    }
+    drawn.push(card);
+  }
+  if (!drawn.length) {
+    battle.log.push(`${sourceCard?.name || "补给"} 未能完成补给，牌库为空。`);
+    return "resolved";
+  }
+  if (drawn.length > keepAmount) {
+    battle.pending = {
+      side,
+      kind: "supplyChoice",
+      cardId: sourceCard?.id || null,
+      ability,
+      drawn,
+      keepAmount,
+      targets: [],
+    };
+    battle.log.push(`${sourceCard?.name || "补给"} 展示 ${drawn.length} 张补给候选，等待 ${getSideName(battle, side)}选择 ${keepAmount} 张。`);
+    pushEffect(battle, {
+      type: "supply",
+      attackerSide: side,
+      sourceCardId: sourceCard?.id || null,
+      amount: drawn.length,
+    });
+    return "pending";
+  }
+  completeSupplyChoice(battle, side, sourceCard, drawn, drawn);
+  return "resolved";
+}
+
+function completeSupplyChoice(battle, side, sourceCard, drawn, kept) {
+  const keptIds = new Set(kept.map((instance) => instance.uid));
+  const returned = drawn.filter((instance) => !keptIds.has(instance.uid));
+  battle.hands[side].push(...kept);
+  battle.decks[side].push(...returned);
+  battle.log.push(`${sourceCard?.name || "补给"} 为 ${getSideName(battle, side)}保留 ${kept.length} 张，${returned.length} 张放回牌库底。`);
+}
+
+function canClearStalePending(battle, pending) {
+  if (!pending || pending.kind === "supplyChoice") {
+    return false;
+  }
+  return !pending.targets?.some((target) => {
+    const live = findBoardInstance(battle, target.side, target.uid);
+    return live && getCurrentPower(live.instance) > 0;
+  });
 }
 
 function getValidEffectTargets(battle, side, ability = {}, sourceCard = null, options = {}) {
@@ -571,8 +685,21 @@ function canTargetForAbility(battle, side, targetRef, ability = {}, sourceCard =
     return false;
   }
 
-  const canRevealHidden = ability.kind === "suppress" || ability.canRevealHidden || canRevealHiddenTargetForAbility(ability, targetRef.instance);
+  const canRevealHidden =
+    ability.kind === "suppress" ||
+    ability.canRevealHidden ||
+    canRevealHiddenTargetForAbility(ability, targetRef.instance) ||
+    (isAirDefenseUnit(sourceCard) && isAirUnit(targetCard));
   if (targetRef.instance.hidden && !canRevealHidden) {
+    return false;
+  }
+  if (ability.publicOnly && targetRef.instance.hidden) {
+    return false;
+  }
+  if (ability.requiresExposed && !targetRef.instance.exposed && !canRevealHidden) {
+    return false;
+  }
+  if (ability.requiresExposedOrAnyTag?.length && !targetRef.instance.exposed && !ability.requiresExposedOrAnyTag.some((tag) => targetCard.tags.includes(tag))) {
     return false;
   }
 
@@ -694,6 +821,9 @@ function matchesTargetRequirements(instance, ability = {}) {
   if (ability.requiresAnyTag?.length && !ability.requiresAnyTag.some((tag) => card.tags.includes(tag))) {
     return false;
   }
+  if (ability.requiresExposedForTags?.some((tag) => card.tags.includes(tag)) && !instance.exposed) {
+    return false;
+  }
   return true;
 }
 
@@ -800,6 +930,16 @@ function dealDamage(battle, attackerSide, targetRef, amount, sourceCard, ability
   targetRef.instance.lastDamagedBy = attackerSide;
   targetRef.instance.shield = false;
   battle.log.push(`${sourceCard.name} 对 ${getCard(targetRef.instance.cardId).name} 造成 ${finalAmount} 点伤害。`);
+  pushEffect(battle, {
+    type: "damage",
+    attackerSide,
+    targetSide: targetRef.side,
+    lineId: targetRef.lineId,
+    targetUid: targetRef.uid,
+    targetCardId: targetRef.instance.cardId,
+    sourceCardId: sourceCard.id,
+    amount: finalAmount,
+  });
 }
 
 function cleanupDestroyed(battle, attackerSide) {
@@ -816,6 +956,15 @@ function cleanupDestroyed(battle, attackerSide) {
         const value = getCardTargetValue(getCard(destroyed.cardId));
         battle.scores[attackerSide] += value;
         battle.log.push(`${getSideName(battle, attackerSide)}摧毁 ${getCard(destroyed.cardId).name}，获得 ${value} 分。`);
+        pushEffect(battle, {
+          type: "destroyed",
+          attackerSide,
+          targetSide: side,
+          lineId: line.id,
+          targetUid: destroyed.uid,
+          targetCardId: destroyed.cardId,
+          amount: value,
+        });
       }
     });
   });
@@ -835,6 +984,18 @@ function exposeInstanceRef(battle, ref, sourceName) {
   ref.instance.exposed = true;
   battle.log.push(`${sourceName} 暴露 ${getCard(ref.instance.cardId).name}。`);
   return true;
+}
+
+function pushEffect(battle, effect) {
+  battle.effectSerial = (battle.effectSerial || 0) + 1;
+  battle.effects ||= [];
+  battle.effects.push({
+    id: `${battle.id || battle.roomCode || "battle"}-${battle.effectSerial}`,
+    serial: battle.effectSerial,
+    atAction: battle.actionSerial,
+    ...effect,
+  });
+  battle.effects = battle.effects.slice(-80);
 }
 
 function resolveFrontlineContact(battle, side, deployedRef) {
@@ -867,9 +1028,22 @@ function resolveFrontlineContact(battle, side, deployedRef) {
   if (!liveDeployed) {
     return;
   }
-  const responseTarget = opponentFrontline.find((target) => findBoardInstance(battle, opponent, target.uid));
-  if (responseTarget) {
-    resolveFrontlineContactFire(battle, side, liveDeployed, opponent, responseTarget);
+  const responseTargets = opponentFrontline
+    .map((target) => findBoardInstance(battle, opponent, target.uid))
+    .filter(Boolean)
+    .filter((target) => canTargetForAbility(battle, side, target, deployedCard.ability, deployedCard, { sourceRef: liveDeployed }) && matchesTargetRequirements(target.instance, deployedCard.ability || {}));
+  if (responseTargets.length > 1) {
+    battle.pending = {
+      side,
+      kind: "frontlineContact",
+      sourceUid: liveDeployed.uid,
+      cardId: deployedCard.id,
+      ability: deployedCard.ability,
+      targets: responseTargets,
+    };
+    battle.log.push(`${deployedCard.name} 前线接敌，需要选择反击目标。`);
+  } else if (responseTargets.length === 1) {
+    resolveFrontlineContactFire(battle, side, liveDeployed, opponent, responseTargets[0]);
     cleanupDestroyed(battle, side);
   }
 }
@@ -930,6 +1104,18 @@ function isFrontlineContactUnit(card) {
 
 function isHighAirUnit(card) {
   return card.tags.includes("战斗机") || card.tags.includes("轰炸机");
+}
+
+function isLowAirUnit(card) {
+  return card.tags.includes("直升机") || card.tags.includes("无人机");
+}
+
+function isAirUnit(card) {
+  return Boolean(card && (isLowAirUnit(card) || isHighAirUnit(card)));
+}
+
+function isAirDefenseUnit(card) {
+  return Boolean(card?.tags?.includes("伴随防空") || card?.tags?.includes("重型防空"));
 }
 
 function applyLineRepair(targetRef, ability = {}) {
@@ -1058,6 +1244,22 @@ function normalizeBoardForViewer(battle, side, viewerSide) {
   }, {});
 }
 
+function normalizePlayerForViewer(battle, side) {
+  const player = battle.sides[side] || {};
+  return {
+    name: player.name || getSideName(battle, side),
+    faction: player.faction || battle.factions[side],
+  };
+}
+
+function normalizeEffectsForViewer(effects, viewerSide) {
+  return effects.map((effect) => ({
+    ...effect,
+    attackerSide: effect.attackerSide ? mapSideForViewer(effect.attackerSide, viewerSide) : null,
+    targetSide: effect.targetSide ? mapSideForViewer(effect.targetSide, viewerSide) : null,
+  }));
+}
+
 function normalizeInstanceForViewer(instance, side, viewerSide) {
   if (side !== viewerSide && instance.hidden) {
     return {
@@ -1075,6 +1277,17 @@ function normalizeInstanceForViewer(instance, side, viewerSide) {
 }
 
 function normalizePendingForViewer(pending, viewerSide) {
+  if (pending.kind === "supplyChoice") {
+    return {
+      kind: "supplyChoice",
+      side: "player",
+      cardId: pending.cardId,
+      ability: pending.ability,
+      drawn: pending.drawn.map(cloneInstance),
+      keepAmount: pending.keepAmount || pending.ability?.keep || 1,
+      targets: [],
+    };
+  }
   return {
     kind: pending.kind,
     side: "player",
@@ -1108,6 +1321,8 @@ function createHiddenPile(count) {
 function createTurnActionState() {
   return {
     handPlayed: false,
+    unitPlayed: false,
+    tacticPlayed: false,
     hiddenActivated: false,
     breakthroughUsed: false,
     enemyFrontlineEmptyAtStart: false,
@@ -1118,7 +1333,7 @@ function resetTurnActions(battle, side) {
   const opponent = getOpponentSide(side);
   battle.turnActions[side] = {
     ...createTurnActionState(),
-    enemyFrontlineEmptyAtStart: battle.board[opponent].frontline.length === 0,
+    enemyFrontlineEmptyAtStart: countAliveUnitsOnLine(battle, opponent, "frontline") === 0,
   };
 }
 
@@ -1127,8 +1342,14 @@ function getTurnActions(battle, side) {
   return battle.turnActions[side];
 }
 
-function markHandActionUsed(battle, side) {
-  getTurnActions(battle, side).handPlayed = true;
+function markUnitDeploymentUsed(battle, side) {
+  const actions = getTurnActions(battle, side);
+  actions.unitPlayed = true;
+  actions.handPlayed = true;
+}
+
+function markTacticActionUsed(battle, side) {
+  getTurnActions(battle, side).tacticPlayed = true;
 }
 
 function markBoardActionUsed(battle, side) {

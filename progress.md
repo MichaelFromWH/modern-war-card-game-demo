@@ -108,3 +108,14 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Updated the online authoritative engine with defense interception, high-air forced exposure, frontline contact/ambush, frontline support screening, and breakthrough targets.
   - Updated README/index/guide/AGENTS copy from V0.8 wording to V0.5 / 20260521 wording; deck exhaustion now correctly says it does not end the game.
   - Verification passed: `node --check` for `src/game-data.js`, `src/main.js`, `src/online-battle-engine.js`; direct Node smoke tests for high-air, breakthrough, interception, and frontline contact; `develop-web-game` Playwright smoke test on `http://127.0.0.1:3105` with no console error files and screenshot reviewed.
+- 2026-05-21 real 1v1 playtest fixes:
+  - Added `GAME_MECHANICS.md` as the canonical common-rules file and `PLAYTEST_DEBUG_LOG.md` for recurring playtest/debug records; `AGENTS.md` now tells future AI collaborators to read and update both.
+  - Split online turn allowances into unit deployment, tactic play, and board-unit action. Tactics no longer consume the unit deployment slot.
+  - Changed online supply resolution to server-authoritative reveal/choose: draw 3, choose 1, return the rest to deck bottom.
+  - Changed online frontline contact so multiple legal response targets create a target-choice pending state instead of auto-picking the first unit.
+  - Hardened online air-defense targeting so accompanying air defense can engage low/high-air targets when the enemy frontline is empty.
+  - Added player names and battle effect events to authoritative snapshots; client commander HUD now maps own name bottom-left and opponent name top-right by viewer perspective.
+  - Added online turn-transition overlay from snapshot changes and preserved local-perspective wording.
+  - Fixed card hover/detail during opponent turns and pending states by removing the `canPlayerAct()` spotlight gate and restoring pointer events on hand cards.
+  - Added WebSocket connect timeouts and online-exit cleanup so a completed/abandoned session can reconnect instead of staying at “连接中”.
+  - Verification passed: `node --check` for `src/online-battle-engine.js`, `src/main.js`, and `server.js`; direct authoritative-engine smoke for mulligan/tactic/supply/contact/air-defense/name mapping; WebSocket room reconnect smoke; Playwright single-page battle smoke; Playwright two-page authoritative flow; Playwright opponent-turn hover check.

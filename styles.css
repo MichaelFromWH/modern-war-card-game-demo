@@ -3531,7 +3531,7 @@ button:disabled {
 .app-shell[data-pending="true"] .hand-rail .war-card:hover,
 .app-shell[data-pending="true"] .hand-rail .war-card:focus-visible,
 .app-shell[data-pending="true"] .hand-rail .war-card.is-selected {
-  pointer-events: none;
+  pointer-events: auto;
   filter: brightness(0.58) saturate(0.76);
   transform: translateY(52px) rotate(var(--fan, 0deg)) scale(1);
 }
@@ -4655,7 +4655,7 @@ button:disabled {
 
 .app-shell[data-active-side="enemy"] .hand-rail .war-card,
 .app-shell[data-turn-locked="true"] .hand-rail .war-card {
-  pointer-events: none;
+  pointer-events: auto;
   filter: brightness(0.58) saturate(0.74);
   transform: translateY(88px) rotate(var(--fan, 0deg)) scale(0.98);
 }

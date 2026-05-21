@@ -82,6 +82,7 @@ const CONTACT_REVEAL_HOLD_MS = 720;
 const CONTACT_FIRE_START_MS = 180;
 const CONTACT_CLEANUP_HOLD_MS = 980;
 const INTERCEPTION_CANCELLED_DAMAGE = -1;
+const ONLINE_SOCKET_TIMEOUT_MS = 8000;
 const AI_DIFFICULTY_LABELS = {
   easy: "简单",
   medium: "中等",
@@ -244,6 +245,7 @@ const state = {
     matchReady: false,
     match: null,
     battleSnapshot: null,
+    lastEffectSerial: 0,
     error: "",
     name: loadOnlineName(),
     joinCode: getInitialOnlineRoomCode(),
@@ -928,6 +930,8 @@ function createInstance(cardId) {
 function createTurnActionState() {
   return {
     handPlayed: false,
+    unitPlayed: false,
+    tacticPlayed: false,
     hiddenActivated: false,
     breakthroughUsed: false,
     enemyFrontlineEmptyAtStart: false,
@@ -1253,14 +1257,17 @@ function renderMulligan() {
 
 function renderCommanderPanel(battle, side, faction) {
   const profile = COMMANDER_PROFILES[side];
+  const player = battle.players?.[side] || {};
+  const displayName = player.name || profile.name;
+  const initial = displayName.trim().slice(0, 1).toUpperCase() || profile.initial;
   const turnActive = battle.activeSide === side && battle.phase === "battle";
   const status = battle.phase === "match-over" ? "结算" : turnActive ? (battle.aiThinking && side === "enemy" ? "研判" : "行动") : "待命";
   return `
     <section class="commander-hud commander-hud--${side} ${turnActive ? "is-active-turn" : ""}" style="--accent:${faction.accent}">
-      <div class="commander-hud__portrait commander-hud__portrait--${side}" aria-hidden="true"><span>${escapeHtml(profile.initial)}</span></div>
+      <div class="commander-hud__portrait commander-hud__portrait--${side}" aria-hidden="true"><span>${escapeHtml(initial)}</span></div>
       <div class="commander-hud__body">
         <span class="commander-hud__turn">${escapeHtml(status)}</span>
-        <strong>${escapeHtml(profile.name)}</strong>
+        <strong>${escapeHtml(displayName)}</strong>
         <small><b>${escapeHtml(profile.rank)}</b><em>${escapeHtml(faction.shortName)}</em></small>
       </div>
     </section>
@@ -1656,10 +1663,10 @@ function renderInspector() {
 }
 
 function renderSpotlight() {
-  const canShowInBattle = state.screen === "battle" && !state.deckBuilderOpen && !state.codexOpen && !state.guideOpen && (canPlayerAct() || state.mulligan.active);
+  const canShowInBattle = state.screen === "battle" && !state.deckBuilderOpen && !state.codexOpen && !state.guideOpen;
   const canShowInCodex = state.codexOpen && !state.guideOpen && !state.deckBuilderOpen;
   const canShowInDeckBuilder = state.deckBuilderOpen && !state.codexOpen && !state.guideOpen;
-  if (!state.hoveredCardId || state.pending || state.draggingUid || (!canShowInBattle && !canShowInCodex && !canShowInDeckBuilder)) {
+  if (!state.hoveredCardId || state.draggingUid || (!canShowInBattle && !canShowInCodex && !canShowInDeckBuilder)) {
     clearSpotlight();
     return;
   }
@@ -2162,12 +2169,6 @@ function selectHandCard(uid, options = {}) {
   if (!canPlayerAct() || state.pending) {
     return;
   }
-  if (!canUseHandAction(battle, "player")) {
-    gameAudio.play("ui.error");
-    battle.log.push("本回合已经打出过一张手牌。你仍可执行一次场上单位行动，或点击【回合结束】。");
-    render();
-    return;
-  }
 
   const instance = battle.hands.player.find((item) => item.uid === uid);
   if (!instance) {
@@ -2175,6 +2176,14 @@ function selectHandCard(uid, options = {}) {
   }
 
   const card = getCard(instance.cardId);
+  if (!canUseHandAction(battle, "player", card)) {
+    gameAudio.play("ui.error");
+    battle.log.push(card.type === "unit"
+      ? "本回合已经部署过一张单位牌。你仍可打出一张战术牌、执行一次场上单位行动，或点击【回合结束】。"
+      : "本回合已经打出过一张战术牌。你仍可部署一张单位牌、执行一次场上单位行动，或点击【回合结束】。");
+    render();
+    return;
+  }
   state.selectedHandUid = uid;
   state.pending = null;
 
@@ -2294,7 +2303,7 @@ function playUnitFromHand(battle, side, uid, lineId, options = {}) {
   const sourceRect = getHandCardElement(side, uid)?.getBoundingClientRect();
   const [instance] = hand.splice(index, 1);
   const card = getCard(instance.cardId);
-  markHandActionUsed(battle, side);
+  markHandActionUsed(battle, side, card);
   instance.hidden = Boolean(options.hidden && canConcealCardForSide(battle, side, card));
   instance.deployedAtAction = battle.actionSerial;
   instance.actedAction = null;
@@ -2682,7 +2691,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
   }
 
   if (payload.handUid) {
-    markHandActionUsed(battle, payload.side);
+    markHandActionUsed(battle, payload.side, sourceCard);
     playTacticCardPresentation(payload.side, sourceCard);
     moveHandCardToGrave(battle, payload.side, payload.handUid);
     battle.log.push(`${getSideName(battle, payload.side)}打出 ${sourceCard.name}。`);
@@ -3767,6 +3776,7 @@ function surrenderBattle() {
   }
   if (isOnlineAuthoritativeBattle()) {
     sendOnlineBattleAction({ kind: "surrender" });
+    leaveOnlineRoom();
   }
   clearBattleTimers(battle);
   clearSpotlight();
@@ -3827,7 +3837,7 @@ function performAiHandPlay(battle, play) {
     return;
   }
 
-  markHandActionUsed(battle, "enemy");
+  markHandActionUsed(battle, "enemy", play.card);
   playTacticCardPresentation("enemy", play.card);
   moveHandCardToGrave(battle, "enemy", play.instance.uid);
   battle.log.push(`${getSideName(battle, "enemy")}打出 ${play.card.name}。`);
@@ -3900,7 +3910,7 @@ function chooseAiTurnAction(battle) {
   const difficulty = battle.aiDifficulty || "medium";
   const profile = getAiProfile(difficulty);
   const actions = getTurnActions(battle, "enemy");
-  const handPlay = !actions.handPlayed ? chooseAiPlay(battle) : null;
+  const handPlay = canAnyHandAction(battle, "enemy") ? chooseAiPlay(battle) : null;
   const boardPlay = !actions.hiddenActivated ? chooseAiBoardActivation(battle) : null;
 
   if (!handPlay && !boardPlay) {
@@ -3912,7 +3922,7 @@ function chooseAiTurnAction(battle) {
   if (!boardPlay) {
     return handPlay;
   }
-  if (actions.handPlayed) {
+  if (!canAnyHandAction(battle, "enemy")) {
     return getAiOptionScore(boardPlay) >= profile.hiddenMinScore ? boardPlay : null;
   }
   if (actions.hiddenActivated) {
@@ -3929,12 +3939,10 @@ function chooseAiTurnAction(battle) {
 
 function chooseAiPlay(battle) {
   const difficulty = battle.aiDifficulty || "medium";
-  if (!canUseHandAction(battle, "enemy")) {
-    return null;
-  }
   const options = battle.hands.enemy
     .map((instance) => createAiPlayOption(battle, instance, difficulty))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((option) => canUseHandAction(battle, "enemy", option.card));
 
   if (!options.length) {
     return null;
@@ -4901,7 +4909,7 @@ function resolveNoTargetHandEffect(battle, side, uid, card) {
   if (!spendIntelForAbility(battle, side, card.ability, card)) {
     return "failed";
   }
-  markHandActionUsed(battle, side);
+  markHandActionUsed(battle, side, card);
   playTacticCardPresentation(side, card);
   moveHandCardToGrave(battle, side, uid);
   battle.log.push(`${getSideName(battle, side)}打出 ${card.name}。`);
@@ -5053,6 +5061,13 @@ function chooseSupplyCard(uid) {
   const selected = pending.drawn.find((instance) => instance.uid === uid);
   if (!selected) {
     gameAudio.play("ui.error");
+    return;
+  }
+  if (isOnlineAuthoritativeBattle()) {
+    sendOnlineBattleAction({
+      kind: "choose_supply",
+      selectedUids: [selected.uid],
+    });
     return;
   }
   completeSupplyDraw(battle, pending.side, getCard(pending.cardId), pending.drawn, [selected]);
@@ -5846,7 +5861,7 @@ function opponentHasExposedHighAir(battle, side) {
 
 function isSelectedUnitAllowedOn(side, lineId) {
   const battle = state.battle;
-  if (!battle || !state.selectedHandUid || side !== "player" || !canPlayerAct() || !canUseHandAction(battle, "player")) {
+  if (!battle || !state.selectedHandUid || side !== "player" || !canPlayerAct()) {
     return false;
   }
   const instance = battle.hands.player.find((item) => item.uid === state.selectedHandUid);
@@ -5854,6 +5869,9 @@ function isSelectedUnitAllowedOn(side, lineId) {
     return false;
   }
   const card = getCard(instance.cardId);
+  if (!canUseHandAction(battle, "player", card)) {
+    return false;
+  }
   return card.type === "unit" && getDeployLines(card).includes(lineId);
 }
 
@@ -5889,12 +5907,26 @@ function canPlayerEndTurn() {
   );
 }
 
-function canUseHandAction(battle, side) {
-  return !getTurnActions(battle, side).handPlayed;
+function canAnyHandAction(battle, side) {
+  return (battle?.hands?.[side] || []).some((instance) => canUseHandAction(battle, side, getCard(instance.cardId)));
 }
 
-function markHandActionUsed(battle, side) {
-  getTurnActions(battle, side).handPlayed = true;
+function canUseHandAction(battle, side, card = null) {
+  const actions = getTurnActions(battle, side);
+  if (card && card.type !== "unit") {
+    return !actions.tacticPlayed;
+  }
+  return !(actions.unitPlayed || actions.handPlayed);
+}
+
+function markHandActionUsed(battle, side, card = null) {
+  const actions = getTurnActions(battle, side);
+  if (card && card.type !== "unit") {
+    actions.tacticPlayed = true;
+    return;
+  }
+  actions.unitPlayed = true;
+  actions.handPlayed = true;
 }
 
 function canUseHiddenAction(battle, side) {
@@ -6374,6 +6406,7 @@ function enterOnlineAuthoritativeBattle(snapshot) {
     renderOnlinePanel();
     return;
   }
+  state.online.lastEffectSerial = 0;
   state.battle = hydrateOnlineBattle(snapshot.battle);
   state.screen = "battle";
   state.selectedHandUid = null;
@@ -6405,11 +6438,16 @@ function applyOnlineBattleSnapshot(snapshot) {
     renderOnlinePanel();
     return;
   }
-  state.battle = hydrateOnlineBattle(snapshot.battle);
+  const previousBattle = state.battle;
+  const previousMulliganActive = state.mulligan.active;
+  const nextBattle = hydrateOnlineBattle(snapshot.battle);
+  applyOnlineTurnTransition(previousBattle, nextBattle, previousMulliganActive, Boolean(snapshot.mulligan?.active));
+  state.battle = nextBattle;
   state.pending = snapshot.pending || null;
   state.mulligan = snapshot.mulligan || { active: false, selectedUids: [] };
   state.selectedHandUid = null;
   render();
+  playOnlineBattleEffects(nextBattle.effects || []);
 }
 
 function isOnlineAuthoritativeBattle() {
@@ -6424,6 +6462,64 @@ function sendOnlineBattleAction(action) {
     type: "battle_action",
     action,
   });
+}
+
+function applyOnlineTurnTransition(previousBattle, nextBattle, previousMulliganActive, nextMulliganActive) {
+  if (!previousBattle || previousBattle.mode !== "online-authoritative" || nextBattle.phase !== "battle" || nextMulliganActive) {
+    return;
+  }
+  const opening = Boolean(previousMulliganActive && !nextMulliganActive);
+  const changedTurn = previousBattle.activeSide && previousBattle.activeSide !== nextBattle.activeSide;
+  if (!opening && !changedTurn) {
+    return;
+  }
+  nextBattle.turnTransition = {
+    fromSide: opening ? null : previousBattle.activeSide,
+    toSide: nextBattle.activeSide,
+    opening,
+    serial: nextBattle.actionSerial,
+  };
+  nextBattle.turnTimer = window.setTimeout(() => {
+    if (state.battle !== nextBattle) {
+      return;
+    }
+    nextBattle.turnTransition = null;
+    render();
+  }, TURN_HANDOFF_MS);
+}
+
+function playOnlineBattleEffects(effects = []) {
+  if (!Array.isArray(effects) || !effects.length || state.screen !== "battle") {
+    return;
+  }
+  const freshEffects = effects
+    .filter((effect) => Number(effect.serial) > (state.online.lastEffectSerial || 0))
+    .sort((left, right) => Number(left.serial || 0) - Number(right.serial || 0));
+  if (!freshEffects.length) {
+    return;
+  }
+  freshEffects.forEach((effect) => {
+    const sourceCard = getCard(effect.sourceCardId) || getCard(effect.targetCardId) || getCard("us_marine_rifle");
+    if (effect.type === "damage") {
+      const targetRef = findBoardInstance(state.battle, effect.targetSide, effect.targetUid) || {
+        side: effect.targetSide,
+        lineId: effect.lineId || "frontline",
+        uid: effect.targetUid,
+        instance: { uid: effect.targetUid, cardId: effect.targetCardId, damage: 0 },
+      };
+      playCombatVfx({
+        attackerSide: effect.attackerSide || "player",
+        sourceCard,
+        targetRef,
+        amount: effect.amount || 1,
+      });
+    } else if (effect.type === "destroyed") {
+      playDestroyedVfx(effect.targetSide, effect.targetUid);
+      const point = getElementCenter(getBoardCardElement(effect.targetSide, effect.targetUid)) || getFallbackVfxPoint(effect.targetSide, effect.lineId || "frontline");
+      playImpactVfx(point, "destroyed", 4);
+    }
+  });
+  state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, ...freshEffects.map((effect) => Number(effect.serial || 0)));
 }
 
 function leaveOnlineRoom() {
@@ -6441,6 +6537,7 @@ function leaveOnlineRoom() {
     matchReady: false,
     match: null,
     battleSnapshot: null,
+    lastEffectSerial: 0,
     lastEvent: "已离开线上房间。",
   });
   renderOnlinePanel();
@@ -6467,8 +6564,29 @@ function ensureOnlineSocket() {
   }
   if (existing?.readyState === WebSocket.CONNECTING) {
     return new Promise((resolve) => {
-      existing.addEventListener("open", () => resolve(existing), { once: true });
-      existing.addEventListener("error", () => resolve(null), { once: true });
+      let settled = false;
+      const finish = (socket) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timer);
+        resolve(socket);
+      };
+      const timer = window.setTimeout(() => {
+        existing.close();
+        if (state.online.socket === existing) {
+          state.online.socket = null;
+          state.online.status = "error";
+          state.online.error = "连接线上房间服务超时，请重新尝试。";
+          state.online.lastEvent = "";
+          renderOnlinePanel();
+        }
+        finish(null);
+      }, ONLINE_SOCKET_TIMEOUT_MS);
+      existing.addEventListener("open", () => finish(existing), { once: true });
+      existing.addEventListener("error", () => finish(null), { once: true });
+      existing.addEventListener("close", () => finish(null), { once: true });
     });
   }
 
@@ -6480,13 +6598,33 @@ function ensureOnlineSocket() {
   return new Promise((resolve) => {
     const socket = new WebSocket(getOnlineSocketUrl());
     state.online.socket = socket;
+    let settled = false;
+    const finish = (value) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      window.clearTimeout(connectTimer);
+      resolve(value);
+    };
+    const connectTimer = window.setTimeout(() => {
+      if (state.online.socket === socket) {
+        socket.close();
+        state.online.socket = null;
+        state.online.status = "error";
+        state.online.error = "连接线上房间服务超时，请检查网络后重试。";
+        state.online.lastEvent = "";
+        renderOnlinePanel();
+      }
+      finish(null);
+    }, ONLINE_SOCKET_TIMEOUT_MS);
 
     socket.addEventListener("open", () => {
       state.online.status = "connected";
       state.online.error = "";
       state.online.lastEvent = "已连接线上房间服务。";
       renderOnlinePanel();
-      resolve(socket);
+      finish(socket);
     }, { once: true });
 
     socket.addEventListener("message", (event) => {
@@ -6498,7 +6636,7 @@ function ensureOnlineSocket() {
       state.online.error = "无法连接线上房间服务。确认当前页面由 Node 服务启动，而不是直接打开 HTML 文件。";
       state.online.lastEvent = "";
       renderOnlinePanel();
-      resolve(null);
+      finish(null);
     }, { once: true });
 
     socket.addEventListener("close", () => {

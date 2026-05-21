@@ -27,6 +27,8 @@
 修改前优先阅读：
 
 - `README.md`：项目入口、运行方式和结构说明。
+- `GAME_MECHANICS.md`：游戏通用机制真源。涉及机制、卡牌效果、联机裁决和回合体验时必须优先参考并同步更新。
+- `PLAYTEST_DEBUG_LOG.md`：真实对局反馈、根因、修复和验证记录。排查联机或机制问题时必须更新。
 - `card_design_method.md`：卡牌设计方法、数值档位、文本模板和平衡检查表。
 - `online_1v1_roadmap.md`：线上 1v1 对局的架构、协议草案和推进阶段。
 - `assets/card-design/usa-modern-card-elements.md`：卡牌视觉元素说明。
