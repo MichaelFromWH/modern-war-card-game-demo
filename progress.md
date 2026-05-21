@@ -55,3 +55,7 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Confirmed no local Render/Railway/Fly CLI is installed.
   - Confirmed Render official docs support Web Services with WebSocket connections and Blueprint deployment from `render.yaml`.
   - Added a Deploy to Render button to `README.md` for the repository Blueprint flow.
+  - Installed Render CLI v2.17.0 and authenticated it via device authorization.
+  - Set default Render workspace to `Michael Woo` (`tea-d87a1ul7vvec738r6d60`).
+  - Initial Blueprint validation failed with `need_payment_info` because omitted `plan` defaults to a paid `starter` service; updated `render.yaml` to use `plan: free`.
+  - Direct `render services create --plan free ...` also returned HTTP 402 `Payment information is required`; deployment is blocked until a payment method is added at Render Billing, even though the service is configured as a Free instance.

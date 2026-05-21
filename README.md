@@ -70,6 +70,7 @@ AGENTS.md                   AI 协作者项目规约
 buildCommand: npm install
 startCommand: npm start
 healthCheckPath: /healthz
+plan: free
 ```
 
 部署完成后，用 Render 提供的 `onrender.com` 地址打开游戏；可访问 `/healthz` 检查服务健康状态。

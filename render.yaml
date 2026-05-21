@@ -2,6 +2,7 @@ services:
   - type: web
     name: modern-war-card-game-demo
     runtime: node
+    plan: free
     repo: https://github.com/MichaelFromWH/modern-war-card-game-demo
     branch: main
     buildCommand: npm install
