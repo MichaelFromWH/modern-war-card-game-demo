@@ -1586,7 +1586,7 @@ function renderInspector() {
           <i>命 ${getCardHealth(card)}</i>
           <i class="is-value-star">★ ${getCardTargetValue(card)}</i>
         </div>
-        <small>【${escapeHtml(getCardUnitAttribute(card))}】${escapeHtml(getCardAttributeNote(card))}</small>
+        <small>${escapeHtml(getCardAttributeNote(card).replace(/\n+/g, " "))}</small>
       ` : ""}
       <p>${escapeHtml(card.effect)}</p>
       <div>
@@ -1609,13 +1609,14 @@ function renderSpotlight() {
     return;
   }
   const card = getCard(state.hoveredCardId);
+  const hasRuleAside = Boolean(card.ruleNote && String(card.ruleNote).trim());
   refs.spotlight.hidden = false;
   refs.spotlight.classList.toggle("is-overlay-preview", canShowInDeckBuilder);
-  refs.spotlight.classList.toggle("has-rule-aside", card.type === "unit");
+  refs.spotlight.classList.toggle("has-rule-aside", hasRuleAside);
   refs.spotlight.innerHTML = `
     <div class="card-spotlight__stage">
       ${renderPreviewCard(card)}
-      ${card.type === "unit" ? renderCardRuleAside(card) : ""}
+      ${hasRuleAside ? renderCardRuleAside(card) : ""}
     </div>
   `;
   if (canShowInDeckBuilder) {
@@ -1626,19 +1627,11 @@ function renderSpotlight() {
 }
 
 function renderCardRuleAside(card) {
-  const bullets = getCardRuleBullets(card);
+  const ruleNote = String(card.ruleNote || "").trim();
   return `
-    <aside class="card-rule-aside" aria-label="规则说明">
-      <span>规则说明</span>
-      ${card.type === "unit" ? `
-        <div class="card-rule-aside__stats">
-          <i><b>战</b>${getCardBaseAttack(card)}</i>
-          <i><b>命</b>${getCardHealth(card)}</i>
-          <i class="is-value-star"><b>★</b>${getCardTargetValue(card)}</i>
-        </div>
-      ` : ""}
-      <p>${escapeHtml(getCardAttributeNote(card))}</p>
-      ${bullets.length ? `<ul>${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+    <aside class="card-rule-aside" aria-label="侧边注释">
+      <span>侧边注释</span>
+      <p>${escapeHtml(ruleNote).replace(/\n/g, "<br>")}</p>
     </aside>
   `;
 }
