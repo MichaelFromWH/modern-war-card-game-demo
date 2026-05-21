@@ -100,3 +100,10 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Continue parity work between the simplified server engine and the richer local AI engine: interception windows, frontline contact chains, detailed VFX timing, and every edge case from the local rule implementation.
   - Add reconnection/rejoin support so a refreshed browser can resume the same side in an active room.
   - Add versioned asset filenames or a manifest if long-lived asset cache needs precise invalidation in future releases.
+- V0.5 / 20260521 DOCX rule and card sync:
+  - Parsed `/Users/michaelwu/Documents/战区卡牌游戏项目/战争卡牌游戏/现代战争三线卡牌 V0.5 机制与全卡牌内容-20260521docx.docx`; the document body labels itself `V0.4.3`, while the filename labels the package `V0.5`.
+  - Added `DOCX_20260521_CARD_PATCHES` in `src/game-data.js` to override the active card library with DOCX attack, health, target value, card-face tags, rule notes, effect text, rarity mapping, and key server-used ability parameters.
+  - Verified all 45 DOCX cards now match the running card library on name, display tags, attack, health, target value, side note, and effect text. Report: `output/card-doc-compare/comparison-after-update.md`.
+  - Updated the online authoritative engine with defense interception, high-air forced exposure, frontline contact/ambush, frontline support screening, and breakthrough targets.
+  - Updated README/index/guide/AGENTS copy from V0.8 wording to V0.5 / 20260521 wording; deck exhaustion now correctly says it does not end the game.
+  - Verification passed: `node --check` for `src/game-data.js`, `src/main.js`, `src/online-battle-engine.js`; direct Node smoke tests for high-air, breakthrough, interception, and frontline contact; `develop-web-game` Playwright smoke test on `http://127.0.0.1:3105` with no console error files and screenshot reviewed.

@@ -3849,6 +3849,572 @@ Object.entries(LATEST_XLSX_CARD_TEXT).forEach(([cardId, patch]) => {
   Object.assign(card, patch);
 });
 
+const RARITY_BY_TARGET_VALUE = {
+  1: "common",
+  2: "uncommon",
+  3: "rare",
+  4: "epic",
+  5: "legendary"
+};
+
+function unitPatch(config) {
+  return {
+    ...config,
+    power: config.health,
+    rarity: RARITY_BY_TARGET_VALUE[config.targetValue] || config.rarity || "common"
+  };
+}
+
+const DOCX_20260521_CARD_PATCHES = {
+  "us_javelin_team": unitPatch({
+    "attack": 2,
+    "health": 3,
+    "targetValue": 2,
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "【步兵】：可以攻击前线区地面单位。\n【前线伏击】：隐蔽部署后因前线接敌被动打击时，伤害+1。",
+    "effect": "【反甲伏击】：若目标为【装甲】，伤害+2。\n【高射机枪】：可对低空目标造成 1 点伤害。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 1,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 2 },
+        { "tag": "装甲", "amount": 4 }
+      ],
+      "sourceExposes": true
+    }
+  }),
+  "us_stinger_team": unitPatch({
+    "attack": 1,
+    "health": 3,
+    "targetValue": 2,
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "【步兵】：可以攻击前线区地面单位。",
+    "effect": "【前线防空】：若目标为低空单位，伤害+3。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "requiresAnyTag": LOW_AIR_TAGS,
+      "sourceExposes": true
+    }
+  }),
+  "us_marine_rifle": unitPatch({
+    "attack": 2,
+    "health": 4,
+    "targetValue": 2,
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "【步兵】：可以攻击前线区地面单位。",
+    "effect": "【地面压制】：若目标为【步兵】，伤害+1。\n【陆战协同】：若己方前线有【装甲】，伤害 +1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 3 }],
+      "ownTagBonus": { "line": "frontline", "tag": "装甲", "amount": 1 },
+      "sourceExposes": true
+    }
+  }),
+  "us_rangers_target": unitPatch({
+    "attack": 0,
+    "health": 3,
+    "targetValue": 1,
+    "displayTags": ["侦察兵"],
+    "unitAttribute": "侦察兵",
+    "ruleNote": "【侦察兵】：无法攻击。被作为目标时，算作步兵。\n【渗透作战】：本单位不会因前线接敌而暴露。",
+    "effect": "【坐标引导】：选择一个隐蔽目标，使其暴露。若己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击；若没有可用火力单位，抽 1 张牌。"
+  }),
+  "us_bradley": unitPatch({
+    "attack": 3,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。",
+    "effect": "【伴随火力】：若目标为【步兵】，伤害+1。\n【高射机枪】：可对低空目标造成 2 点伤害。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 4 },
+        { "tag": "装甲", "amount": 3 }
+      ],
+      "sourceExposes": true
+    }
+  }),
+  "us_stryker": unitPatch({
+    "attack": 2,
+    "health": 4,
+    "targetValue": 2,
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。",
+    "effect": "【快速突击】：若目标为【步兵】，伤害+1。\n【高射机枪】：可对低空目标造成 1 点伤害。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 1,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 3 },
+        { "tag": "装甲", "amount": 2 }
+      ],
+      "sourceExposes": true
+    }
+  }),
+  "us_m1a2": unitPatch({
+    "attack": 4,
+    "health": 7,
+    "targetValue": 5,
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。",
+    "effect": "【装甲突击】：若目标为【装甲】，伤害+1。\n【高射机枪】：可对低空目标造成 1 点伤害。\n【协同推进】：若己方前线有【步兵】，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 1,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 4 },
+        { "tag": "装甲", "amount": 5 }
+      ],
+      "ownTagBonus": { "line": "frontline", "tag": "步兵", "amount": 1 },
+      "sourceExposes": true
+    }
+  }),
+  "us_apache": unitPatch({
+    "attack": 3,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["直升机", "低空"],
+    "unitAttribute": "直升机、低空",
+    "ruleNote": "【直升机】：可以攻击前线区地面和低空单位。\n【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。",
+    "effect": "【空中打击】：若目标为【装甲】、【直升机】，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 3,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "装甲", "amount": 5 },
+        { "tag": "直升机", "amount": 5 }
+      ],
+      "sourceExposes": true
+    }
+  }),
+  "us_reaper": unitPatch({
+    "attack": 0,
+    "health": 2,
+    "targetValue": 3,
+    "displayTags": ["无人机", "低空"],
+    "unitAttribute": "无人机、低空",
+    "ruleNote": "【无人机】：无法攻击。",
+    "effect": "【无人侦扫】：选择一个隐蔽目标，使其暴露。\n【火力校射】：若目标为地面单位，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击，本次伤害 +1；若没有可用火力单位，抽 1 张牌。"
+  }),
+  "us_avenger": unitPatch({
+    "attack": 2,
+    "health": 3,
+    "targetValue": 2,
+    "displayTags": ["伴随防空"],
+    "unitAttribute": "伴随防空",
+    "ruleNote": "【伴随防空】：可以攻击所有战线低空和高空单位。",
+    "effect": "【近程拦截】：若目标为低空单位，伤害+1。\n【伴随防空】：敌方【巡航导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": LOW_OR_HIGH_AIR_TAGS,
+      "bonuses": [
+        { "tag": "直升机", "amount": 3 },
+        { "tag": "无人机", "amount": 3 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 0,
+      "interceptCancelsDamage": true,
+      "interceptTags": ["巡航导弹"],
+      "protectLines": ["frontline", "support"],
+      "sourceExposes": true
+    }
+  }),
+  "us_patriot": unitPatch({
+    "attack": 5,
+    "health": 3,
+    "targetValue": 5,
+    "displayTags": ["重型防空"],
+    "unitAttribute": "重型防空",
+    "ruleNote": "【重型防空】：可以攻击所有战线高空单位。",
+    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "requiresAnyTag": HIGH_AIR_TAGS,
+      "sourceExposes": true
+    }
+  }),
+  "us_himars": unitPatch({
+    "attack": 3,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["火箭炮"],
+    "unitAttribute": "火箭炮"
+  }),
+  "us_m109": unitPatch({
+    "attack": 3,
+    "health": 3,
+    "targetValue": 3,
+    "displayTags": ["榴弹炮"],
+    "unitAttribute": "榴弹炮"
+  }),
+  "us_tomahawk": unitPatch({
+    "attack": 4,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["巡航导弹"],
+    "unitAttribute": "巡航导弹"
+  }),
+  "us_atacms": unitPatch({
+    "attack": 5,
+    "health": 3,
+    "targetValue": 5,
+    "displayTags": ["弹道导弹"],
+    "unitAttribute": "弹道导弹"
+  }),
+  "us_b2": unitPatch({
+    "attack": 5,
+    "health": 5,
+    "targetValue": 5,
+    "displayTags": ["轰炸机", "高空"],
+    "unitAttribute": "轰炸机、高空"
+  }),
+  "us_f35": unitPatch({
+    "attack": 4,
+    "health": 6,
+    "targetValue": 5,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空"
+  }),
+  "us_f35a_sead": unitPatch({
+    "attack": 2,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": [...AIR_DEFENSE_TAGS, ...LOW_OR_HIGH_AIR_TAGS],
+      "preferredTargetProfile": {
+        "requiresAnyTag": AIR_DEFENSE_TAGS,
+        "requiresExposed": false,
+        "canRevealHiddenForTags": AIR_DEFENSE_TAGS
+      },
+      "fallbackTargetProfile": {
+        "requiresAnyTag": LOW_OR_HIGH_AIR_TAGS,
+        "requiresExposed": false,
+        "canRevealHiddenForTags": []
+      },
+      "canRevealHiddenForTags": AIR_DEFENSE_TAGS,
+      "bonuses": [
+        { "tag": "伴随防空", "amount": 5 },
+        { "tag": "重型防空", "amount": 5 },
+        { "tag": "直升机", "amount": 3 },
+        { "tag": "无人机", "amount": 3 },
+        { "tag": "战斗机", "amount": 3 },
+        { "tag": "轰炸机", "amount": 3 }
+      ],
+      "ignoreInterceptionForTargetTags": AIR_DEFENSE_TAGS,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  }),
+  "ru_kornet_team": unitPatch({
+    "attack": 2,
+    "health": 3,
+    "targetValue": 2,
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [{ "tag": "装甲", "amount": 4 }],
+      "sourceExposes": true
+    }
+  }),
+  "ru_motostrelki": unitPatch({
+    "attack": 2,
+    "health": 4,
+    "targetValue": 2,
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 3 }],
+      "ownAnyTagBonus": { "line": "support", "tags": ["榴弹炮", "火箭炮"], "amount": 1 },
+      "sourceExposes": true
+    }
+  }),
+  "ru_spetsnaz_target": unitPatch({
+    "attack": 0,
+    "health": 3,
+    "targetValue": 1,
+    "displayTags": ["侦察兵"],
+    "unitAttribute": "侦察兵",
+    "ruleNote": "【侦察兵】：无法攻击。\n【渗透作战】：本单位不会因前线接敌而暴露。"
+  }),
+  "ru_bmp3m": unitPatch({
+    "attack": 3,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 4 },
+        { "tag": "装甲", "amount": 3 }
+      ],
+      "sourceExposes": true
+    }
+  }),
+  "ru_bmpt": unitPatch({
+    "attack": 2,
+    "health": 5,
+    "targetValue": 3,
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [{ "tag": "步兵", "amount": 3 }],
+      "sourceExposes": true
+    }
+  }),
+  "ru_t90m": unitPatch({
+    "attack": 4,
+    "health": 7,
+    "targetValue": 5,
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 1,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "步兵", "amount": 4 },
+        { "tag": "装甲", "amount": 5 }
+      ],
+      "ownTagBonus": { "line": "frontline", "tag": "步兵", "amount": 1 },
+      "sourceExposes": true
+    }
+  }),
+  "ru_ka52_unit": unitPatch({
+    "attack": 3,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["直升机", "低空"],
+    "unitAttribute": "直升机、低空",
+    "effect": "【空中打击】：若目标为【装甲】、【直升机】，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 3,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [
+        { "tag": "装甲", "amount": 5 },
+        { "tag": "直升机", "amount": 5 }
+      ],
+      "sourceExposes": true
+    }
+  }),
+  "ru_orlan10": unitPatch({
+    "attack": 0,
+    "health": 2,
+    "targetValue": 2,
+    "displayTags": ["无人机", "低空"],
+    "unitAttribute": "无人机、低空"
+  }),
+  "ru_pantsir": unitPatch({
+    "attack": 2,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["伴随防空"],
+    "unitAttribute": "伴随防空",
+    "effect": "【野战防空】：若目标为低空单位，伤害+1。\n【伴随拦截】：敌方【巡航导弹】和【SEAD战斗机】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": LOW_OR_HIGH_AIR_TAGS,
+      "bonuses": [
+        { "tag": "直升机", "amount": 3 },
+        { "tag": "无人机", "amount": 3 }
+      ],
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 0,
+      "interceptCancelsDamage": true,
+      "interceptTags": ["巡航导弹", "SEAD导弹"],
+      "protectLines": ["frontline", "support"],
+      "sourceExposes": true
+    }
+  }),
+  "ru_buk_m3": unitPatch({
+    "attack": 5,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["重型防空"],
+    "unitAttribute": "重型防空",
+    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "requiresAnyTag": HIGH_AIR_TAGS,
+      "sourceExposes": true
+    }
+  }),
+  "ru_tornado_s": unitPatch({
+    "attack": 3,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["火箭炮"],
+    "unitAttribute": "火箭炮"
+  }),
+  "ru_2s19": unitPatch({
+    "attack": 3,
+    "health": 3,
+    "targetValue": 3,
+    "displayTags": ["榴弹炮"],
+    "unitAttribute": "榴弹炮"
+  }),
+  "ru_kalibr": unitPatch({
+    "attack": 4,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["巡航导弹"],
+    "unitAttribute": "巡航导弹"
+  }),
+  "ru_iskander": unitPatch({
+    "attack": 5,
+    "health": 3,
+    "targetValue": 5,
+    "displayTags": ["弹道导弹"],
+    "unitAttribute": "弹道导弹"
+  }),
+  "ru_su34": unitPatch({
+    "attack": 5,
+    "health": 5,
+    "targetValue": 5,
+    "displayTags": ["轰炸机", "高空"],
+    "unitAttribute": "轰炸机、高空",
+    "tags": ["轰炸机"],
+    "effect": "【对地空袭】：选择最多两个目标造成伤害，主目标 5 点，第二目标 2 点。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "secondaryAmount": 2,
+      "sameLineOnly": true,
+      "requiresAnyTag": SURFACE_TARGET_TAGS,
+      "maxTargets": 2,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  }),
+  "ru_su35": unitPatch({
+    "attack": 4,
+    "health": 6,
+    "targetValue": 5,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空"
+  }),
+  "ru_su57_sead": unitPatch({
+    "attack": 2,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "requiresAnyTag": [...AIR_DEFENSE_TAGS, ...LOW_OR_HIGH_AIR_TAGS],
+      "preferredTargetProfile": {
+        "requiresAnyTag": AIR_DEFENSE_TAGS,
+        "requiresExposed": false,
+        "canRevealHiddenForTags": AIR_DEFENSE_TAGS
+      },
+      "fallbackTargetProfile": {
+        "requiresAnyTag": LOW_OR_HIGH_AIR_TAGS,
+        "requiresExposed": false,
+        "canRevealHiddenForTags": []
+      },
+      "canRevealHiddenForTags": AIR_DEFENSE_TAGS,
+      "bonuses": [
+        { "tag": "伴随防空", "amount": 5 },
+        { "tag": "重型防空", "amount": 5 },
+        { "tag": "直升机", "amount": 3 },
+        { "tag": "无人机", "amount": 3 },
+        { "tag": "战斗机", "amount": 3 },
+        { "tag": "轰炸机", "amount": 3 }
+      ],
+      "ignoreInterceptionForTargetTags": AIR_DEFENSE_TAGS,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  })
+};
+
+Object.entries(DOCX_20260521_CARD_PATCHES).forEach(([cardId, patch]) => {
+  const card = CARD_LIBRARY[cardId];
+  if (!card) {
+    return;
+  }
+  Object.assign(card, patch);
+});
+
+[
+  "us_electronic_suppression",
+  "us_emergency_supply",
+  "us_smoke_screen",
+  "us_battlefield_repair",
+  "us_reposition",
+  "ru_ammo_supply",
+  "ru_electronic_suppression",
+  "ru_smoke_decoys",
+  "ru_battlefield_repair",
+  "ru_reposition"
+].forEach((cardId) => {
+  const card = CARD_LIBRARY[cardId];
+  if (card) {
+    card.displayTags = ["战术"];
+  }
+});
+
 const V07_ACTIVE_CARD_IDS = new Set([
   "us_marine_rifle",
   "us_javelin_team",

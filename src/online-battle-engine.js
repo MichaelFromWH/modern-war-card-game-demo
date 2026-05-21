@@ -43,7 +43,7 @@ export function createAuthoritativeBattle({ roomCode, match, players }) {
     },
     log: [
       "服务器权威对局已创建：洗牌、发牌、调度、部署、目标和回合移交均由服务器统一裁决。",
-      "当前权威版先覆盖核心回合与主要技能；复杂演出仍由客户端本地表现。",
+      "当前权威版覆盖核心回合、主要技能、防空拦截、高空暴露、前线接敌和前线突破；复杂演出仍由客户端本地表现。",
     ],
     matchWinner: null,
     supplyExhausted: false,
@@ -223,8 +223,9 @@ function applyPlayUnit(battle, side, action) {
     return { ok: false, error: "该单位不能部署到这个战线。" };
   }
 
+  const concealedDeploy = Boolean(action.hidden);
   battle.hands[side].splice(handIndex, 1);
-  instance.hidden = Boolean(action.hidden);
+  instance.hidden = concealedDeploy;
   instance.exposed = !instance.hidden;
   instance.deployedAtAction = battle.actionSerial;
   instance.actedAction = null;
@@ -234,7 +235,11 @@ function applyPlayUnit(battle, side, action) {
     ? `${getSideName(battle, side)}在${getLineName(lineId)}隐蔽部署了一个单位。`
     : `${getSideName(battle, side)}部署 ${card.name} 到${getLineName(lineId)}。`);
 
-  if (!instance.hidden) {
+  const sourceRef = { side, lineId, uid: instance.uid, instance };
+  resolveFrontlineContact(battle, side, sourceRef);
+  enforceHighAirExposure(battle);
+
+  if (!concealedDeploy && !instance.hidden && instance.actedAction !== battle.actionSerial && findBoardInstance(battle, side, instance.uid)) {
     maybeOpenPendingOrResolve(battle, side, instance.uid, card.ability, "boardEffect");
   }
   resolveBattleEndIfReady(battle);
@@ -405,7 +410,7 @@ function maybeOpenPendingOrResolve(battle, side, sourceUid, ability, kind) {
   }
   const source = findBoardInstance(battle, side, sourceUid);
   const sourceCard = source ? getCard(source.instance.cardId) : null;
-  const targets = getValidEffectTargets(battle, side, ability, sourceCard, { sourceRef: source });
+  const targets = getValidEffectTargets(battle, side, ability, sourceCard, { sourceRef: source, asActingSource: true });
   if (!targets.length) {
     if (ability.kind === "supply") {
       resolveNoTargetAbility(battle, side, ability, sourceCard);
@@ -436,6 +441,12 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
   const ability = pending.ability || {};
   const sourceRef = pending.sourceUid ? findBoardInstance(battle, side, pending.sourceUid) : null;
 
+  if (targetRef.breakthrough && sourceRef) {
+    resolveBreakthroughOnTarget(battle, side, sourceRef, ability, targetRef);
+    cleanupDestroyed(battle, side);
+    return;
+  }
+
   if (ability.sourceExposes && sourceRef) {
     sourceRef.instance.hidden = false;
     sourceRef.instance.exposed = true;
@@ -445,7 +456,7 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
     if (targetRef.instance.hidden && canRevealHiddenTargetForAbility(ability, targetRef.instance)) {
       exposeTarget(battle, targetRef, sourceCard.name);
     }
-    dealDamage(battle, side, targetRef, getDamageAmount(battle, side, ability, targetRef, sourceCard), sourceCard);
+    dealDamage(battle, side, targetRef, getDamageAmount(battle, side, ability, targetRef, sourceCard), sourceCard, ability);
     cleanupDestroyed(battle, side);
     return;
   }
@@ -456,7 +467,7 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
       const amount = index === 0
         ? getDamageAmount(battle, side, ability, item, sourceCard)
         : getSecondaryDamageAmount(ability, item);
-      dealDamage(battle, side, item, amount, sourceCard);
+      dealDamage(battle, side, item, amount, sourceCard, ability);
     });
     cleanupDestroyed(battle, side);
     return;
@@ -471,7 +482,7 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
       const callerCard = getCard(caller.instance.cardId);
       const fire = callerCard.fire || { amount: 2 };
       const amount = getDamageAmount(battle, side, fire, targetRef, callerCard) + (ability.calledFireBonus || 0);
-      dealDamage(battle, side, targetRef, amount, callerCard);
+      dealDamage(battle, side, targetRef, amount, callerCard, fire);
       battle.log.push(`${sourceCard.name} 引导 ${callerCard.name} 校射。`);
       cleanupDestroyed(battle, side);
     } else if (ability.noCallerFallback === "draw") {
@@ -487,6 +498,7 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
     targetRef.instance.shield = true;
     applyLineRepair(targetRef, ability);
     battle.log.push(`${sourceCard.name} 令 ${getCard(targetRef.instance.cardId).name} 重新进入隐蔽。`);
+    enforceHighAirExposure(battle);
     return;
   }
 
@@ -532,12 +544,16 @@ function getValidEffectTargets(battle, side, ability = {}, sourceCard = null, op
       }
     });
   });
-  return targets;
+  return withBreakthroughTargets(battle, side, ability, sourceCard, targets, options);
 }
 
-function canTargetForAbility(battle, side, targetRef, ability = {}, sourceCard = null) {
+function canTargetForAbility(battle, side, targetRef, ability = {}, sourceCard = null, options = {}) {
   const targetCard = getCard(targetRef.instance.cardId);
   if (!targetCard || getCurrentPower(targetRef.instance) <= 0) {
+    return false;
+  }
+
+  if (isBlockedByEnemyFrontlineScreen(battle, side, targetRef, ability, { sourceRef: options.sourceRef, sourceCard, ignoreFrontlineSupportBlock: options.ignoreFrontlineSupportBlock })) {
     return false;
   }
 
@@ -587,6 +603,100 @@ function collectTargetsByProfile(battle, side, profile = {}) {
     });
 }
 
+function withBreakthroughTargets(battle, side, ability, sourceCard, targets, options = {}) {
+  const sourceRef = options.sourceRef;
+  if (!canSourceUseBreakthrough(battle, side, sourceRef, { ignoreActed: Boolean(options.asActingSource) })) {
+    return targets;
+  }
+  const opponent = getOpponentSide(side);
+  const hiddenSupportTargets = getAllBoardTargets(battle, opponent)
+    .filter((target) => target.lineId === "support" && target.instance.hidden && getCurrentPower(target.instance) > 0)
+    .map((target) => ({ ...target, breakthrough: true }));
+  if (!hiddenSupportTargets.length) {
+    return targets;
+  }
+  const existingIds = new Set(targets.map((target) => target.uid));
+  return [
+    ...targets.map((target) => hiddenSupportTargets.some((item) => item.uid === target.uid) ? { ...target, breakthrough: true } : target),
+    ...hiddenSupportTargets.filter((target) => !existingIds.has(target.uid))
+  ];
+}
+
+function canSourceUseBreakthrough(battle, side, sourceRef, options = {}) {
+  if (!sourceRef?.instance || sourceRef.lineId !== "frontline" || getCurrentPower(sourceRef.instance) <= 0) {
+    return false;
+  }
+  const actions = getTurnActions(battle, side);
+  if (!actions.enemyFrontlineEmptyAtStart || actions.breakthroughUsed) {
+    return false;
+  }
+  if (sourceRef.instance.deployedAtAction === battle.actionSerial) {
+    return false;
+  }
+  return options.ignoreActed || sourceRef.instance.actedAction !== battle.actionSerial;
+}
+
+function getBreakthroughStrikeAbility(ability) {
+  if (!ability || !["damage", "areaDamage"].includes(ability.kind)) {
+    return null;
+  }
+  return {
+    ...ability,
+    kind: ability.kind === "areaDamage" ? "damage" : ability.kind,
+    rows: [...new Set([...(ability.rows || []), "support"])],
+    canRevealHidden: true,
+    requiresExposed: false
+  };
+}
+
+function resolveBreakthroughOnTarget(battle, side, sourceRef, ability, targetRef) {
+  const sourceCard = getCard(sourceRef.instance.cardId);
+  getTurnActions(battle, side).breakthroughUsed = true;
+  exposeTarget(battle, targetRef, "前线突破");
+  const breakthroughAbility = getBreakthroughStrikeAbility(ability);
+  const canStrike = Boolean(
+    breakthroughAbility &&
+      canTargetForAbility(battle, side, targetRef, breakthroughAbility, sourceCard, { sourceRef, ignoreFrontlineSupportBlock: true }) &&
+      matchesTargetRequirements(targetRef.instance, breakthroughAbility)
+  );
+  if (!canStrike) {
+    battle.log.push(`${sourceCard.name} 执行前线突破，只暴露目标，未造成伤害。`);
+    return;
+  }
+  const amount = getDamageAmount(battle, side, breakthroughAbility, targetRef, sourceCard);
+  battle.log.push(`${sourceCard.name} 执行前线突破并开火。`);
+  dealDamage(battle, side, targetRef, amount, sourceCard, breakthroughAbility);
+}
+
+function isDirectAttackAbility(ability) {
+  return ["damage", "areaDamage"].includes(ability?.kind);
+}
+
+function isFrontlineSourceContext(context) {
+  if (context.sourceRef?.lineId) {
+    return context.sourceRef.lineId === "frontline";
+  }
+  return Boolean(context.sourceCard?.type === "unit" && context.sourceCard.line === "frontline");
+}
+
+function isBlockedByEnemyFrontlineScreen(battle, actingSide, targetRef, ability, context = {}) {
+  if (context.ignoreFrontlineSupportBlock || targetRef.breakthrough || !isDirectAttackAbility(ability)) {
+    return false;
+  }
+  if (targetRef.side === actingSide || targetRef.lineId !== "support" || !isFrontlineSourceContext(context)) {
+    return false;
+  }
+  return countAliveUnitsOnLine(battle, targetRef.side, "frontline") > 0;
+}
+
+function matchesTargetRequirements(instance, ability = {}) {
+  const card = getCard(instance.cardId);
+  if (ability.requiresAnyTag?.length && !ability.requiresAnyTag.some((tag) => card.tags.includes(tag))) {
+    return false;
+  }
+  return true;
+}
+
 function getAreaDamageTargets(battle, side, ability, primaryTarget) {
   const row = battle.board[primaryTarget.side][primaryTarget.lineId]
     .filter((instance) => getCurrentPower(instance) > 0)
@@ -610,6 +720,15 @@ function getDamageAmount(battle, side, ability = {}, targetRef, sourceCard) {
   if (ability.ownTagBonus && battle.board[side]?.[ability.ownTagBonus.line]?.some((instance) => getCard(instance.cardId).tags.includes(ability.ownTagBonus.tag))) {
     amount += ability.ownTagBonus.amount || 0;
   }
+  if (ability.ownAnyTagBonus && battle.board[side]?.[ability.ownAnyTagBonus.line]?.some((instance) => {
+    const card = getCard(instance.cardId);
+    return getCurrentPower(instance) > 0 && ability.ownAnyTagBonus.tags?.some((tag) => card.tags.includes(tag));
+  })) {
+    amount += ability.ownAnyTagBonus.amount || 0;
+  }
+  if (Number.isFinite(ability.ownTagBonus?.cap)) {
+    amount = Math.min(amount, ability.ownTagBonus.cap);
+  }
   return Math.max(0, amount - (targetRef.instance.shield ? 1 : 0));
 }
 
@@ -624,16 +743,63 @@ function getSecondaryDamageAmount(ability = {}, targetRef) {
   return amount;
 }
 
-function dealDamage(battle, attackerSide, targetRef, amount, sourceCard) {
+function applyInterception(battle, attackerSide, targetRef, amount, sourceCard, ability = {}) {
+  const defenderSide = targetRef.side;
+  const targetCard = getCard(targetRef.instance.cardId);
+  if (ability.ignoreInterceptionForTargetTags?.some((tag) => targetCard.tags.includes(tag))) {
+    return amount;
+  }
+  const allowedInterceptorTags = ability.interceptByTags || [];
+  if (!allowedInterceptorTags.length) {
+    return amount;
+  }
+  const interceptor = getAllBoardTargets(battle, defenderSide).find((ref) => {
+    if (ref.instance.interceptAction === battle.actionSerial || getCurrentPower(ref.instance) <= 0) {
+      return false;
+    }
+    const card = getCard(ref.instance.cardId);
+    const intercept = card.continuous;
+    if (!intercept || !allowedInterceptorTags.some((tag) => card.tags.includes(tag))) {
+      return false;
+    }
+    if (intercept.protectLines?.length && !intercept.protectLines.includes(targetRef.lineId)) {
+      return false;
+    }
+    return intercept.interceptTags?.some((tag) => sourceCard.tags.includes(tag));
+  });
+  if (!interceptor) {
+    return amount;
+  }
+  const interceptorCard = getCard(interceptor.instance.cardId);
+  const intercept = interceptorCard.continuous || {};
+  interceptor.instance.interceptAction = battle.actionSerial;
+  if (intercept.sourceExposes) {
+    interceptor.instance.hidden = false;
+    interceptor.instance.exposed = true;
+  }
+  if (intercept.interceptCancelsDamage) {
+    battle.log.push(`${interceptorCard.name} 拦截 ${sourceCard.name}，本次伤害无效。`);
+    return 0;
+  }
+  const nextAmount = Math.max(0, amount - (intercept.intercept || 0));
+  battle.log.push(`${interceptorCard.name} 拦截 ${sourceCard.name}，伤害 -${amount - nextAmount}。`);
+  return nextAmount;
+}
+
+function dealDamage(battle, attackerSide, targetRef, amount, sourceCard, ability = {}) {
   if (!targetRef?.instance || amount <= 0) {
+    return;
+  }
+  const finalAmount = applyInterception(battle, attackerSide, targetRef, amount, sourceCard, ability);
+  if (finalAmount <= 0) {
     return;
   }
   targetRef.instance.hidden = false;
   targetRef.instance.exposed = true;
-  targetRef.instance.damage = (targetRef.instance.damage || 0) + amount;
+  targetRef.instance.damage = (targetRef.instance.damage || 0) + finalAmount;
   targetRef.instance.lastDamagedBy = attackerSide;
   targetRef.instance.shield = false;
-  battle.log.push(`${sourceCard.name} 对 ${getCard(targetRef.instance.cardId).name} 造成 ${amount} 点伤害。`);
+  battle.log.push(`${sourceCard.name} 对 ${getCard(targetRef.instance.cardId).name} 造成 ${finalAmount} 点伤害。`);
 }
 
 function cleanupDestroyed(battle, attackerSide) {
@@ -659,6 +825,111 @@ function exposeTarget(battle, targetRef, sourceName) {
   targetRef.instance.hidden = false;
   targetRef.instance.exposed = true;
   battle.log.push(`${sourceName} 暴露 ${getCard(targetRef.instance.cardId).name}。`);
+}
+
+function exposeInstanceRef(battle, ref, sourceName) {
+  if (!ref?.instance || !ref.instance.hidden) {
+    return false;
+  }
+  ref.instance.hidden = false;
+  ref.instance.exposed = true;
+  battle.log.push(`${sourceName} 暴露 ${getCard(ref.instance.cardId).name}。`);
+  return true;
+}
+
+function resolveFrontlineContact(battle, side, deployedRef) {
+  const deployedCard = getCard(deployedRef.instance.cardId);
+  if (deployedRef.lineId !== "frontline" || !isFrontlineContactUnit(deployedCard) || deployedCard.contactException) {
+    return;
+  }
+  const opponent = getOpponentSide(side);
+  const opponentFrontline = getAllBoardTargets(battle, opponent)
+    .filter((target) => target.lineId === "frontline" && getCurrentPower(target.instance) > 0);
+  if (!opponentFrontline.length) {
+    return;
+  }
+
+  exposeInstanceRef(battle, deployedRef, "前线接敌");
+  const ambushers = opponentFrontline.filter((target) => {
+    const card = getCard(target.instance.cardId);
+    return target.instance.hidden && isFrontlineContactUnit(card) && !card.contactException;
+  });
+
+  ambushers.forEach((ambusher) => {
+    exposeInstanceRef(battle, ambusher, "前线接敌");
+    if (findBoardInstance(battle, side, deployedRef.uid)) {
+      resolveFrontlineContactFire(battle, opponent, ambusher, side, deployedRef, { includeAmbushBonus: true });
+      cleanupDestroyed(battle, opponent);
+    }
+  });
+
+  const liveDeployed = findBoardInstance(battle, side, deployedRef.uid);
+  if (!liveDeployed) {
+    return;
+  }
+  const responseTarget = opponentFrontline.find((target) => findBoardInstance(battle, opponent, target.uid));
+  if (responseTarget) {
+    resolveFrontlineContactFire(battle, side, liveDeployed, opponent, responseTarget);
+    cleanupDestroyed(battle, side);
+  }
+}
+
+function resolveFrontlineContactFire(battle, attackerSide, sourceRef, defenderSide, targetRef, options = {}) {
+  const sourceCard = getCard(sourceRef.instance.cardId);
+  const ability = sourceCard.ability;
+  if (!ability || !["damage", "areaDamage"].includes(ability.kind)) {
+    return false;
+  }
+  if (!canTargetForAbility(battle, attackerSide, targetRef, ability, sourceCard, { sourceRef }) || !matchesTargetRequirements(targetRef.instance, ability)) {
+    return false;
+  }
+  const amount = getDamageAmount(battle, attackerSide, ability, targetRef, sourceCard) + (options.includeAmbushBonus ? sourceCard.ambushBonus || 0 : 0);
+  if (options.includeAmbushBonus && sourceCard.ambushBonus) {
+    battle.log.push(`${sourceCard.name} 触发【前线伏击】，本次伤害 +${sourceCard.ambushBonus}。`);
+  }
+  markUnitActed(battle, sourceRef.instance);
+  dealDamage(battle, attackerSide, targetRef, amount, sourceCard, ability);
+  return true;
+}
+
+function enforceHighAirExposure(battle) {
+  const sidesWithHighAir = SIDES.filter((side) => getAllBoardTargets(battle, side).some((target) => {
+    const card = getCard(target.instance.cardId);
+    return getCurrentPower(target.instance) > 0 && isHighAirUnit(card);
+  }));
+  if (sidesWithHighAir.length < 2) {
+    return;
+  }
+  SIDES.forEach((side) => {
+    getAllBoardTargets(battle, side).forEach((target) => {
+      const card = getCard(target.instance.cardId);
+      if (getCurrentPower(target.instance) > 0 && isHighAirUnit(card)) {
+        exposeInstanceRef(battle, target, "高空接敌");
+      }
+    });
+  });
+}
+
+function getAllBoardTargets(battle, side) {
+  return LINES.flatMap((line) =>
+    battle.board[side][line.id].map((instance) => ({ side, lineId: line.id, uid: instance.uid, instance }))
+  );
+}
+
+function countAliveUnitsOnLine(battle, side, lineId) {
+  return (battle.board[side]?.[lineId] || []).filter((instance) => getCurrentPower(instance) > 0).length;
+}
+
+function isGroundContactUnit(card) {
+  return card.tags.includes("步兵") || card.tags.includes("装甲");
+}
+
+function isFrontlineContactUnit(card) {
+  return isGroundContactUnit(card) || card.tags.includes("直升机");
+}
+
+function isHighAirUnit(card) {
+  return card.tags.includes("战斗机") || card.tags.includes("轰炸机");
 }
 
 function applyLineRepair(targetRef, ability = {}) {
@@ -815,6 +1086,7 @@ function normalizePendingForViewer(pending, viewerSide) {
       side: mapSideForViewer(target.side, viewerSide),
       lineId: target.lineId,
       uid: target.uid,
+      breakthrough: Boolean(target.breakthrough),
       instance: normalizeInstanceForViewer(target.instance, target.side, viewerSide),
     })),
   };

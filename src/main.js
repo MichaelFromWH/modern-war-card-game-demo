@@ -848,10 +848,10 @@ function createBattle(options = {}) {
       enemy: 0,
     },
     log: [
-      "V0.8 规则：单位拆分为攻击、生命和目标价值，摧毁后按目标价值获得战场得分。",
+      "V0.5 / 20260521 规则：单位拆分为攻击、生命和目标价值，摧毁后按目标价值获得战场得分。",
       "巡航导弹、弹道导弹、SEAD 战斗机、轰炸机均为驻场单位，拥有生命、可被摧毁并提供得分。",
       "巡航导弹仅能打击暴露地面目标或直升机，可被伴随/重型防空拦截；弹道导弹打击规则相同，但只能被重型防空拦截。",
-      "SEAD 导弹可指定敌方伴随/重型防空，包括隐蔽防空；若目标仍有拦截窗口，打击被抵消为暴露目标并消耗该窗口。",
+      "SEAD 战斗机可指定敌方伴随/重型防空，包括隐蔽防空；没有防空目标时转入有限制空。",
       "每个单位每回合最多行动一次；部署单位可立即行动，但本回合不能再次作为场上行动单位，也不能执行前线突破。",
       "敌方前线仍有单位时，前线单位不能越过前线直接攻击支援区目标。",
       "若己方回合开始时敌方前线为空，可用一个回合开始前已部署且未行动的前线单位突破，暴露并打击其可有效攻击的敌方隐蔽支援区单位。",
@@ -1430,6 +1430,9 @@ function renderCardStats(card) {
 }
 
 function getCardDisplayTags(card) {
+  if (Array.isArray(card.displayTags) && card.displayTags.length) {
+    return uniqueDisplayTags(card.displayTags).slice(0, 2);
+  }
   const tags = Array.isArray(card.tags) ? card.tags : [];
   if (card.type === "unit") {
     return uniqueDisplayTags([getDeployChipLabel(card), getUnitDisplayTypeTag(card)]).slice(0, 2);
@@ -1617,7 +1620,7 @@ function renderLog() {
   const battle = state.battle;
   const items = battle?.log.slice().reverse() || [
     "正确来源：/Users/michaelwu/Documents/战区卡牌游戏项目/战争卡牌游戏。",
-    "本原型使用 V0.8 三线卡牌机制与美俄首发 30 张预组。",
+    "本原型使用 V0.5 / 20260521 三线卡牌机制与美俄首发 30 张预组。",
   ];
   if (refs.logPanel) {
     refs.logPanel.hidden = state.screen !== "battle";
@@ -1866,7 +1869,7 @@ function renderGuide() {
     {
       index: "01",
       title: "胜利目标",
-      body: "摧毁敌方单位即可按其目标价值得分，率先达到 50 分获胜。若牌库耗尽，会进入终局行动并比较得分。",
+      body: "摧毁敌方单位即可按其目标价值得分，率先达到 50 分获胜。牌库耗尽不会直接结束，玩家仍可继续行动。",
     },
     {
       index: "02",
@@ -1881,7 +1884,7 @@ function renderGuide() {
     {
       index: "04",
       title: "火力链",
-      body: "侦察单位先翻开目标，远火、导弹、SEAD 战斗机和轰炸机作为驻场单位兑现伤害；巡航/弹道导弹只能打击地面目标或直升机，巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截，SEAD 可点隐蔽防空并消耗其拦截窗口。",
+      body: "侦察单位先翻开目标，远火、导弹、SEAD 战斗机和轰炸机作为驻场单位兑现伤害；巡航/弹道导弹可打击地面和低空目标，巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截，SEAD 优先压制防空目标。",
     },
     {
       index: "05",
@@ -2783,7 +2786,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
   }
 
   if (ability.kind === "damageBoost") {
-    battle.log.push(`${sourceCard.name} 的旧版火力指示效果已停用；V0.8 仅使用隐蔽与暴露状态。`);
+    battle.log.push(`${sourceCard.name} 的旧版火力指示效果已停用；当前规则仅使用隐蔽与暴露状态。`);
     if (ability.sourceExposes && sourceRef) {
       exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
     }
@@ -4950,7 +4953,7 @@ function resolveNoTargetEffect(battle, side, sourceInstance, card) {
   }
 
   if (ability.kind === "intelDeny") {
-    battle.log.push(`${card.name} 的旧版反引导效果已停用；V0.8 使用电子压制处理隐蔽和暴露目标。`);
+    battle.log.push(`${card.name} 的旧版反引导效果已停用；当前规则使用电子压制处理隐蔽和暴露目标。`);
     drawIfOwnCardPresent(battle, side, ability.drawIfOwnCard, card);
   }
 

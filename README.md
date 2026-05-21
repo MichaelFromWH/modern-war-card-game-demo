@@ -1,8 +1,8 @@
 # 现代战争三线卡牌 WebDemo
 
-基于 V0.8 核心机制与美俄首发卡组/组卡规则的可玩原型。
+基于 V0.5 / 20260521 核心机制与美俄首发卡组/组卡规则的可玩原型。
 
-当前版本围绕三线战场、隐蔽/暴露、前线接敌、火力引导、防空拦截、导弹打击和 50 点摧毁得分胜利构建。单位牌均为驻场牌，并拆分为攻击、生命和目标价值；巡航导弹、弹道导弹、SEAD 战斗机和轰炸机也拥有生命并可被摧毁得分。
+当前版本围绕前线区/支援区、隐蔽/暴露、前线接敌、前线突破、火力引导、防空拦截、导弹打击和 50 点摧毁得分胜利构建。单位牌均为驻场牌，并拆分为攻击、生命和目标价值；巡航导弹、弹道导弹、SEAD 战斗机和轰炸机也拥有生命并可被摧毁得分。牌库耗尽不会直接结束游戏。
 
 ## 本地运行
 
@@ -56,13 +56,13 @@ AGENTS.md                   AI 协作者项目规约
 
 ## GitHub Pages
 
-仓库可通过 GitHub Pages 从 `main` 分支根目录直接发布为静态页面。
+仓库可通过 GitHub Pages 从 `main` 分支根目录直接发布为静态页面；该模式适合展示和本地试玩，不承载服务器权威 1v1。
 
 ## 线上 1v1 部署
 
-真正的朋友 1v1 对局需要 Node Web Service 承载 WebSocket 房间服务，不能只依赖 GitHub Pages。
+真正的朋友 1v1 对局需要 Node Web Service 承载 WebSocket 房间服务，不能只依赖 GitHub Pages。当前线上版本部署在阿里云 ECS，由 Node 服务同时提供页面、房间和服务器权威战斗快照。
 
-当前仓库已提供 `render.yaml`，可在 Render 中作为 Blueprint 创建 Web Service：
+仓库仍保留 `render.yaml`，如需迁移到 Render，可作为 Blueprint 创建 Web Service：
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MichaelFromWH/modern-war-card-game-demo)
 
@@ -73,7 +73,7 @@ healthCheckPath: /healthz
 plan: free
 ```
 
-部署完成后，用 Render 提供的 `onrender.com` 地址打开游戏；可访问 `/healthz` 检查服务健康状态。
+部署完成后，用对应服务地址打开游戏；可访问 `/healthz` 检查服务健康状态。
 
 ## 协作说明
 
