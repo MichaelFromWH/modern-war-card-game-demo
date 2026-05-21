@@ -1284,9 +1284,8 @@ function renderUnitHudStrip(card, glyph = getPrimaryGlyph(card)) {
         <i aria-hidden="true">◎</i>
         <b>${getCardBaseAttack(card)}</b>
       </span>
-      <span class="war-card__hud-unit">
+      <span class="war-card__hud-unit" aria-label="${escapeHtml(attribute)}">
         <i aria-hidden="true">${escapeHtml(glyph)}</i>
-        <b>${escapeHtml(attribute)}</b>
       </span>
       <span class="war-card__hud-stat is-health">
         <i aria-hidden="true">盾</i>
@@ -1577,12 +1576,10 @@ function renderSpotlight() {
 }
 
 function renderCardRuleAside(card) {
-  const attribute = getCardUnitAttribute(card);
   const bullets = getCardRuleBullets(card);
   return `
-    <aside class="card-rule-aside" aria-label="单位属性与规则说明">
-      <span>单位属性</span>
-      <strong>【${escapeHtml(attribute)}】</strong>
+    <aside class="card-rule-aside" aria-label="规则说明">
+      <span>规则说明</span>
       ${card.type === "unit" ? `
         <div class="card-rule-aside__stats">
           <i><b>战</b>${getCardBaseAttack(card)}</i>
