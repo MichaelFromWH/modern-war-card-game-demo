@@ -64,11 +64,15 @@ AGENTS.md                   AI 协作者项目规约
 
 当前仓库已提供 `render.yaml`，可在 Render 中作为 Blueprint 创建 Web Service：
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MichaelFromWH/modern-war-card-game-demo)
+
 ```text
 buildCommand: npm install
 startCommand: npm start
 healthCheckPath: /healthz
 ```
+
+部署完成后，用 Render 提供的 `onrender.com` 地址打开游戏；可访问 `/healthz` 检查服务健康状态。
 
 ## 协作说明
 

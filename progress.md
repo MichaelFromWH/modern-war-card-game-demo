@@ -48,3 +48,10 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Restarted local server on port 3000.
   - WebSocket script confirms create/join/ready now produces `match_start` with seed and loadout summaries.
   - `/healthz` returns rooms/sockets to 0 after test clients close.
+- GitHub sync:
+  - Completed GitHub CLI device authorization for account `MichaelFromWH`.
+  - Pushed local commits through `14bb7da` to `origin/main`.
+- Deployment prep:
+  - Confirmed no local Render/Railway/Fly CLI is installed.
+  - Confirmed Render official docs support Web Services with WebSocket connections and Blueprint deployment from `render.yaml`.
+  - Added a Deploy to Render button to `README.md` for the repository Blueprint flow.
