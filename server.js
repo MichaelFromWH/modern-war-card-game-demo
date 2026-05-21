@@ -73,11 +73,7 @@ const server = createServer((request, response) => {
 
   const stats = statSync(filePath);
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
-  const cacheControl = pathname.startsWith("/assets/")
-    ? "public, max-age=31536000, immutable"
-    : type.startsWith("text/html")
-      ? "no-cache"
-      : "public, max-age=300";
+  const cacheControl = getCacheControl(pathname, type);
   response.writeHead(200, {
     "Content-Type": type,
     "Content-Length": stats.size,
@@ -546,4 +542,19 @@ function resolvePath(urlPath) {
   const rawPath = pathname === "/" ? "/index.html" : pathname;
   const safePath = normalize(rawPath).replace(/^(\.\.[/\\])+/, "");
   return join(rootDir, safePath);
+}
+
+function getCacheControl(pathname, type) {
+  if (pathname.startsWith("/assets/")) {
+    return "public, max-age=31536000, immutable";
+  }
+  if (
+    pathname.startsWith("/src/") ||
+    type.startsWith("text/html") ||
+    type.startsWith("text/javascript") ||
+    type.startsWith("text/css")
+  ) {
+    return "no-cache";
+  }
+  return "public, max-age=300";
 }
