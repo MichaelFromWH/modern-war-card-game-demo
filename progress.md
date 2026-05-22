@@ -121,3 +121,17 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Verification passed: `node --check` for `src/online-battle-engine.js`, `src/main.js`, and `server.js`; direct authoritative-engine smoke for mulligan/tactic/supply/contact/air-defense/name mapping; WebSocket room reconnect smoke; Playwright single-page battle smoke; Playwright two-page authoritative flow; Playwright opponent-turn hover check.
   - Deployed the changed runtime files to ECS `/opt/war-card-game` and marked `.deployed-version` as `923bf7b`; PM2 `war-card-game` restarted online and local server health passed.
   - Network note: Alibaba security group and Linux firewall are open for port 80. If `http://121.41.9.156/` shows 502 or online room service stays connecting on a tester machine, check local proxy settings first; `127.0.0.1:7897` intercepted this IP during deployment verification.
+- 2026-05-22 automated balance testing:
+  - Ran server-authoritative bot playtests focused on the high-air counterplay problem reported after real 1v1.
+  - Current starter decks: 3 high-air units, 4 direct anti-high-air units, 2 hard counters, and 1 heavy intercept card per side.
+  - Current 120-game bot sample: high-air damage averaged 51.33 per game; 51.9% of high-air hits landed while the defender had no direct anti-high-air card in hand/board; 59.1% landed with no hard counter.
+  - Virtual variants tested without changing code: +1 soft AA, +1 heavy AA, +1 fighter, soft-AA damage buff, and +1 soft AA with buff.
+  - Best first design direction: increase soft anti-air response density rather than adding more fighters; consider adding one Avenger/Pantsir to starter decks and testing soft AA as 2 damage plus expose/mark, or 3 damage if simpler.
+  - Logged the full balance table and recommendations in `PLAYTEST_DEBUG_LOG.md`.
+- 2026-05-22 second live 1v1 fixes:
+  - Updated card data for artillery/rocket low-air targeting, F-22/Su-35S 2 attack + high-air bonus, heavy AA target value 4, and soft AA target value 3.
+  - Removed SEAD's heavy-AA interception bypass so hidden/exposed heavy AA can spend its once-per-turn intercept window against SEAD missiles.
+  - Added authoritative hidden-helicopter frontline-support handling: hidden helicopters stay hidden when enemy frontline units exist instead of being flipped by frontline contact.
+  - Added online `draw`, `discard`, and `intercept` events and client-side card-flight/blocking VFX for draw, discard, destroyed-to-grave, and interception.
+  - Increased online turn handoff overlay duration to 2 seconds and added frontline/support labels to target choices.
+  - Verification passed: `node --check` for `src/game-data.js`, `src/online-battle-engine.js`, `src/main.js`; direct authoritative smoke for hidden helicopter, artillery vs low air, SEAD interception, and updated values.

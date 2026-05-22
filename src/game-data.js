@@ -4022,7 +4022,7 @@ const DOCX_20260521_CARD_PATCHES = {
   "us_avenger": unitPatch({
     "attack": 2,
     "health": 3,
-    "targetValue": 2,
+    "targetValue": 3,
     "displayTags": ["伴随防空"],
     "unitAttribute": "伴随防空",
     "ruleNote": "【伴随防空】：可以攻击所有战线低空和高空单位。",
@@ -4049,7 +4049,7 @@ const DOCX_20260521_CARD_PATCHES = {
   "us_patriot": unitPatch({
     "attack": 5,
     "health": 3,
-    "targetValue": 5,
+    "targetValue": 4,
     "displayTags": ["重型防空"],
     "unitAttribute": "重型防空",
     "ruleNote": "【重型防空】：可以攻击所有战线高空单位。",
@@ -4067,14 +4067,58 @@ const DOCX_20260521_CARD_PATCHES = {
     "health": 3,
     "targetValue": 4,
     "displayTags": ["火箭炮"],
-    "unitAttribute": "火箭炮"
+    "unitAttribute": "火箭炮",
+    "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
+    "effect": "【火力覆盖】：选择最多两个地面或低空目标造成伤害，主目标 3 点，第二目标 1 点，若目标为【步兵】，伤害+1。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "secondaryBonuses": [{ "tag": "步兵", "amount": 2 }],
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "maxTargets": 2,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "secondaryBonuses": [{ "tag": "步兵", "amount": 2 }],
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "maxTargets": 2,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    }
   }),
   "us_m109": unitPatch({
     "attack": 3,
     "health": 3,
     "targetValue": 3,
     "displayTags": ["榴弹炮"],
-    "unitAttribute": "榴弹炮"
+    "unitAttribute": "榴弹炮",
+    "ruleNote": "【榴弹炮】：可以攻击所有战线地面和低空单位。",
+    "effect": "【远程炮击】：对一个地面或低空目标造成 3 点伤害，若目标为【步兵】，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    }
   }),
   "us_tomahawk": unitPatch({
     "attack": 4,
@@ -4098,11 +4142,23 @@ const DOCX_20260521_CARD_PATCHES = {
     "unitAttribute": "轰炸机、高空"
   }),
   "us_f35": unitPatch({
-    "attack": 4,
+    "attack": 2,
     "health": 6,
-    "targetValue": 5,
+    "targetValue": 4,
     "displayTags": ["战斗机", "高空"],
-    "unitAttribute": "战斗机、高空"
+    "unitAttribute": "战斗机、高空",
+    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为高空单位，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "bonuses": [
+        { "tag": "战斗机", "amount": 4 },
+        { "tag": "轰炸机", "amount": 4 }
+      ],
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
   }),
   "us_f35a_sead": unitPatch({
     "attack": 2,
@@ -4134,7 +4190,6 @@ const DOCX_20260521_CARD_PATCHES = {
         { "tag": "战斗机", "amount": 3 },
         { "tag": "轰炸机", "amount": 3 }
       ],
-      "ignoreInterceptionForTargetTags": AIR_DEFENSE_TAGS,
       "sourceExposes": true,
       "interceptByTags": ["重型防空"]
     }
@@ -4259,7 +4314,7 @@ const DOCX_20260521_CARD_PATCHES = {
   "ru_pantsir": unitPatch({
     "attack": 2,
     "health": 3,
-    "targetValue": 4,
+    "targetValue": 3,
     "displayTags": ["伴随防空"],
     "unitAttribute": "伴随防空",
     "effect": "【野战防空】：若目标为低空单位，伤害+1。\n【伴随拦截】：敌方【巡航导弹】和【SEAD战斗机】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
@@ -4302,14 +4357,54 @@ const DOCX_20260521_CARD_PATCHES = {
     "health": 3,
     "targetValue": 4,
     "displayTags": ["火箭炮"],
-    "unitAttribute": "火箭炮"
+    "unitAttribute": "火箭炮",
+    "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
+    "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "maxTargets": 3,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "maxTargets": 3,
+      "sameLineOnly": true,
+      "sourceExposes": true
+    }
   }),
   "ru_2s19": unitPatch({
     "attack": 3,
     "health": 3,
     "targetValue": 3,
     "displayTags": ["榴弹炮"],
-    "unitAttribute": "榴弹炮"
+    "unitAttribute": "榴弹炮",
+    "ruleNote": "【榴弹炮】：可以攻击所有战线地面和低空单位。",
+    "effect": "【远程炮击】：对一个地面或低空目标造成 3 点伤害，若目标为【步兵】，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "sourceExposes": true
+    }
   }),
   "ru_kalibr": unitPatch({
     "attack": 4,
@@ -4346,11 +4441,23 @@ const DOCX_20260521_CARD_PATCHES = {
     }
   }),
   "ru_su35": unitPatch({
-    "attack": 4,
+    "attack": 2,
     "health": 6,
-    "targetValue": 5,
+    "targetValue": 4,
     "displayTags": ["战斗机", "高空"],
-    "unitAttribute": "战斗机、高空"
+    "unitAttribute": "战斗机、高空",
+    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为高空单位，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "bonuses": [
+        { "tag": "战斗机", "amount": 4 },
+        { "tag": "轰炸机", "amount": 4 }
+      ],
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
   }),
   "ru_su57_sead": unitPatch({
     "attack": 2,
@@ -4382,7 +4489,6 @@ const DOCX_20260521_CARD_PATCHES = {
         { "tag": "战斗机", "amount": 3 },
         { "tag": "轰炸机", "amount": 3 }
       ],
-      "ignoreInterceptionForTargetTags": AIR_DEFENSE_TAGS,
       "sourceExposes": true,
       "interceptByTags": ["重型防空"]
     }

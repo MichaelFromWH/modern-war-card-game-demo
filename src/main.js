@@ -67,7 +67,7 @@ const BGM_PLAYLIST = [
   "./assets/audio/bgm/star-sky-instrumental.mp3",
 ];
 
-const TURN_HANDOFF_MS = 1150;
+const TURN_HANDOFF_MS = 2000;
 const AI_THINK_MS = 1050;
 const CARD_FLIGHT_MS = 760;
 const DEPLOY_CARD_FLIGHT_MS = 940;
@@ -1099,6 +1099,7 @@ function renderBoardCard(instance, side, lineId) {
       </div>
       <strong>${escapeHtml(title)}</strong>
       <span>${escapeHtml(tags)}</span>
+      ${targetable ? `<em class="board-card__target-line">${escapeHtml(getLine(lineId).name)}</em>` : ""}
       <p class="board-card__effect">${concealed ? "" : escapeHtml(card.effect)}</p>
       <div class="board-card__states">
         ${!concealed && instance.hidden ? "<i>Hidden</i>" : ""}
@@ -1737,9 +1738,10 @@ function renderIntentTargetButton(target) {
   const concealed = shouldConcealEnemyInfo(target);
   const targetCard = getVisibleCardForInstance(target.instance, target.side);
   const side = target.side === "player" ? "我方" : "敌方";
+  const lineLabel = getLine(target.lineId).name;
   const power = getCurrentPower(target.instance);
   const artPath = concealed ? "./assets/ui/card-back-frame.png" : getCardArtPath(targetCard);
-  const targetLabel = concealed ? "敌方隐蔽单位" : `${side}${targetCard.name}`;
+  const targetLabel = concealed ? `${side}${lineLabel}隐蔽单位` : `${side}${lineLabel}${targetCard.name}`;
   const cardClass = concealed ? "intent-target__card intent-target__card--back" : "intent-target__card";
 
   return `
@@ -1758,7 +1760,7 @@ function renderIntentTargetButton(target) {
       >
         ${concealed ? "" : `<i>${power}</i><b>${escapeHtml(targetCard.name)}</b>`}
       </span>
-      ${concealed ? "" : `<span>${escapeHtml(side)} / ${escapeHtml(getLine(target.lineId).name)}</span>`}
+      <span class="intent-target__line">${escapeHtml(side)} / ${escapeHtml(lineLabel)}</span>
     </button>
   `;
 }
@@ -3299,6 +3301,25 @@ function getPileElement(side, kind) {
   return document.querySelector(`.deck-hud--${side} [data-pile="${kind}"] .deck-pile__cards`);
 }
 
+function getHandDestinationElement(side) {
+  if (side === "player") {
+    return document.querySelector(".hand-rail") || document.querySelector(".command-overlay");
+  }
+  return document.querySelector(".enemy-hand-strip") || document.querySelector(".commander-hud--enemy");
+}
+
+function getFallbackHandPoint(side) {
+  const element = getHandDestinationElement(side);
+  const point = getElementCenter(element);
+  if (point) {
+    return point;
+  }
+  return {
+    x: side === "player" ? window.innerWidth * 0.5 : window.innerWidth * 0.5,
+    y: side === "player" ? window.innerHeight * 0.88 : window.innerHeight * 0.1,
+  };
+}
+
 function getElementCenter(element) {
   if (!element) {
     return null;
@@ -3342,6 +3363,26 @@ function playCardFlight(card, side, fromRect, toRect, options = {}) {
   element.innerHTML = `<span>${options.back ? "" : escapeHtml(card?.name || "")}</span>`;
   refs.fxLayer.append(element);
   window.setTimeout(() => element.remove(), options.duration || CARD_FLIGHT_MS);
+}
+
+function playCardFlightFromPoint(card, side, fromPoint, toElement, options = {}) {
+  const to = getElementCenter(toElement);
+  if (!fromPoint || !to) {
+    return;
+  }
+  const fromRect = {
+    left: fromPoint.x,
+    top: fromPoint.y,
+    width: 0,
+    height: 0,
+  };
+  const toRect = {
+    left: to.x,
+    top: to.y,
+    width: 0,
+    height: 0,
+  };
+  playCardFlight(card, side, fromRect, toRect, options);
 }
 
 function playCardFlightBetweenElements(card, side, fromElement, toElement, options = {}) {
@@ -5273,6 +5314,10 @@ function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete)
   }
 
   const opponent = side === "player" ? "enemy" : "player";
+  if (deployedRef.instance.hidden && canStayHiddenDuringFrontlineDeploy(deployedCard)) {
+    battle.log.push(`${deployedCard.name} 依靠低空前线支援保持隐蔽部署。`);
+    return false;
+  }
   if (deployedRef.instance.hidden && countAliveUnitsOnLine(battle, opponent, "frontline") > 0) {
     exposeInstance(battle, deployedRef, "前线接敌", { ignoreDecoy: true });
   }
@@ -5843,6 +5888,10 @@ function isGroundContactUnit(card) {
 
 function isFrontlineContactUnit(card) {
   return isGroundContactUnit(card) || card.tags.includes("直升机");
+}
+
+function canStayHiddenDuringFrontlineDeploy(card) {
+  return Boolean(card?.tags?.includes("直升机"));
 }
 
 function isHighAirUnit(card) {
@@ -6514,9 +6563,33 @@ function playOnlineBattleEffects(effects = []) {
         amount: effect.amount || 1,
       });
     } else if (effect.type === "destroyed") {
+      const targetCard = getCard(effect.targetCardId) || sourceCard;
+      const fromPoint = getElementCenter(getBoardCardElement(effect.targetSide, effect.targetUid)) || getFallbackVfxPoint(effect.targetSide, effect.lineId || "frontline");
+      playCardFlightFromPoint(targetCard, effect.targetSide, fromPoint, getPileElement(effect.targetSide, "grave"), { back: true, duration: 760 });
       playDestroyedVfx(effect.targetSide, effect.targetUid);
-      const point = getElementCenter(getBoardCardElement(effect.targetSide, effect.targetUid)) || getFallbackVfxPoint(effect.targetSide, effect.lineId || "frontline");
-      playImpactVfx(point, "destroyed", 4);
+      playImpactVfx(fromPoint, "destroyed", 4);
+    } else if (effect.type === "intercept") {
+      const interceptorRef = findBoardInstance(state.battle, effect.targetSide, effect.interceptorUid);
+      const targetRef = interceptorRef || findBoardInstance(state.battle, effect.targetSide, effect.targetUid) || {
+        side: effect.targetSide,
+        lineId: effect.lineId || "support",
+        uid: effect.targetUid,
+        instance: { uid: effect.targetUid, cardId: effect.targetCardId || "us_marine_rifle", damage: 0 },
+      };
+      playBlockedVfx(targetRef, "拦截");
+    } else if (effect.type === "draw") {
+      const side = effect.targetSide || "player";
+      const amount = Math.max(1, Number(effect.amount) || 1);
+      const cardBack = getCard("us_marine_rifle");
+      for (let index = 0; index < amount; index += 1) {
+        window.setTimeout(() => {
+          playCardFlightBetweenElements(cardBack, side, getPileElement(side, "deck"), getHandDestinationElement(side), { back: true, duration: 660 });
+        }, index * 90);
+      }
+    } else if (effect.type === "discard") {
+      const side = effect.targetSide || "player";
+      const discardCard = getCard(effect.targetCardId) || getCard("us_marine_rifle");
+      playCardFlightFromPoint(discardCard, side, getFallbackHandPoint(side), getPileElement(side, "grave"), { back: false, duration: 680 });
     }
   });
   state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, ...freshEffects.map((effect) => Number(effect.serial || 0)));

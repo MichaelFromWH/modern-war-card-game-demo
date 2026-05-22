@@ -232,7 +232,7 @@ function applyPlayUnit(battle, side, action) {
     return { ok: false, error: "该单位不能部署到这个战线。" };
   }
 
-  const concealedDeploy = Boolean(action.hidden);
+  const concealedDeploy = Boolean(action.hidden && canConcealCardForSide(battle, side, card));
   battle.hands[side].splice(handIndex, 1);
   instance.hidden = concealedDeploy;
   instance.exposed = !instance.hidden;
@@ -285,6 +285,12 @@ function applyPlayTactic(battle, side, action) {
     battle.graves[side].push(instance);
     markTacticActionUsed(battle, side);
     battle.log.push(`${getSideName(battle, side)}打出 ${card.name}。`);
+    pushEffect(battle, {
+      type: "discard",
+      targetSide: side,
+      targetCardId: card.id,
+      amount: 1,
+    });
     resolveNoTargetAbility(battle, side, card.ability, card);
     resolveBattleEndIfReady(battle);
     return { ok: true };
@@ -387,6 +393,12 @@ function applyChooseTarget(battle, side, action) {
     battle.graves[side].push(instance);
     markTacticActionUsed(battle, side);
     battle.log.push(`${getSideName(battle, side)}打出 ${getCard(pending.cardId).name}。`);
+    pushEffect(battle, {
+      type: "discard",
+      targetSide: side,
+      targetCardId: pending.cardId,
+      amount: 1,
+    });
   }
 
   if (pending.kind === "frontlineContact") {
@@ -630,6 +642,14 @@ function completeSupplyChoice(battle, side, sourceCard, drawn, kept) {
   battle.hands[side].push(...kept);
   battle.decks[side].push(...returned);
   battle.log.push(`${sourceCard?.name || "补给"} 为 ${getSideName(battle, side)}保留 ${kept.length} 张，${returned.length} 张放回牌库底。`);
+  if (kept.length) {
+    pushEffect(battle, {
+      type: "draw",
+      targetSide: side,
+      sourceCardId: sourceCard?.id || null,
+      amount: kept.length,
+    });
+  }
 }
 
 function canClearStalePending(battle, pending) {
@@ -909,10 +929,34 @@ function applyInterception(battle, attackerSide, targetRef, amount, sourceCard, 
   }
   if (intercept.interceptCancelsDamage) {
     battle.log.push(`${interceptorCard.name} 拦截 ${sourceCard.name}，本次伤害无效。`);
+    pushEffect(battle, {
+      type: "intercept",
+      attackerSide,
+      targetSide: defenderSide,
+      lineId: targetRef.lineId,
+      targetUid: targetRef.uid,
+      targetCardId: targetRef.instance.cardId,
+      sourceCardId: sourceCard.id,
+      interceptorUid: interceptor.uid,
+      interceptorCardId: interceptorCard.id,
+      amount,
+    });
     return 0;
   }
   const nextAmount = Math.max(0, amount - (intercept.intercept || 0));
   battle.log.push(`${interceptorCard.name} 拦截 ${sourceCard.name}，伤害 -${amount - nextAmount}。`);
+  pushEffect(battle, {
+    type: "intercept",
+    attackerSide,
+    targetSide: defenderSide,
+    lineId: targetRef.lineId,
+    targetUid: targetRef.uid,
+    targetCardId: targetRef.instance.cardId,
+    sourceCardId: sourceCard.id,
+    interceptorUid: interceptor.uid,
+    interceptorCardId: interceptorCard.id,
+    amount: amount - nextAmount,
+  });
   return nextAmount;
 }
 
@@ -1007,6 +1051,10 @@ function resolveFrontlineContact(battle, side, deployedRef) {
   const opponentFrontline = getAllBoardTargets(battle, opponent)
     .filter((target) => target.lineId === "frontline" && getCurrentPower(target.instance) > 0);
   if (!opponentFrontline.length) {
+    return;
+  }
+  if (deployedRef.instance.hidden && canStayHiddenDuringFrontlineDeploy(deployedCard)) {
+    battle.log.push(`${deployedCard.name} 依靠低空前线支援保持隐蔽部署。`);
     return;
   }
 
@@ -1118,6 +1166,28 @@ function isAirDefenseUnit(card) {
   return Boolean(card?.tags?.includes("伴随防空") || card?.tags?.includes("重型防空"));
 }
 
+function canStayHiddenDuringFrontlineDeploy(card) {
+  return Boolean(card?.tags?.includes("直升机"));
+}
+
+function canConcealCardForSide(battle, side, card) {
+  if (!battle || card?.type !== "unit") {
+    return false;
+  }
+  if (isHighAirUnit(card) && opponentHasExposedHighAir(battle, side)) {
+    return false;
+  }
+  return true;
+}
+
+function opponentHasExposedHighAir(battle, side) {
+  const opponent = getOpponentSide(side);
+  return getAllBoardTargets(battle, opponent).some((target) => {
+    const card = getCard(target.instance.cardId);
+    return getCurrentPower(target.instance) > 0 && target.instance.exposed && !target.instance.hidden && isHighAirUnit(card);
+  });
+}
+
 function applyLineRepair(targetRef, ability = {}) {
   const repair = ability.repairIfLine;
   if (!repair || repair.line !== targetRef.lineId) {
@@ -1165,6 +1235,13 @@ function drawCards(battle, side, amount, options = {}) {
   for (let index = 0; index < amount; index += 1) {
     const card = battle.decks[side].shift();
     if (!card) {
+      if (drawn && !options.silent) {
+        pushEffect(battle, {
+          type: "draw",
+          targetSide: side,
+          amount: drawn,
+        });
+      }
       if (options.triggerExhaustion !== false) {
         battle.supplyExhausted = true;
         battle.log.push(`${getSideName(battle, side)}补给耗尽。`);
@@ -1173,6 +1250,13 @@ function drawCards(battle, side, amount, options = {}) {
     }
     battle.hands[side].push(card);
     drawn += 1;
+  }
+  if (drawn && !options.silent) {
+    pushEffect(battle, {
+      type: "draw",
+      targetSide: side,
+      amount: drawn,
+    });
   }
   return drawn;
 }

@@ -359,6 +359,27 @@ button:disabled {
   font-style: normal;
 }
 
+.board-card__target-line {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 6px;
+  z-index: 3;
+  display: block;
+  padding: 2px 5px;
+  border: 1px solid rgba(255, 220, 145, 0.52);
+  border-radius: 4px;
+  color: #fff4d3;
+  background: rgba(0, 0, 0, 0.64);
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 1px 4px #000;
+}
+
 .command-overlay {
   left: 0;
   right: 0;
@@ -7400,6 +7421,18 @@ button:disabled {
   color: rgba(246, 239, 221, 0.7);
   font-size: 0.62rem;
   line-height: 1.1;
+}
+
+.intent-target__line {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff3d0 !important;
+  background: rgba(0, 0, 0, 0.36);
+  font-weight: 900;
 }
 
 .commander-hud--player {
