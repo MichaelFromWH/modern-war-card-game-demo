@@ -135,3 +135,10 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Added online `draw`, `discard`, and `intercept` events and client-side card-flight/blocking VFX for draw, discard, destroyed-to-grave, and interception.
   - Increased online turn handoff overlay duration to 2 seconds and added frontline/support labels to target choices.
   - Verification passed: `node --check` for `src/game-data.js`, `src/online-battle-engine.js`, `src/main.js`; direct authoritative smoke for hidden helicopter, artillery vs low air, SEAD interception, and updated values.
+- 2026-05-23 V0.5.1 rules/card sync in progress:
+  - Updated final card patches toward `现代战争三线卡牌 V0.5.1 机制与全卡牌内容-20260523.docx`.
+  - Kept F-35A and Su-57 as SEAD-role fighters, but removed the final runtime dependency on a dedicated `SEAD导弹` tag/logic.
+  - Updated authoritative turn economy to 1 tactic window plus 2 non-tactic actions, including empty-board double deployment and two different board-unit actions.
+  - Restricted frontline breakthrough to cards explicitly marked with `canBreakthrough`.
+  - Synced docs: `GAME_MECHANICS.md`, `PLAYTEST_DEBUG_LOG.md`, and README version wording.
+  - Verification passed: `node --check` for `src/game-data.js`, `src/online-battle-engine.js`, `src/main.js`, and `server.js`; direct authoritative smoke for double deployment, two board actions, breakthrough gating, missile target limits, SEAD tag removal, and recon call-fire gating; Playwright smoke on `http://127.0.0.1:3105` produced no console error files and screenshot was reviewed.

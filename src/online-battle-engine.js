@@ -212,8 +212,8 @@ function applyPlayUnit(battle, side, action) {
   if (battle.pending) {
     return { ok: false, error: "请先完成当前目标选择。" };
   }
-  if (getTurnActions(battle, side).unitPlayed || getTurnActions(battle, side).handPlayed) {
-    return { ok: false, error: "本回合已经部署过一张单位牌。" };
+  if (!canUseUnitDeployment(battle, side)) {
+    return { ok: false, error: "本回合单位部署额度已经用完。" };
   }
 
   const handIndex = battle.hands[side].findIndex((item) => item.uid === action.handUid);
@@ -318,8 +318,8 @@ function applyActivateUnit(battle, side, action) {
   if (battle.pending) {
     return { ok: false, error: "请先完成当前目标选择。" };
   }
-  if (getTurnActions(battle, side).hiddenActivated) {
-    return { ok: false, error: "本回合已经执行过一次场上单位行动。" };
+  if (!canUseBoardAction(battle, side)) {
+    return { ok: false, error: "本回合场上单位行动额度已经用完。" };
   }
 
   const source = findBoardInstance(battle, side, action.sourceUid);
@@ -547,10 +547,11 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
     const freshExpose = targetRef.instance.hidden;
     exposeTarget(battle, targetRef, sourceCard.name);
     const caller = findCallableUnit(battle, side, ability.callerTags);
-    if (caller && (!ability.callFireRequiresFreshExpose || freshExpose)) {
+    const callerCard = caller ? getCard(caller.instance.cardId) : null;
+    const fire = callerCard?.fire || { amount: 2 };
+    const canCallFireTarget = canCallFireAtTarget(battle, side, targetRef, ability, caller, callerCard, fire);
+    if (caller && canCallFireTarget && (!ability.callFireRequiresFreshExpose || freshExpose)) {
       caller.instance.actedAction = battle.actionSerial;
-      const callerCard = getCard(caller.instance.cardId);
-      const fire = callerCard.fire || { amount: 2 };
       const amount = getDamageAmount(battle, side, fire, targetRef, callerCard) + (ability.calledFireBonus || 0);
       dealDamage(battle, side, targetRef, amount, callerCard, fire);
       battle.log.push(`${sourceCard.name} 引导 ${callerCard.name} 校射。`);
@@ -773,8 +774,15 @@ function canSourceUseBreakthrough(battle, side, sourceRef, options = {}) {
   if (!sourceRef?.instance || sourceRef.lineId !== "frontline" || getCurrentPower(sourceRef.instance) <= 0) {
     return false;
   }
+  const sourceCard = getCard(sourceRef.instance.cardId);
+  if (!sourceCard?.canBreakthrough) {
+    return false;
+  }
   const actions = getTurnActions(battle, side);
   if (!actions.enemyFrontlineEmptyAtStart || actions.breakthroughUsed) {
+    return false;
+  }
+  if (!canUseBoardAction(battle, side)) {
     return false;
   }
   if (sourceRef.instance.deployedAtAction === battle.actionSerial) {
@@ -1142,6 +1150,10 @@ function countAliveUnitsOnLine(battle, side, lineId) {
   return (battle.board[side]?.[lineId] || []).filter((instance) => getCurrentPower(instance) > 0).length;
 }
 
+function countAliveUnitsForSide(battle, side) {
+  return LINES.reduce((total, line) => total + countAliveUnitsOnLine(battle, side, line.id), 0);
+}
+
 function isGroundContactUnit(card) {
   return card.tags.includes("步兵") || card.tags.includes("装甲");
 }
@@ -1205,6 +1217,17 @@ function findCallableUnit(battle, side, callerTags = []) {
         ref.instance.actedAction !== battle.actionSerial &&
         callerTags.some((tag) => card.tags.includes(tag));
     });
+}
+
+function canCallFireAtTarget(battle, side, targetRef, ability = {}, caller, callerCard, fire = {}) {
+  const targetCard = getCard(targetRef.instance.cardId);
+  if (ability.callFireTargetTags?.length && !ability.callFireTargetTags.some((tag) => targetCard.tags.includes(tag))) {
+    return false;
+  }
+  if (!caller || !callerCard) {
+    return false;
+  }
+  return canTargetForAbility(battle, side, targetRef, fire, callerCard, { sourceRef: caller }) && matchesTargetRequirements(targetRef.instance, fire);
 }
 
 function assertCanAct(battle, side) {
@@ -1410,6 +1433,10 @@ function createTurnActionState() {
     hiddenActivated: false,
     breakthroughUsed: false,
     enemyFrontlineEmptyAtStart: false,
+    ownBoardEmptyAtStart: false,
+    nonTacticActionsUsed: 0,
+    unitDeployments: 0,
+    boardActions: 0,
   };
 }
 
@@ -1418,6 +1445,7 @@ function resetTurnActions(battle, side) {
   battle.turnActions[side] = {
     ...createTurnActionState(),
     enemyFrontlineEmptyAtStart: countAliveUnitsOnLine(battle, opponent, "frontline") === 0,
+    ownBoardEmptyAtStart: countAliveUnitsForSide(battle, side) === 0,
   };
 }
 
@@ -1426,10 +1454,28 @@ function getTurnActions(battle, side) {
   return battle.turnActions[side];
 }
 
+function canUseUnitDeployment(battle, side) {
+  const actions = getTurnActions(battle, side);
+  if ((actions.nonTacticActionsUsed || 0) >= 2 || (actions.unitDeployments || 0) >= 2) {
+    return false;
+  }
+  if ((actions.unitDeployments || 0) >= 1 && !actions.ownBoardEmptyAtStart) {
+    return false;
+  }
+  return true;
+}
+
+function canUseBoardAction(battle, side) {
+  const actions = getTurnActions(battle, side);
+  return (actions.nonTacticActionsUsed || 0) < 2 && (actions.boardActions || 0) < 2;
+}
+
 function markUnitDeploymentUsed(battle, side) {
   const actions = getTurnActions(battle, side);
-  actions.unitPlayed = true;
-  actions.handPlayed = true;
+  actions.unitDeployments = (actions.unitDeployments || 0) + 1;
+  actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
+  actions.unitPlayed = actions.unitDeployments > 0;
+  actions.handPlayed = actions.unitDeployments > 0;
 }
 
 function markTacticActionUsed(battle, side) {
@@ -1437,7 +1483,10 @@ function markTacticActionUsed(battle, side) {
 }
 
 function markBoardActionUsed(battle, side) {
-  getTurnActions(battle, side).hiddenActivated = true;
+  const actions = getTurnActions(battle, side);
+  actions.boardActions = (actions.boardActions || 0) + 1;
+  actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
+  actions.hiddenActivated = actions.boardActions > 0;
 }
 
 function markUnitActed(battle, instance) {

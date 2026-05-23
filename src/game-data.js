@@ -2988,12 +2988,13 @@ const GROUND_UNIT_TAGS = ["步兵", "装甲"];
 const LOW_AIR_TAGS = ["直升机", "无人机"];
 const HIGH_AIR_TAGS = ["战斗机", "轰炸机"];
 const MISSILE_TARGET_TAGS = ["导弹", "巡航导弹", "弹道导弹"];
-const MISSILE_TAGS = [...MISSILE_TARGET_TAGS, "SEAD导弹"];
+const MISSILE_TAGS = [...MISSILE_TARGET_TAGS];
 const AIR_DEFENSE_TAGS = ["伴随防空", "重型防空"];
 const GROUND_SUPPORT_TAGS = ["榴弹炮", "火箭炮", ...AIR_DEFENSE_TAGS];
 const SURFACE_TARGET_TAGS = [...GROUND_UNIT_TAGS, ...GROUND_SUPPORT_TAGS, ...MISSILE_TARGET_TAGS];
 const SURFACE_OR_LOW_AIR_TAGS = [...SURFACE_TARGET_TAGS, ...LOW_AIR_TAGS];
-const MISSILE_LEGAL_TARGET_TAGS = [...SURFACE_TARGET_TAGS, "直升机"];
+const GROUND_OR_LOW_AIR_TARGET_TAGS = [...GROUND_UNIT_TAGS, ...GROUND_SUPPORT_TAGS, ...LOW_AIR_TAGS];
+const MISSILE_LEGAL_TARGET_TAGS = [...GROUND_UNIT_TAGS, ...GROUND_SUPPORT_TAGS, "直升机"];
 const LOW_OR_HIGH_AIR_TAGS = [...LOW_AIR_TAGS, ...HIGH_AIR_TAGS];
 
 const V07_CARD_OVERRIDES = {
@@ -3176,7 +3177,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_avenger": {
-    "effect": "【近程拦截】：对一个低空或高空目标造成 2 点伤害，若目标为【直升机】或【无人机】，伤害+1。\n【伴随防空】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -1。",
+    "effect": "【近程拦截】：对一个低空或高空目标造成 2 点伤害，若目标为【直升机】或【无人机】，伤害+1。\n【伴随防空】：敌方【战斗机】或【巡航导弹】打击造成的伤害 -1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3190,7 +3191,7 @@ const V07_CARD_OVERRIDES = {
     },
     "continuous": {
       "intercept": 1,
-      "interceptTags": ["战斗机", "巡航导弹", "SEAD导弹"],
+      "interceptTags": ["战斗机", "巡航导弹"],
       "protectLines": ["frontline", "support"],
       "sourceExposes": true
     }
@@ -3281,8 +3282,8 @@ const V07_CARD_OVERRIDES = {
     "power": 5,
     "rarity": "epic",
     "specialization": "反辐射压制、有限制空",
-    "tags": ["战斗机", "SEAD", "SEAD导弹"],
-    "effect": "【SEAD反辐射导弹】：指定敌方【伴随防空】或【重型防空】，含隐蔽单位，造成 5 点伤害。\n【有限制空】：若【SEAD反辐射导弹】找不到有效目标，对一个低空或高空目标造成 4 点伤害。",
+    "tags": ["战斗机", "SEAD"],
+    "effect": "【SEAD反辐射压制】：指定敌方【伴随防空】或【重型防空】，含隐蔽单位，造成 5 点伤害。\n【有限制空】：若找不到有效防空目标，对一个低空或高空目标造成 4 点伤害。",
     "art": "us_f35a_sead",
     "ability": {
       "kind": "damage",
@@ -3523,7 +3524,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_pantsir": {
-    "effect": "【野战防空】：对一个低空目标造成 2 点伤害；若目标为【直升机】或【无人机】，伤害+2。\n【伴随拦截】：敌方【战斗机】、【巡航导弹】或【SEAD导弹】打击造成的伤害 -2。",
+    "effect": "【野战防空】：对一个低空目标造成 2 点伤害；若目标为【直升机】或【无人机】，伤害+2。\n【伴随拦截】：敌方【战斗机】或【巡航导弹】打击造成的伤害 -2。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3537,7 +3538,7 @@ const V07_CARD_OVERRIDES = {
     },
     "continuous": {
       "intercept": 2,
-      "interceptTags": ["战斗机", "巡航导弹", "SEAD导弹"],
+      "interceptTags": ["战斗机", "巡航导弹"],
       "protectLines": ["frontline", "support"],
       "sourceExposes": true
     }
@@ -3625,8 +3626,8 @@ const V07_CARD_OVERRIDES = {
     "power": 5,
     "rarity": "epic",
     "specialization": "反辐射压制、有限制空",
-    "tags": ["战斗机", "SEAD", "SEAD导弹"],
-    "effect": "【SEAD反辐射导弹】：指定敌方【伴随防空】或【重型防空】，含隐蔽单位，造成 5 点伤害。\n【有限制空】：若【SEAD反辐射导弹】找不到有效目标，对一个低空或高空目标造成 4 点伤害。",
+    "tags": ["战斗机", "SEAD"],
+    "effect": "【SEAD反辐射压制】：指定敌方【伴随防空】或【重型防空】，含隐蔽单位，造成 5 点伤害。\n【有限制空】：若找不到有效防空目标，对一个低空或高空目标造成 4 点伤害。",
     "art": "ru_su57_sead",
     "ability": {
       "kind": "damage",
@@ -3873,16 +3874,13 @@ const DOCX_20260521_CARD_PATCHES = {
     "displayTags": ["步兵"],
     "unitAttribute": "步兵",
     "ruleNote": "【步兵】：可以攻击前线区地面单位。\n【前线伏击】：隐蔽部署后因前线接敌被动打击时，伤害+1。",
-    "effect": "【反甲伏击】：若目标为【装甲】，伤害+2。\n【高射机枪】：可对低空目标造成 1 点伤害。",
+    "effect": "【反甲伏击】：对前线地面目标造成 2 点伤害；若目标为【装甲】，伤害+2。\n【前线伏击】：隐蔽部署后因前线接敌被动打击时，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
-      "amount": 1,
-      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
-      "bonuses": [
-        { "tag": "步兵", "amount": 2 },
-        { "tag": "装甲", "amount": 4 }
-      ],
+      "amount": 2,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
+      "bonuses": [{ "tag": "装甲", "amount": 4 }],
       "sourceExposes": true
     }
   }),
@@ -3921,13 +3919,25 @@ const DOCX_20260521_CARD_PATCHES = {
     }
   }),
   "us_rangers_target": unitPatch({
-    "attack": 0,
+    "attack": 1,
     "health": 3,
-    "targetValue": 1,
+    "targetValue": 2,
     "displayTags": ["侦察兵"],
     "unitAttribute": "侦察兵",
-    "ruleNote": "【侦察兵】：无法攻击。被作为目标时，算作步兵。\n【渗透作战】：本单位不会因前线接敌而暴露。",
-    "effect": "【坐标引导】：选择一个隐蔽目标，使其暴露。若己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击；若没有可用火力单位，抽 1 张牌。"
+    "ruleNote": "【侦察兵】：被作为目标时，算作步兵。\n【渗透作战】：本单位不会因前线接敌而暴露。",
+    "effect": "【坐标引导】：选择一个隐蔽目标，使其暴露。若目标为地面或低空单位，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击；否则抽 1 张牌。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "hiddenOnly": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "callFireTargetTags": GROUND_OR_LOW_AIR_TARGET_TAGS,
+      "noCallerFallback": "draw",
+      "fallbackDraw": 1,
+      "sourceExposes": true
+    },
+    "contactException": true
   }),
   "us_bradley": unitPatch({
     "attack": 3,
@@ -3935,13 +3945,14 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["装甲"],
     "unitAttribute": "装甲",
-    "ruleNote": "【装甲】：可以攻击前线区地面单位。",
-    "effect": "【伴随火力】：若目标为【步兵】，伤害+1。\n【高射机枪】：可对低空目标造成 2 点伤害。",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
+    "effect": "【伴随火力】：对前线地面目标造成 3 点伤害；若目标为【步兵】，伤害+1。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
-      "amount": 2,
-      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "amount": 3,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
       "bonuses": [
         { "tag": "步兵", "amount": 4 },
         { "tag": "装甲", "amount": 3 }
@@ -3955,8 +3966,9 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 2,
     "displayTags": ["装甲"],
     "unitAttribute": "装甲",
-    "ruleNote": "【装甲】：可以攻击前线区地面单位。",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
     "effect": "【快速突击】：若目标为【步兵】，伤害+1。\n【高射机枪】：可对低空目标造成 1 点伤害。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
@@ -3975,13 +3987,14 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 5,
     "displayTags": ["装甲"],
     "unitAttribute": "装甲",
-    "ruleNote": "【装甲】：可以攻击前线区地面单位。",
-    "effect": "【装甲突击】：若目标为【装甲】，伤害+1。\n【高射机枪】：可对低空目标造成 1 点伤害。\n【协同推进】：若己方前线有【步兵】，伤害+1。",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
+    "effect": "【装甲突击】：对前线地面目标造成 4 点伤害；若目标为【装甲】，伤害+1。\n【协同推进】：若己方前线有【步兵】，伤害+1。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
-      "amount": 1,
-      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "amount": 4,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
       "bonuses": [
         { "tag": "步兵", "amount": 4 },
         { "tag": "装甲", "amount": 5 }
@@ -3996,8 +4009,9 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["直升机", "低空"],
     "unitAttribute": "直升机、低空",
-    "ruleNote": "【直升机】：可以攻击前线区地面和低空单位。\n【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。",
+    "ruleNote": "【直升机】：可以攻击前线区地面和低空单位。\n【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
     "effect": "【空中打击】：若目标为【装甲】、【直升机】，伤害+2。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
@@ -4013,11 +4027,23 @@ const DOCX_20260521_CARD_PATCHES = {
   "us_reaper": unitPatch({
     "attack": 0,
     "health": 2,
-    "targetValue": 3,
+    "targetValue": 2,
     "displayTags": ["无人机", "低空"],
     "unitAttribute": "无人机、低空",
     "ruleNote": "【无人机】：无法攻击。",
-    "effect": "【无人侦扫】：选择一个隐蔽目标，使其暴露。\n【火力校射】：若目标为地面单位，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击，本次伤害 +1；若没有可用火力单位，抽 1 张牌。"
+    "effect": "【无人侦扫】：选择一个隐蔽目标，使其暴露。\n【火力校射】：若目标为地面或低空单位，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击；否则抽 1 张牌。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "hiddenOnly": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "callFireTargetTags": GROUND_OR_LOW_AIR_TARGET_TAGS,
+      "callFireRequiresFreshExpose": true,
+      "noCallerFallback": "draw",
+      "fallbackDraw": 1,
+      "sourceExposes": true
+    }
   }),
   "us_avenger": unitPatch({
     "attack": 2,
@@ -4059,6 +4085,13 @@ const DOCX_20260521_CARD_PATCHES = {
       "rows": ["frontline", "support"],
       "amount": 5,
       "requiresAnyTag": HIGH_AIR_TAGS,
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 0,
+      "interceptCancelsDamage": true,
+      "interceptTags": ["战斗机", "轰炸机", ...MISSILE_TAGS],
+      "protectLines": ["frontline", "support"],
       "sourceExposes": true
     }
   }),
@@ -4125,14 +4158,36 @@ const DOCX_20260521_CARD_PATCHES = {
     "health": 3,
     "targetValue": 4,
     "displayTags": ["巡航导弹"],
-    "unitAttribute": "巡航导弹"
+    "unitAttribute": "巡航导弹",
+    "ruleNote": "【巡航导弹】：可以攻击所有战线地面单位和直升机；不能攻击无人机、高空单位或对方导弹。",
+    "effect": "【巡航打击】：对一个地面或直升机目标造成 4 点伤害，若目标在前线，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "lineAmounts": { "frontline": 5 },
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
   }),
   "us_atacms": unitPatch({
     "attack": 5,
     "health": 3,
     "targetValue": 5,
     "displayTags": ["弹道导弹"],
-    "unitAttribute": "弹道导弹"
+    "unitAttribute": "弹道导弹",
+    "ruleNote": "【弹道导弹】：可以攻击所有战线地面单位和直升机；不能攻击无人机、高空单位或对方导弹。只有重型防空可拦截。",
+    "effect": "【弹道打击】：对一个地面或直升机目标造成 5 点伤害，若目标在前线，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "lineAmounts": { "frontline": 6 },
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
   }),
   "us_b2": unitPatch({
     "attack": 5,
@@ -4143,16 +4198,18 @@ const DOCX_20260521_CARD_PATCHES = {
   }),
   "us_f35": unitPatch({
     "attack": 2,
-    "health": 6,
+    "health": 5,
     "targetValue": 4,
     "displayTags": ["战斗机", "高空"],
     "unitAttribute": "战斗机、高空",
-    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为高空单位，伤害+2。",
+    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为低空或高空单位，伤害+2。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 2,
       "bonuses": [
+        { "tag": "直升机", "amount": 4 },
+        { "tag": "无人机", "amount": 4 },
         { "tag": "战斗机", "amount": 4 },
         { "tag": "轰炸机", "amount": 4 }
       ],
@@ -4166,6 +4223,8 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["战斗机", "高空"],
     "unitAttribute": "战斗机、高空",
+    "tags": ["战斗机", "SEAD"],
+    "effect": "【SEAD反辐射压制】：目标为【伴随防空】或【重型防空】时，伤害+3，并可锁定隐蔽防空单位。\n【有限制空】：若目标为低空或高空单位，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -4200,11 +4259,13 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 2,
     "displayTags": ["步兵"],
     "unitAttribute": "步兵",
+    "ruleNote": "【步兵】：可以攻击前线区地面单位。\n【前线伏击】：隐蔽部署后因前线接敌被动打击时，伤害+1。",
+    "effect": "【反甲伏击】：对前线地面目标造成 2 点伤害；若目标为【装甲】，伤害+2。\n【前线伏击】：隐蔽部署后因前线接敌被动打击时，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
       "amount": 2,
-      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "requiresAnyTag": GROUND_UNIT_TAGS,
       "bonuses": [{ "tag": "装甲", "amount": 4 }],
       "sourceExposes": true
     }
@@ -4226,12 +4287,25 @@ const DOCX_20260521_CARD_PATCHES = {
     }
   }),
   "ru_spetsnaz_target": unitPatch({
-    "attack": 0,
+    "attack": 1,
     "health": 3,
-    "targetValue": 1,
+    "targetValue": 2,
     "displayTags": ["侦察兵"],
     "unitAttribute": "侦察兵",
-    "ruleNote": "【侦察兵】：无法攻击。\n【渗透作战】：本单位不会因前线接敌而暴露。"
+    "ruleNote": "【侦察兵】：被作为目标时，算作步兵。\n【渗透作战】：本单位不会因前线接敌而暴露。",
+    "effect": "【坐标引导】：选择一个隐蔽目标，使其暴露。若目标为地面或低空单位，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击；否则抽 1 张牌。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "hiddenOnly": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "callFireTargetTags": GROUND_OR_LOW_AIR_TARGET_TAGS,
+      "noCallerFallback": "draw",
+      "fallbackDraw": 1,
+      "sourceExposes": true
+    },
+    "contactException": true
   }),
   "ru_bmp3m": unitPatch({
     "attack": 3,
@@ -4239,11 +4313,14 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["装甲"],
     "unitAttribute": "装甲",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
+    "effect": "【伴随火力】：对前线地面目标造成 3 点伤害；若目标为【步兵】，伤害+1。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
-      "amount": 2,
-      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "amount": 3,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
       "bonuses": [
         { "tag": "步兵", "amount": 4 },
         { "tag": "装甲", "amount": 3 }
@@ -4257,6 +4334,9 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 3,
     "displayTags": ["装甲"],
     "unitAttribute": "装甲",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
+    "effect": "【火力清剿】：若目标为【步兵】，伤害+1。\n【高射机枪】：可对低空目标造成 2 点伤害。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
@@ -4272,11 +4352,14 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 5,
     "displayTags": ["装甲"],
     "unitAttribute": "装甲",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
+    "effect": "【装甲突击】：对前线地面目标造成 4 点伤害；若目标为【装甲】，伤害+1。\n【突破推进】：若己方前线有【步兵】，伤害 +1。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
-      "amount": 1,
-      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "amount": 4,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
       "bonuses": [
         { "tag": "步兵", "amount": 4 },
         { "tag": "装甲", "amount": 5 }
@@ -4291,7 +4374,9 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["直升机", "低空"],
     "unitAttribute": "直升机、低空",
+    "ruleNote": "【直升机】：可以攻击前线区地面和低空单位。\n【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
     "effect": "【空中打击】：若目标为【装甲】、【直升机】，伤害+2。",
+    "canBreakthrough": true,
     "ability": {
       "kind": "damage",
       "rows": ["frontline"],
@@ -4309,7 +4394,21 @@ const DOCX_20260521_CARD_PATCHES = {
     "health": 2,
     "targetValue": 2,
     "displayTags": ["无人机", "低空"],
-    "unitAttribute": "无人机、低空"
+    "unitAttribute": "无人机、低空",
+    "ruleNote": "【无人机】：无法攻击。",
+    "effect": "【无人侦扫】：选择一个隐蔽目标，使其暴露。\n【炮兵校射】：若目标为地面或低空单位，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击；否则抽 1 张牌。",
+    "ability": {
+      "kind": "exposeAndCallFire",
+      "rows": ["frontline", "support"],
+      "canRevealHidden": true,
+      "hiddenOnly": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "callFireTargetTags": GROUND_OR_LOW_AIR_TARGET_TAGS,
+      "callFireRequiresFreshExpose": true,
+      "noCallerFallback": "draw",
+      "fallbackDraw": 1,
+      "sourceExposes": true
+    }
   }),
   "ru_pantsir": unitPatch({
     "attack": 2,
@@ -4317,7 +4416,7 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 3,
     "displayTags": ["伴随防空"],
     "unitAttribute": "伴随防空",
-    "effect": "【野战防空】：若目标为低空单位，伤害+1。\n【伴随拦截】：敌方【巡航导弹】和【SEAD战斗机】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
+    "effect": "【野战防空】：若目标为低空单位，伤害+1。\n【伴随拦截】：敌方【巡航导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -4332,7 +4431,7 @@ const DOCX_20260521_CARD_PATCHES = {
     "continuous": {
       "intercept": 0,
       "interceptCancelsDamage": true,
-      "interceptTags": ["巡航导弹", "SEAD导弹"],
+      "interceptTags": ["巡航导弹"],
       "protectLines": ["frontline", "support"],
       "sourceExposes": true
     }
@@ -4349,6 +4448,13 @@ const DOCX_20260521_CARD_PATCHES = {
       "rows": ["frontline", "support"],
       "amount": 5,
       "requiresAnyTag": HIGH_AIR_TAGS,
+      "sourceExposes": true
+    },
+    "continuous": {
+      "intercept": 0,
+      "interceptCancelsDamage": true,
+      "interceptTags": ["战斗机", "轰炸机", ...MISSILE_TAGS],
+      "protectLines": ["frontline", "support"],
       "sourceExposes": true
     }
   }),
@@ -4411,14 +4517,36 @@ const DOCX_20260521_CARD_PATCHES = {
     "health": 3,
     "targetValue": 4,
     "displayTags": ["巡航导弹"],
-    "unitAttribute": "巡航导弹"
+    "unitAttribute": "巡航导弹",
+    "ruleNote": "【巡航导弹】：可以攻击所有战线地面单位和直升机；不能攻击无人机、高空单位或对方导弹。",
+    "effect": "【巡航打击】：对一个地面或直升机目标造成 4 点伤害，若目标在前线，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 4,
+      "lineAmounts": { "frontline": 5 },
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
+      "sourceExposes": true,
+      "interceptByTags": ["伴随防空", "重型防空"]
+    }
   }),
   "ru_iskander": unitPatch({
     "attack": 5,
     "health": 3,
     "targetValue": 5,
     "displayTags": ["弹道导弹"],
-    "unitAttribute": "弹道导弹"
+    "unitAttribute": "弹道导弹",
+    "ruleNote": "【弹道导弹】：可以攻击所有战线地面单位和直升机；不能攻击无人机、高空单位或对方导弹。只有重型防空可拦截。",
+    "effect": "【弹道导弹】：对一个地面或直升机目标造成 5 点伤害，若目标在前线，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "lineAmounts": { "frontline": 6 },
+      "requiresAnyTag": MISSILE_LEGAL_TARGET_TAGS,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
   }),
   "ru_su34": unitPatch({
     "attack": 5,
@@ -4427,12 +4555,12 @@ const DOCX_20260521_CARD_PATCHES = {
     "displayTags": ["轰炸机", "高空"],
     "unitAttribute": "轰炸机、高空",
     "tags": ["轰炸机"],
-    "effect": "【对地空袭】：选择最多两个目标造成伤害，主目标 5 点，第二目标 2 点。",
+    "effect": "【对地空袭】：选择最多两个目标造成伤害，主目标 5 点，第二目标 3 点。",
     "ability": {
       "kind": "areaDamage",
       "rows": ["frontline", "support"],
       "amount": 5,
-      "secondaryAmount": 2,
+      "secondaryAmount": 3,
       "sameLineOnly": true,
       "requiresAnyTag": SURFACE_TARGET_TAGS,
       "maxTargets": 2,
@@ -4446,12 +4574,14 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["战斗机", "高空"],
     "unitAttribute": "战斗机、高空",
-    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为高空单位，伤害+2。",
+    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为低空或高空单位，伤害+2。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
       "amount": 2,
       "bonuses": [
+        { "tag": "直升机", "amount": 4 },
+        { "tag": "无人机", "amount": 4 },
         { "tag": "战斗机", "amount": 4 },
         { "tag": "轰炸机", "amount": 4 }
       ],
@@ -4465,6 +4595,8 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["战斗机", "高空"],
     "unitAttribute": "战斗机、高空",
+    "tags": ["战斗机", "SEAD"],
+    "effect": "【SEAD反辐射压制】：目标为【伴随防空】或【重型防空】时，伤害+3，并可锁定隐蔽防空单位。\n【有限制空】：若目标为低空或高空单位，伤害+1。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],

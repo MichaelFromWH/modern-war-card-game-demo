@@ -177,20 +177,21 @@ const DECK_RULES = {
 };
 const UNIT_ATTRIBUTE_NOTES = {
   步兵: "可打击地面目标；普通步兵默认不能打击直升机。",
-  反甲步兵: "可打击地面目标，擅长反装甲；部分反甲小组可对直升机造成低额伤害。",
+  反甲步兵: "可打击地面目标，擅长反装甲；不承担低空反制。",
   防空步兵: "可打击低空单位，主要反制直升机和无人机。",
   侦查步兵: "主要负责暴露隐蔽目标并引导远程火力，本体不承担常规伤害。",
-  装甲: "可打击地面目标；部分坦克和装甲车可对低空直升机造成低额伤害。",
-  直升机: "可打击地面与低空目标，并能威胁已暴露的后排装备。",
-  榴弹炮: "可打击前线地面目标，也可打击已暴露或被突破暴露的后排装备。",
-  火箭炮: "可进行多目标地面覆盖，也可覆盖已暴露或被突破暴露的后排装备。",
-  伴随防空: "可打击低空单位，并可削弱部分战斗机、巡航导弹或 SEAD 导弹打击。",
+  侦察兵: "主要负责暴露隐蔽目标并引导远程火力；若目标不适合校射则转为抽牌。",
+  装甲: "可打击地面目标；少数装甲支援车可对低空目标造成低额伤害。",
+  直升机: "可打击地面与低空目标，拥有前线支援和突破能力。",
+  榴弹炮: "可打击所有战线的地面和低空单位，适合被侦察单位校射。",
+  火箭炮: "可覆盖所有战线的地面和低空单位，适合压制同一战线多个目标。",
+  伴随防空: "可打击低空和高空单位，并可拦截巡航导弹。",
   重型防空: "可打击高空单位，并可拦截所有类型导弹。",
   无人机: "主要负责侦查、暴露和校射，默认不承担常规攻击。",
-  巡航导弹: "可打击地面目标和直升机，不能打击战斗机、轰炸机和无人机。",
-  弹道导弹: "可打击地面目标和直升机，不能打击战斗机、轰炸机和无人机。",
+  巡航导弹: "可打击地面目标和直升机，不能打击无人机、高空单位和对方导弹。",
+  弹道导弹: "可打击地面目标和直升机，不能打击无人机、高空单位和对方导弹。",
   战斗机: "高空单位，可执行制空和精确打击；会被防空单位拦截。",
-  SEAD战斗机: "可压制伴随防空和重型防空，含隐蔽防空单位；没有防空目标时转入有限制空。",
+  SEAD战斗机: "可压制伴随防空和重型防空，含隐蔽防空单位；按战斗机而非独立导弹处理。",
   轰炸机: "高空单位，擅长对地面和后排装备进行范围打击；会被重型防空拦截。",
   战斗轰炸机: "高空单位，偏重对地打击，也会被防空单位拦截。",
 };
@@ -211,7 +212,7 @@ const UNIT_DISPLAY_PLATFORM_TAGS = [
   "战斗机",
   "轰炸机",
 ];
-const MISSILE_DISPLAY_TYPE_TAGS = ["弹道导弹", "巡航导弹", "导弹", "SEAD导弹"];
+const MISSILE_DISPLAY_TYPE_TAGS = ["弹道导弹", "巡航导弹", "导弹"];
 const initialPlayerFaction = loadSavedDeckFaction();
 
 const state = {
@@ -725,6 +726,7 @@ function resetTurnActions(battle, side) {
   const nextActions = createTurnActionState();
   const opponent = side === "player" ? "enemy" : side === "enemy" ? "player" : null;
   nextActions.enemyFrontlineEmptyAtStart = opponent ? countAliveUnitsOnLine(battle, opponent, "frontline") === 0 : false;
+  nextActions.ownBoardEmptyAtStart = countAliveUnitsForSide(battle, side) === 0;
   battle.turnActions[side] = nextActions;
 }
 
@@ -935,6 +937,10 @@ function createTurnActionState() {
     hiddenActivated: false,
     breakthroughUsed: false,
     enemyFrontlineEmptyAtStart: false,
+    ownBoardEmptyAtStart: false,
+    nonTacticActionsUsed: 0,
+    unitDeployments: 0,
+    boardActions: 0,
   };
 }
 
@@ -2738,12 +2744,19 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
       exposedNow = exposeInstance(battle, target, sourceCard.name);
     }
     const caller = findCallableUnit(battle, payload.side, ability.callerTags);
-    const canCallFire = caller && !target.instance.hidden && (!ability.callFireRequiresFreshExpose || exposedNow);
+    const fire = caller ? getCalledFireProfile(caller, ability) : null;
+    const canCallFire =
+      caller &&
+      fire &&
+      !target.instance.hidden &&
+      canCallFireAtTarget(battle, payload.side, target, ability, caller, fire) &&
+      (!ability.callFireRequiresFreshExpose || exposedNow);
     if (canCallFire) {
-      const fire = getCalledFireProfile(caller, ability);
       resolveCalledFire(battle, payload.side, sourceCard, caller, target, fire);
     } else {
-      if (caller && ability.callFireRequiresFreshExpose && !exposedNow) {
+      if (caller && ability.callFireTargetTags?.length && !targetHasAnyTag(target.instance, ability.callFireTargetTags)) {
+        battle.log.push(`${sourceCard.name} 暴露目标，但该目标不适合远程校射。`);
+      } else if (caller && ability.callFireRequiresFreshExpose && !exposedNow) {
         battle.log.push(`${sourceCard.name} 确认目标已暴露，未触发额外校射。`);
       } else {
         battle.log.push(`${sourceCard.name} 完成坐标引导，但己方没有本回合未行动的远程单位。`);
@@ -3454,14 +3467,14 @@ function canPassiveRevealFromHidden(passive) {
 }
 
 function applyInterception(battle, defenderSide, targetLineId, amount, sourceCard, sourceRef = null, targetRef = null) {
-  if (!sourceCard.tags.some((tag) => ["直升机", "战斗机", "轰炸机", "导弹", "空战", "战机", "巡航导弹", "弹道导弹", "SEAD导弹"].includes(tag))) {
+  if (!sourceCard.tags.some((tag) => ["直升机", "战斗机", "轰炸机", "导弹", "空战", "战机", "巡航导弹", "弹道导弹"].includes(tag))) {
     return amount;
   }
   if (shouldIgnoreInterceptionForTarget(sourceCard, targetRef)) {
     return amount;
   }
 
-  if (tryConsumeTargetInterceptionForSead(battle, defenderSide, targetLineId, sourceCard, targetRef)) {
+  if (tryConsumeTargetInterceptionCancel(battle, defenderSide, targetLineId, sourceCard, targetRef)) {
     gameAudio.play("defense.intercept", { sourceCard, reduction: amount });
     return 0;
   }
@@ -3534,7 +3547,7 @@ function canInterceptionCancelDamage(sourceCard, targetRef) {
   );
 }
 
-function tryConsumeTargetInterceptionForSead(battle, defenderSide, targetLineId, sourceCard, targetRef) {
+function tryConsumeTargetInterceptionCancel(battle, defenderSide, targetLineId, sourceCard, targetRef) {
   if (!canInterceptionCancelDamage(sourceCard, targetRef)) {
     return false;
   }
@@ -3557,7 +3570,7 @@ function tryConsumeTargetInterceptionForSead(battle, defenderSide, targetLineId,
   instance.interceptAction = battle.actionSerial;
   markUnitActed(battle, instance);
   exposeInstance(battle, { side: defenderSide, lineId: targetRef.lineId, instance }, `${card.name} 拦截`, { ignoreDecoy: true });
-  battle.log.push(`${card.name} 抵消 ${sourceCard.name} 的 SEAD 导弹，仅暴露并消耗本回合拦截窗口。`);
+  battle.log.push(`${card.name} 抵消 ${sourceCard.name} 的打击，仅暴露并消耗本回合拦截窗口。`);
   return true;
 }
 
@@ -3952,7 +3965,7 @@ function chooseAiTurnAction(battle) {
   const profile = getAiProfile(difficulty);
   const actions = getTurnActions(battle, "enemy");
   const handPlay = canAnyHandAction(battle, "enemy") ? chooseAiPlay(battle) : null;
-  const boardPlay = !actions.hiddenActivated ? chooseAiBoardActivation(battle) : null;
+  const boardPlay = canUseBoardAction(battle, "enemy") ? chooseAiBoardActivation(battle) : null;
 
   if (!handPlay && !boardPlay) {
     return null;
@@ -3966,7 +3979,7 @@ function chooseAiTurnAction(battle) {
   if (!canAnyHandAction(battle, "enemy")) {
     return getAiOptionScore(boardPlay) >= profile.hiddenMinScore ? boardPlay : null;
   }
-  if (actions.hiddenActivated) {
+  if (!canUseBoardAction(battle, "enemy")) {
     return handPlay;
   }
 
@@ -5550,6 +5563,20 @@ function findCallableUnit(battle, side, callerTags = []) {
   return candidates.sort((left, right) => getCurrentPower(right.instance) - getCurrentPower(left.instance))[0] || null;
 }
 
+function canCallFireAtTarget(battle, side, targetRef, ability = {}, caller, fire = {}) {
+  if (ability.callFireTargetTags?.length && !targetHasAnyTag(targetRef.instance, ability.callFireTargetTags)) {
+    return false;
+  }
+  const rows = fire.rows || ["frontline", "support"];
+  return rows.includes(targetRef.lineId) &&
+    canTargetForAbility(battle, side, targetRef, { ...fire, rows, canRevealHidden: fire.canRevealHidden }, { sourceRef: caller, sourceCard: caller.card }) &&
+    matchesTargetRequirements(targetRef.instance, fire);
+}
+
+function targetHasAnyTag(instance, tags = []) {
+  return tags.some((tag) => hasTag(instance, tag));
+}
+
 function exposeInstance(battle, targetRef, sourceName, options = {}) {
   if (!targetRef?.instance) {
     return false;
@@ -5730,6 +5757,10 @@ function isSupportUncovered(battle, side) {
 
 function countAliveUnitsOnLine(battle, side, lineId) {
   return battle.board[side][lineId].filter((instance) => getCurrentPower(instance) > 0).length;
+}
+
+function countAliveUnitsForSide(battle, side) {
+  return LINES.reduce((total, line) => total + countAliveUnitsOnLine(battle, side, line.id), 0);
 }
 
 function refreshIntelValues(battle) {
@@ -5965,7 +5996,7 @@ function canUseHandAction(battle, side, card = null) {
   if (card && card.type !== "unit") {
     return !actions.tacticPlayed;
   }
-  return !(actions.unitPlayed || actions.handPlayed);
+  return canUseUnitDeployment(battle, side);
 }
 
 function markHandActionUsed(battle, side, card = null) {
@@ -5974,8 +6005,10 @@ function markHandActionUsed(battle, side, card = null) {
     actions.tacticPlayed = true;
     return;
   }
-  actions.unitPlayed = true;
-  actions.handPlayed = true;
+  actions.unitDeployments = (actions.unitDeployments || 0) + 1;
+  actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
+  actions.unitPlayed = actions.unitDeployments > 0;
+  actions.handPlayed = actions.unitDeployments > 0;
 }
 
 function canUseHiddenAction(battle, side) {
@@ -5987,11 +6020,26 @@ function markHiddenActionUsed(battle, side) {
 }
 
 function canUseBoardAction(battle, side) {
-  return !getTurnActions(battle, side).hiddenActivated;
+  const actions = getTurnActions(battle, side);
+  return (actions.nonTacticActionsUsed || 0) < 2 && (actions.boardActions || 0) < 2;
 }
 
 function markBoardActionUsed(battle, side) {
-  getTurnActions(battle, side).hiddenActivated = true;
+  const actions = getTurnActions(battle, side);
+  actions.boardActions = (actions.boardActions || 0) + 1;
+  actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
+  actions.hiddenActivated = actions.boardActions > 0;
+}
+
+function canUseUnitDeployment(battle, side) {
+  const actions = getTurnActions(battle, side);
+  if ((actions.nonTacticActionsUsed || 0) >= 2 || (actions.unitDeployments || 0) >= 2) {
+    return false;
+  }
+  if ((actions.unitDeployments || 0) >= 1 && !actions.ownBoardEmptyAtStart) {
+    return false;
+  }
+  return true;
 }
 
 function wasUnitDeployedThisTurn(battle, instance) {
@@ -6021,8 +6069,15 @@ function canSourceUseBreakthrough(battle, side, sourceRef, options = {}) {
   if (!battle || !sourceRef?.instance || sourceRef.lineId !== "frontline") {
     return false;
   }
+  const sourceCard = getCard(sourceRef.instance.cardId);
+  if (!sourceCard?.canBreakthrough) {
+    return false;
+  }
   const actions = getTurnActions(battle, side);
   if (!actions.enemyFrontlineEmptyAtStart || actions.breakthroughUsed) {
+    return false;
+  }
+  if (!canUseBoardAction(battle, side)) {
     return false;
   }
   if (wasUnitDeployedThisTurn(battle, sourceRef.instance)) {
@@ -6042,7 +6097,7 @@ function getBreakthroughVisualState(battle) {
   }
   const opponent = side === "player" ? "enemy" : side === "enemy" ? "player" : null;
   const actions = getTurnActions(battle, side);
-  if (!opponent || !actions.enemyFrontlineEmptyAtStart || actions.breakthroughUsed || actions.hiddenActivated) {
+  if (!opponent || !actions.enemyFrontlineEmptyAtStart || actions.breakthroughUsed || !canUseBoardAction(battle, side)) {
     return null;
   }
   const hasEligibleSource = battle.board[side].frontline.some((instance) => canSourceUseBreakthrough(battle, side, { side, lineId: "frontline", instance }));
