@@ -168,3 +168,9 @@
 - `node --check server.js`
 - 服务端权威规则 smoke 通过：空场双部署、两个不同场上单位行动、前线突破白名单、巡航导弹不能攻击无人机/对方导弹但能攻击直升机、最终运行时无 `SEAD导弹` 标签、侦察暴露高空目标时不触发远火校射并改为抽牌。
 - Playwright smoke 通过：本地进入战斗与调度界面正常，无 console error 文件，截图已复核。
+
+部署记录：
+
+- 2026-05-23 22:03 已同步到阿里云 ECS `/opt/war-card-game`，PM2 进程 `war-card-game` 已重启。
+- 首次服务器侧 `git fetch origin main` 卡在 GitHub pack 压缩阶段；随后改用本地生成的 `9a5fc93 -> 714eb90` 差异补丁通过 Workbench 应用，服务器端 `git apply --check`、`node --check` 和 `/healthz` 均通过。
+- 公网验证通过：`http://121.41.9.156/healthz` 返回正常，`.deployed-version` 确认为 V0.5.1 部署版本。
