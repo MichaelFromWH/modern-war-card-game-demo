@@ -16,12 +16,18 @@
       href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
       rel="stylesheet"
     />
+    <link rel="preload" as="image" href="./assets/ui/battlefield-ruins.webp" type="image/webp" fetchpriority="high" />
+    <link rel="preload" as="image" href="./assets/ui/card-back-frame.webp" type="image/webp" />
+    <link rel="preload" as="image" href="./assets/cards/card-shell-frame.webp" type="image/webp" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell" id="app" data-screen="briefing">
       <div class="battle-map" aria-hidden="true">
-        <img src="./assets/ui/battlefield-ruins.jpg" alt="" />
+        <picture>
+          <source srcset="./assets/ui/battlefield-ruins.webp" type="image/webp" />
+          <img src="./assets/ui/battlefield-ruins.jpg" alt="" decoding="async" fetchpriority="high" />
+        </picture>
         <div class="battle-map__shade"></div>
         <div class="battle-map__scan"></div>
       </div>

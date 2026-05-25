@@ -166,6 +166,7 @@ export const CARD_UI_ASSETS = {
   },
   factionMarks: {
     usa: `${COMMON_CARD_UI_ROOT}/faction/usa.png`,
+    russia: "./assets/cards/emblem-skull.webp",
   },
   tagBadges: {
     伴随防空: `${COMMON_CARD_UI_ROOT}/tags/mobile-aa.png`,
@@ -229,13 +230,22 @@ export function getCardArtPath(card) {
   return `${root}/${artKey}.jpg`;
 }
 
+export function getCardThumbnailArtPath(card) {
+  const generated = getGeneratedCardImages(card);
+  if (generated?.thumb) {
+    return generated.thumb;
+  }
+  return getCardArtPath(card);
+}
+
 export function getGeneratedCardImages(card) {
   const id = card?.id;
   if (!id || (!GENERATED_CARD_IDS.has(id) && !GENERATED_DETAIL_CARD_IDS.has(id))) {
     return null;
   }
   return {
-    art: GENERATED_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-art.jpg` : "",
+    art: GENERATED_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-art.webp` : "",
+    thumb: GENERATED_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-thumb.webp` : "",
     detail: GENERATED_DETAIL_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-detail.jpg` : "",
   };
 }

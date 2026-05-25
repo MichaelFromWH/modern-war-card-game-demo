@@ -279,6 +279,9 @@ class GameAudio {
       return;
     }
     if (action === "deploy") {
+      if (options.hidden) {
+        return;
+      }
       this.playSample("card.deploy", { volume: 0.38, playbackRate: 0.92 + Math.random() * 0.14 });
       this.playCategoryCue(category, "deploy", card);
       return;

@@ -74,10 +74,23 @@ const server = createServer((request, response) => {
   const stats = statSync(filePath);
   const type = contentTypes[extname(filePath)] || "application/octet-stream";
   const cacheControl = getCacheControl(pathname, type);
+  const etag = createEtag(stats);
+  const lastModified = stats.mtime.toUTCString();
+  if (isFresh(request, etag, stats.mtime)) {
+    response.writeHead(304, {
+      "Cache-Control": cacheControl,
+      ETag: etag,
+      "Last-Modified": lastModified,
+    });
+    response.end();
+    return;
+  }
   response.writeHead(200, {
     "Content-Type": type,
     "Content-Length": stats.size,
     "Cache-Control": cacheControl,
+    ETag: etag,
+    "Last-Modified": lastModified,
   });
 
   if (request.method === "HEAD") {
@@ -546,7 +559,7 @@ function resolvePath(urlPath) {
 
 function getCacheControl(pathname, type) {
   if (pathname.startsWith("/assets/")) {
-    return "public, max-age=31536000, immutable";
+    return "public, max-age=604800, stale-while-revalidate=86400";
   }
   if (
     pathname.startsWith("/src/") ||
@@ -557,4 +570,35 @@ function getCacheControl(pathname, type) {
     return "no-cache";
   }
   return "public, max-age=300";
+}
+
+function createEtag(stats) {
+  return `"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`;
+}
+
+function isFresh(request, etag, modifiedAt) {
+  const ifNoneMatch = request.headers["if-none-match"];
+  if (ifNoneMatch) {
+    const current = normalizeEtagValue(etag);
+    const candidates = ifNoneMatch
+      .split(",")
+      .map((value) => normalizeEtagValue(value));
+    if (candidates.includes("*") || candidates.includes(current)) {
+      return true;
+    }
+  }
+  const ifModifiedSince = request.headers["if-modified-since"];
+  if (!ifModifiedSince) {
+    return false;
+  }
+  const sinceTime = Date.parse(ifModifiedSince);
+  return Number.isFinite(sinceTime) && modifiedAt.getTime() <= sinceTime + 1000;
+}
+
+function normalizeEtagValue(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^W\//, "")
+    .replace(/\\"/g, "\"")
+    .replace(/^"|"$/g, "");
 }

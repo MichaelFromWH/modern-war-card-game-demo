@@ -15,6 +15,7 @@ import {
   getFactionMarkPath,
   getCardArtPath,
   getCardFireVideoPath,
+  getCardThumbnailArtPath,
   getGeneratedCardImages,
   getSkillIconPath,
   getSkillGlyph,
@@ -67,6 +68,17 @@ const BGM_PLAYLIST = [
   "./assets/audio/bgm/star-sky-instrumental.mp3",
 ];
 
+const CARD_BACK_ART_PATH = "./assets/ui/card-back-frame.webp";
+const CRITICAL_IMAGE_ASSETS = [
+  "./assets/ui/battlefield-ruins.webp",
+  CARD_BACK_ART_PATH,
+  "./assets/cards/card-shell-frame.webp",
+  "./assets/cards/card-hover-frame.webp",
+  "./assets/cards/card-selected-frame.webp",
+  "./assets/ui/deck-grave-panel.webp",
+  "./assets/ui/lane-icons.webp",
+];
+const ASSET_PRELOAD_CONCURRENCY = 4;
 const TURN_HANDOFF_MS = 2000;
 const AI_THINK_MS = 1050;
 const CARD_FLIGHT_MS = 760;
@@ -214,6 +226,13 @@ const UNIT_DISPLAY_PLATFORM_TAGS = [
 ];
 const MISSILE_DISPLAY_TYPE_TAGS = ["弹道导弹", "巡航导弹", "导弹"];
 const initialPlayerFaction = loadSavedDeckFaction();
+const imagePreloadState = {
+  queue: [],
+  queued: new Set(),
+  loaded: new Set(),
+  failed: new Set(),
+  inFlight: 0,
+};
 
 const state = {
   screen: "briefing",
@@ -263,9 +282,14 @@ bootstrap();
 
 function bootstrap() {
   gameAudio.preload();
+  warmShellAssets();
   bindEvents();
   updateDifficultyButtons();
   render();
+  runWhenIdle(() => {
+    warmDeckAssets(state.playerDeck, { includeFull: true });
+    warmFactionPoolAssets(FACTION_PAIR[state.playerFaction] || "russia");
+  }, 1200);
   if (state.online.joinCode) {
     window.setTimeout(() => focusOnlinePanel(), 420);
   }
@@ -304,6 +328,190 @@ function bindEvents() {
       toggleFullscreen();
     }
   });
+}
+
+function warmShellAssets() {
+  scheduleImagePreload(CRITICAL_IMAGE_ASSETS, { priority: true });
+}
+
+function runWhenIdle(callback, timeout = 1600) {
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(callback, { timeout });
+  } else {
+    window.setTimeout(callback, Math.min(timeout, 250));
+  }
+}
+
+function scheduleImagePreload(urls = [], options = {}) {
+  const entries = [...new Set(urls.map(normalizeAssetUrl).filter(Boolean))];
+  if (!entries.length) {
+    return;
+  }
+  entries.forEach((src) => {
+    if (imagePreloadState.loaded.has(src) || imagePreloadState.queued.has(src)) {
+      return;
+    }
+    imagePreloadState.queued.add(src);
+    const entry = { src, priority: Boolean(options.priority) };
+    if (entry.priority) {
+      imagePreloadState.queue.unshift(entry);
+    } else {
+      imagePreloadState.queue.push(entry);
+    }
+  });
+  pumpImagePreloadQueue();
+}
+
+function pumpImagePreloadQueue() {
+  while (imagePreloadState.inFlight < ASSET_PRELOAD_CONCURRENCY && imagePreloadState.queue.length) {
+    const entry = imagePreloadState.queue.shift();
+    imagePreloadState.inFlight += 1;
+    preloadImageAsset(entry.src, entry.priority)
+      .then(() => {
+        imagePreloadState.loaded.add(entry.src);
+      })
+      .catch(() => {
+        imagePreloadState.failed.add(entry.src);
+      })
+      .finally(() => {
+        imagePreloadState.inFlight -= 1;
+        pumpImagePreloadQueue();
+      });
+  }
+}
+
+function preloadImageAsset(src, priority = false) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.fetchPriority = priority ? "high" : "low";
+    image.onload = () => {
+      const decode = typeof image.decode === "function" ? image.decode() : Promise.resolve();
+      decode.then(resolve).catch(resolve);
+    };
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function normalizeAssetUrl(url) {
+  if (!url || typeof url !== "string") {
+    return "";
+  }
+  if (/^(data:|blob:)/.test(url)) {
+    return "";
+  }
+  try {
+    return new URL(url, window.location.href).href;
+  } catch {
+    return url;
+  }
+}
+
+function warmDeckAssets(cardIds = [], options = {}) {
+  const cards = cardIds.map((cardId) => getCard(cardId)).filter(Boolean);
+  const urls = cards.flatMap((card) => getCardImagePreloadUrls(card, options));
+  scheduleImagePreload(urls, { priority: Boolean(options.priority) });
+}
+
+function warmFactionPoolAssets(factionId, options = {}) {
+  const cards = getFactionCards(factionId).slice(0, options.limit || 40);
+  const urls = cards.flatMap((card) => getCardImagePreloadUrls(card, options));
+  scheduleImagePreload(urls, { priority: Boolean(options.priority) });
+}
+
+function warmBattleDeckReserves(battle) {
+  if (!battle) {
+    return;
+  }
+  warmDeckAssets(collectInstanceCardIds(battle.decks.player).slice(0, 10), { includeFull: false });
+  warmDeckAssets(collectInstanceCardIds(battle.decks.enemy).slice(0, 10), { includeFull: false });
+}
+
+function warmVisibleBattleAssets(battle, options = {}) {
+  if (!battle) {
+    return;
+  }
+  const priorityUrls = [CARD_BACK_ART_PATH];
+  collectInstanceCardIds(battle.hands.player).forEach((cardId) => {
+    const card = getCard(cardId);
+    if (card) {
+      priorityUrls.push(...getCardImagePreloadUrls(card, { includeFull: false }));
+    }
+  });
+  ["player", "enemy"].forEach((side) => {
+    ["frontline", "support"].forEach((lineId) => {
+      (battle.board?.[side]?.[lineId] || []).forEach((instance) => {
+        if (instance.hidden || instance.masked) {
+          priorityUrls.push(CARD_BACK_ART_PATH);
+          return;
+        }
+        const card = getCard(instance.cardId);
+        if (card) {
+          priorityUrls.push(...getCardImagePreloadUrls(card, { includeFull: false }));
+        }
+      });
+    });
+  });
+  scheduleImagePreload(priorityUrls, { priority: options.priority !== false });
+  runWhenIdle(() => {
+    const fullUrls = collectBattleVisibleCards(battle).flatMap((card) => getCardImagePreloadUrls(card, { includeFull: true }));
+    scheduleImagePreload(fullUrls);
+  }, 1800);
+}
+
+function warmOnlineRoomAssets() {
+  warmDeckAssets(state.playerDeck, { priority: true, includeFull: false });
+  const factions = state.online.players
+    .map((player) => player?.loadout?.faction)
+    .filter(Boolean);
+  runWhenIdle(() => {
+    factions.forEach((factionId) => warmFactionPoolAssets(factionId, { includeFull: false }));
+  }, 1200);
+}
+
+function warmBattleSnapshotAssets(snapshot) {
+  if (snapshot?.battle) {
+    warmVisibleBattleAssets(snapshot.battle, { priority: true });
+  }
+}
+
+function collectBattleVisibleCards(battle) {
+  const cards = [];
+  collectInstanceCardIds(battle.hands.player).forEach((cardId) => {
+    const card = getCard(cardId);
+    if (card) {
+      cards.push(card);
+    }
+  });
+  ["player", "enemy"].forEach((side) => {
+    ["frontline", "support"].forEach((lineId) => {
+      (battle.board?.[side]?.[lineId] || []).forEach((instance) => {
+        if (instance.hidden || instance.masked) {
+          return;
+        }
+        const card = getCard(instance.cardId);
+        if (card) {
+          cards.push(card);
+        }
+      });
+    });
+  });
+  return cards;
+}
+
+function collectInstanceCardIds(instances = []) {
+  return instances
+    .map((instance) => instance?.cardId)
+    .filter(Boolean);
+}
+
+function getCardImagePreloadUrls(card, options = {}) {
+  const urls = [getCardThumbnailArtPath(card)];
+  if (options.includeFull) {
+    urls.push(getCardArtPath(card));
+  }
+  return urls.filter(Boolean);
 }
 
 function handleInput(event) {
@@ -535,6 +743,8 @@ function startBattle(options = {}) {
     return;
   }
   state.battle = createBattle(options);
+  warmVisibleBattleAssets(state.battle, { priority: true });
+  runWhenIdle(() => warmBattleDeckReserves(state.battle), 900);
   if (options.mode === "online-preview") {
     const seedText = options.seed ? `Seed ${options.seed}` : "未指定 Seed";
     const opponentText = options.opponentName ? `对手：${options.opponentName}。` : "";
@@ -951,6 +1161,9 @@ function render() {
   refs.app.dataset.turnLocked = state.battle?.turnTransition || state.battle?.aiThinking || state.battle?.actionAnimation ? "true" : "false";
   refs.app.dataset.mulligan = state.mulligan.active ? "true" : "false";
   refs.briefing.hidden = state.screen !== "briefing";
+  if (state.battle) {
+    warmVisibleBattleAssets(state.battle);
+  }
   renderDeckStatus();
   renderOnlinePanel();
   renderBoard();
@@ -1067,7 +1280,7 @@ function renderBoardCard(instance, side, lineId) {
   const targetable = isPendingTarget(side, instance.uid);
   const concealed = instance.hidden;
   const inspectable = !concealed || side === "player";
-  const artPath = concealed ? "./assets/ui/card-back-frame.png" : getCardArtPath(card);
+  const artPath = concealed ? CARD_BACK_ART_PATH : getCardThumbnailArtPath(card);
   const fireVideoPath = concealed ? "" : getCardFireVideoPath(card);
   const title = concealed ? "" : card.name;
   const tags = concealed ? "" : getCardDisplayTags(card).join(" / ");
@@ -1079,6 +1292,7 @@ function renderBoardCard(instance, side, lineId) {
   const firingClass =
     !concealed && ["cardDeployVideo", "cardFireVideo"].includes(actionAnimation?.kind) && actionAnimation.sourceUid === instance.uid ? "is-video-firing" : "";
   const contactClass = getContactAnimationClass(actionAnimation, instance.uid);
+  const thumbnailClass = !concealed && card.type === "unit" ? "board-card--thumbnail" : "";
   const stateTitle = concealed
     ? side === "player"
       ? `${card.name}（隐蔽部署，悬停查看详情）`
@@ -1088,7 +1302,7 @@ function renderBoardCard(instance, side, lineId) {
       : card.name;
   return `
     <article
-      class="board-card ${modernClass} ${generatedClass} ${firingClass} ${contactClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
+      class="board-card ${modernClass} ${generatedClass} ${thumbnailClass} ${firingClass} ${contactClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
       data-board-card="${instance.uid}"
       data-side="${side}"
       ${inspectable ? `data-card-id="${card.id}"` : ""}
@@ -1099,6 +1313,7 @@ function renderBoardCard(instance, side, lineId) {
       <div class="board-card__power">${concealed ? "" : `<strong>${attack}</strong><span>战</span>`}</div>
       ${!concealed && card.type === "unit" ? renderUnitHealthBadge(card, "board-card__health-badge", currentHealth, maxHealth) : ""}
       ${!concealed && card.type === "unit" ? renderUnitValueBadge(card, "board-card__value-badge") : ""}
+      ${!concealed && card.type === "unit" ? renderThumbnailCombatOverlay(card, { className: "board-card__thumb-hud", currentHealth, maxHealth }) : ""}
       ${fireVideoPath ? `<video class="board-card__fire-video" src="${escapeHtml(fireVideoPath)}" playsinline preload="none"></video>` : ""}
       <div class="board-card__art ${artPath ? "" : "is-empty"}" data-glyph="${escapeHtml(getPrimaryGlyph(card))}">
         ${artPath ? "" : `<span>${escapeHtml(TYPE_LABELS[card.type])}</span>`}
@@ -1284,19 +1499,21 @@ function renderCommanderPanel(battle, side, faction) {
 function renderWarCard(card, options = {}) {
   const faction = getFaction(card.faction);
   const glyph = getPrimaryGlyph(card);
+  const isHandThumbnail = Boolean(options.handUid && !options.preview);
   const spread = (options.total || 1) > 8 ? 1.35 : 1.72;
   const fan = ((options.index || 0) - ((options.total || 1) - 1) / 2) * spread;
   const generated = hasGeneratedCardImages(card);
   const generatedImages = getGeneratedCardImages(card);
-  const detailArtPath = options.preview ? generatedImages?.detail || "" : "";
+  const detailArtPath = "";
   const previewArtPath = options.preview && generatedImages?.art ? generatedImages.art : "";
   const liveDetailOverlay = Boolean(options.preview && detailArtPath);
   const livePowerOverlay = liveDetailOverlay;
-  const artPath = previewArtPath || detailArtPath || getCardArtPath(card);
+  const artPath = isHandThumbnail ? getCardThumbnailArtPath(card) : previewArtPath || detailArtPath || getCardArtPath(card);
   const modern = isModernUnitCard(card);
   const displayTags = getCardDisplayTags(card);
   const metaItems = displayTags;
   const factionMarkPath = getFactionMarkPath(card.faction);
+  const footerFactionLabel = options.preview ? faction.shortName : card.specialization;
   const classes = [
     "war-card",
     `war-card--${card.type}`,
@@ -1307,13 +1524,15 @@ function renderWarCard(card, options = {}) {
     detailArtPath ? "war-card--generated-detail" : "",
     liveDetailOverlay ? "war-card--live-detail-overlay" : "",
     options.preview ? "war-card--detailed" : "war-card--simple",
+    options.preview ? "war-card--visual-preview" : "",
+    isHandThumbnail ? "war-card--thumbnail" : "",
     options.preview ? "war-card--preview" : "",
     options.selected ? "is-selected" : "",
     options.mulliganSelected ? "is-mulligan-selected" : "",
   ]
     .filter(Boolean)
     .join(" ");
-  const showPowerBadge = card.type === "unit" ? (!detailArtPath || livePowerOverlay) : !generated;
+  const showPowerBadge = isHandThumbnail ? false : card.type === "unit" ? (!detailArtPath || livePowerOverlay) : !generated;
   const powerBadge = card.type === "unit" ? getCardBaseAttack(card) : card.type === "tactic" ? "T" : "S";
   const footerStarsLabel = card.type === "unit" ? `目标价值 ${getCardTargetValue(card)} 星` : "";
   const footerStars = card.type === "unit" ? renderUnitValueStars(card) : "";
@@ -1346,15 +1565,16 @@ function renderWarCard(card, options = {}) {
             ${card.type === "unit" ? "<span>战</span>" : ""}
           </div>
         ` : ""}
-      ${card.type === "unit" ? renderUnitHealthBadge(card) : ""}
-      ${card.type === "unit" ? renderUnitValueBadge(card) : ""}
+      ${isHandThumbnail && card.type === "unit" ? renderThumbnailCombatOverlay(card, { className: "war-card__thumb-hud" }) : ""}
+      ${card.type === "unit" && !isHandThumbnail ? renderUnitHealthBadge(card) : ""}
+      ${card.type === "unit" && !isHandThumbnail ? renderUnitValueBadge(card) : ""}
       <div class="war-card__titlebar">
         <strong>${escapeHtml(card.name)}</strong>
         <div class="war-card__meta">
           ${metaItems.map((item) => `<span data-meta-item="${escapeHtml(item)}">${escapeHtml(item)}</span>`).join("")}
         </div>
       </div>
-      ${card.type === "unit" ? renderUnitHudStrip(card, glyph) : ""}
+      ${card.type === "unit" && !isHandThumbnail ? renderUnitHudStrip(card, glyph) : ""}
       <div class="war-card__art ${artPath ? "" : "is-empty"}" data-glyph="${escapeHtml(glyph)}">
         ${artPath ? "" : "<span>插画待补</span>"}
       </div>
@@ -1367,7 +1587,7 @@ function renderWarCard(card, options = {}) {
       </div>
       <div class="war-card__footer">
         ${card.type === "unit" ? `<span class="war-card__stars war-card__value-stars" aria-label="${escapeHtml(footerStarsLabel)}">${footerStars}</span>` : ""}
-        <em class="war-card__faction-mark" ${factionMarkPath ? `style="--faction-mark:url('${factionMarkPath}')"` : ""} aria-label="${escapeHtml(faction.shortName)}">${escapeHtml(card.specialization)}</em>
+        <em class="war-card__faction-mark" ${factionMarkPath ? `style="--faction-mark:url('${factionMarkPath}')"` : ""} aria-label="${escapeHtml(faction.shortName)}">${escapeHtml(footerFactionLabel)}</em>
       </div>
       ${deployActions}
     </article>
@@ -1387,11 +1607,39 @@ function renderUnitHudStrip(card, glyph = getPrimaryGlyph(card)) {
       </span>
       <span class="war-card__hud-unit" aria-label="${escapeHtml(attribute)}">
         <i aria-hidden="true">${escapeHtml(glyph)}</i>
+        <b>${escapeHtml(attribute)}</b>
       </span>
       <span class="war-card__hud-stat is-health">
         <i aria-hidden="true">盾</i>
         <b>${getCardHealth(card)}</b>
       </span>
+    </div>
+  `;
+}
+
+function renderThumbnailCombatOverlay(card, options = {}) {
+  if (card.type !== "unit") {
+    return "";
+  }
+  const currentHealth = options.currentHealth ?? getCardHealth(card);
+  const maxHealth = options.maxHealth ?? getCardHealth(card);
+  const damagedClass = currentHealth < maxHealth ? " is-damaged" : "";
+  const className = options.className ? ` ${options.className}` : "";
+  const attack = getCardBaseAttack(card);
+  const value = getCardTargetValue(card);
+  return `
+    <div class="card-thumb-hud${className}" aria-label="星级 ${value}，攻击 ${attack}，生命 ${currentHealth}">
+      <div class="card-thumb-hud__rating" aria-hidden="true"><b>${value}</b></div>
+      <div class="card-thumb-hud__combat" aria-hidden="true">
+        <span class="card-thumb-hud__stat card-thumb-hud__stat--attack">
+          <i class="card-thumb-hud__icon card-thumb-hud__icon--attack">&#8982;</i>
+          <b>${attack}</b>
+        </span>
+        <span class="card-thumb-hud__stat card-thumb-hud__stat--health${damagedClass}">
+          <i class="card-thumb-hud__icon card-thumb-hud__icon--health">&#9829;</i>
+          <b>${currentHealth}</b>
+        </span>
+      </div>
     </div>
   `;
 }
@@ -1682,14 +1930,12 @@ function renderSpotlight() {
     return;
   }
   const card = getCard(state.hoveredCardId);
-  const hasRuleAside = Boolean(card.ruleNote && String(card.ruleNote).trim());
   refs.spotlight.hidden = false;
   refs.spotlight.classList.toggle("is-overlay-preview", canShowInDeckBuilder);
-  refs.spotlight.classList.toggle("has-rule-aside", hasRuleAside);
+  refs.spotlight.classList.toggle("has-rule-aside", false);
   refs.spotlight.innerHTML = `
     <div class="card-spotlight__stage">
       ${renderPreviewCard(card)}
-      ${hasRuleAside ? renderCardRuleAside(card) : ""}
     </div>
   `;
   if (canShowInDeckBuilder) {
@@ -1746,7 +1992,7 @@ function renderIntentTargetButton(target) {
   const side = target.side === "player" ? "我方" : "敌方";
   const lineLabel = getLine(target.lineId).name;
   const power = getCurrentPower(target.instance);
-  const artPath = concealed ? "./assets/ui/card-back-frame.png" : getCardArtPath(targetCard);
+  const artPath = concealed ? CARD_BACK_ART_PATH : getCardThumbnailArtPath(targetCard);
   const targetLabel = concealed ? `${side}${lineLabel}隐蔽单位` : `${side}${lineLabel}${targetCard.name}`;
   const cardClass = concealed ? "intent-target__card intent-target__card--back" : "intent-target__card";
 
@@ -2153,7 +2399,7 @@ function renderDeckBuilderCard(card, count) {
   const tags = getCardDisplayTags(card).map((tag) => `<i>${escapeHtml(tag)}</i>`).join("");
   return `
     <article class="deck-card ${count ? "is-in-deck" : ""}" data-card-id="${card.id}" style="--accent:${getFaction(card.faction).accent}">
-      <div class="deck-card__art" style="--card-art:url('${getCardArtPath(card)}')"></div>
+      <div class="deck-card__art" style="--card-art:url('${getCardThumbnailArtPath(card)}')"></div>
       <div class="deck-card__body">
         <div class="deck-card__title">
           <strong>${escapeHtml(card.name)}</strong>
@@ -2328,7 +2574,7 @@ function playUnitFromHand(battle, side, uid, lineId, options = {}) {
     back: instance.hidden,
     duration: DEPLOY_CARD_FLIGHT_MS,
   });
-  gameAudio.playCard(card, { action: instance.hidden ? "conceal" : "deploy", side, hidden: instance.hidden });
+  gameAudio.playCard(card, { action: "deploy", side, hidden: instance.hidden });
   battle.log.push(getDeploymentLog(battle, side, instance, card, lineId));
 
   const deployDelay = shouldDeferCardDeployVideo(side, card, { side, lineId, instance }) ? DEPLOY_VIDEO_START_DELAY_MS : DEPLOY_EFFECT_DELAY_MS;
@@ -3371,7 +3617,7 @@ function playCardFlight(card, side, fromRect, toRect, options = {}) {
   element.style.setProperty("--to-y", `${to.y}px`);
   element.style.setProperty("--mid-x", `${(from.x + to.x) / 2}px`);
   element.style.setProperty("--mid-y", `${Math.min(from.y, to.y) - 88}px`);
-  element.style.setProperty("--card-art", options.back ? "url('./assets/ui/card-back-frame.png')" : `url('${getCardArtPath(card)}')`);
+  element.style.setProperty("--card-art", options.back ? `url('${CARD_BACK_ART_PATH}')` : `url('${getCardThumbnailArtPath(card)}')`);
   element.style.setProperty("--flight-duration", `${options.duration || CARD_FLIGHT_MS}ms`);
   element.innerHTML = `<span>${options.back ? "" : escapeHtml(card?.name || "")}</span>`;
   refs.fxLayer.append(element);
@@ -6475,6 +6721,9 @@ function toggleOnlineReady() {
     return;
   }
   state.online.ready = !state.online.ready;
+  if (state.online.ready) {
+    warmOnlineRoomAssets();
+  }
   sendOnlineMessage({
     type: "ready",
     ready: state.online.ready,
@@ -6512,6 +6761,7 @@ function enterOnlineAuthoritativeBattle(snapshot) {
   }
   state.online.lastEffectSerial = 0;
   state.battle = hydrateOnlineBattle(snapshot.battle);
+  warmVisibleBattleAssets(state.battle, { priority: true });
   state.screen = "battle";
   state.selectedHandUid = null;
   state.hoveredCardId = null;
@@ -6538,6 +6788,7 @@ function hydrateOnlineBattle(battle) {
 
 function applyOnlineBattleSnapshot(snapshot) {
   state.online.battleSnapshot = snapshot;
+  warmBattleSnapshotAssets(snapshot);
   if (state.screen !== "battle" || state.battle?.mode !== "online-authoritative") {
     renderOnlinePanel();
     return;
@@ -6811,6 +7062,7 @@ function handleOnlineMessage(raw) {
     state.online.match = null;
     state.online.battleSnapshot = null;
     state.online.status = "connected";
+    warmOnlineRoomAssets();
     state.online.lastEvent = message.type === "room_created" ? "房间已创建，复制房间码发给朋友。" : "已加入房间。";
     renderOnlinePanel();
     return;
@@ -6824,6 +7076,7 @@ function handleOnlineMessage(raw) {
     const self = state.online.players.find((player) => player.id === state.online.clientId);
     state.online.ready = Boolean(self?.ready);
     state.online.status = "connected";
+    warmOnlineRoomAssets();
     renderOnlinePanel();
     return;
   }
@@ -6832,6 +7085,7 @@ function handleOnlineMessage(raw) {
     state.online.matchReady = true;
     state.online.match = message.match || state.online.match;
     const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
+    warmOnlineRoomAssets();
     state.online.lastEvent = `双方已准备，服务器已创建权威对局。${seed} 点击进入战场。`;
     renderOnlinePanel();
     return;
@@ -6841,12 +7095,14 @@ function handleOnlineMessage(raw) {
     state.online.matchReady = true;
     state.online.match = message.match || state.online.match;
     const seed = state.online.match?.seed ? ` Seed ${state.online.match.seed}` : "";
+    warmOnlineRoomAssets();
     state.online.lastEvent = `真人对局房间已就绪。${seed} 点击进入战场接入服务器快照。`;
     renderOnlinePanel();
     return;
   }
 
   if (message.type === "battle_snapshot") {
+    warmBattleSnapshotAssets(message);
     applyOnlineBattleSnapshot(message);
     return;
   }
