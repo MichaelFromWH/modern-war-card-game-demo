@@ -246,7 +246,7 @@ export function getGeneratedCardImages(card) {
   return {
     art: GENERATED_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-art.webp` : "",
     thumb: GENERATED_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-thumb.webp` : "",
-    detail: GENERATED_DETAIL_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-detail.jpg` : "",
+    detail: GENERATED_DETAIL_CARD_IDS.has(id) ? `${GENERATED_CARD_ROOT}/${id}-detail.webp` : "",
   };
 }
 

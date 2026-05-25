@@ -1504,10 +1504,10 @@ function renderWarCard(card, options = {}) {
   const fan = ((options.index || 0) - ((options.total || 1) - 1) / 2) * spread;
   const generated = hasGeneratedCardImages(card);
   const generatedImages = getGeneratedCardImages(card);
-  const detailArtPath = "";
-  const previewArtPath = options.preview && generatedImages?.art ? generatedImages.art : "";
-  const liveDetailOverlay = Boolean(options.preview && detailArtPath);
-  const livePowerOverlay = liveDetailOverlay;
+  const detailArtPath = options.preview && generatedImages?.detail ? generatedImages.detail : "";
+  const previewArtPath = options.preview && !detailArtPath && generatedImages?.art ? generatedImages.art : "";
+  const liveDetailOverlay = false;
+  const livePowerOverlay = false;
   const artPath = isHandThumbnail ? getCardThumbnailArtPath(card) : previewArtPath || detailArtPath || getCardArtPath(card);
   const modern = isModernUnitCard(card);
   const displayTags = getCardDisplayTags(card);
@@ -1524,7 +1524,6 @@ function renderWarCard(card, options = {}) {
     detailArtPath ? "war-card--generated-detail" : "",
     liveDetailOverlay ? "war-card--live-detail-overlay" : "",
     options.preview ? "war-card--detailed" : "war-card--simple",
-    options.preview ? "war-card--visual-preview" : "",
     isHandThumbnail ? "war-card--thumbnail" : "",
     options.preview ? "war-card--preview" : "",
     options.selected ? "is-selected" : "",
