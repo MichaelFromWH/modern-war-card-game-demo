@@ -8,3 +8,16 @@ dist.zip
 node_modules/
 npm-debug.log*
 output/
+
+# Local/debug artifacts that should not ship with the web deployment.
+.playwright-mcp/
+aliyun-*.png
+hover-preview-*.png
+mwcards-*.png
+
+# Generated source/candidate media. The app uses optimized webp/detail jpg
+# card images and canonical *-fire.mp4 videos instead.
+assets/generated-cards/imagegen-us-model-test/*-art.jpg
+assets/card-fire-vfx/*-original.mp4
+assets/card-fire-vfx/*-seedance-*.mp4
+assets/card-fire-vfx/*tasks*.json

@@ -4635,6 +4635,209 @@ Object.entries(DOCX_20260521_CARD_PATCHES).forEach(([cardId, patch]) => {
   Object.assign(card, patch);
 });
 
+const DOCX_20260523_SURFACE_DAMAGE_4_BONUSES = SURFACE_TARGET_TAGS.map((tag) => ({ tag, amount: 4 }));
+
+const DOCX_20260523_CARD_PATCHES = {
+  "us_stryker": unitPatch({
+    "attack": 2,
+    "health": 4,
+    "targetValue": 2,
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "【装甲】：可以攻击前线区地面单位。\n【前线突破】：若敌方前线为空，可突破暴露一个隐蔽支援单位。",
+    "effect": "【快速突击】：若目标为【步兵】，伤害+1。\n【高射机枪】：也可对低空目标造成 2 点伤害。",
+    "canBreakthrough": true,
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": [{ "tag": "步兵", "amount": 3 }],
+      "sourceExposes": true
+    }
+  }),
+  "us_himars": unitPatch({
+    "attack": 3,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["火箭炮"],
+    "unitAttribute": "火箭炮",
+    "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
+    "effect": "【火力覆盖】：选择最多两个地面或低空目标造成伤害，主目标 3 点，第二目标 1 点；若目标为【步兵】，伤害+1。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "secondaryBonuses": [{ "tag": "步兵", "amount": 2 }],
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "maxTargets": 2,
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "secondaryBonuses": [{ "tag": "步兵", "amount": 2 }],
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 4 }],
+      "maxTargets": 2,
+      "sourceExposes": true
+    }
+  }),
+  "us_b2": unitPatch({
+    "attack": 5,
+    "health": 5,
+    "targetValue": 5,
+    "displayTags": ["轰炸机", "高空"],
+    "unitAttribute": "轰炸机、高空",
+    "tags": ["轰炸机"],
+    "ruleNote": "【轰炸机】：可以攻击所有战线地面单位。",
+    "effect": "【战略轰炸】：选择最多两个地面目标造成伤害，主目标 5 点，第二目标 3 点。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "secondaryAmount": 3,
+      "requiresAnyTag": SURFACE_TARGET_TAGS,
+      "maxTargets": 2,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  }),
+  "us_f35": unitPatch({
+    "attack": 2,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "tags": ["战斗机"],
+    "ruleNote": "【战斗机】：可以攻击所有战线单位。",
+    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为低空或高空单位，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "bonuses": LOW_OR_HIGH_AIR_TAGS.map((tag) => ({ tag, amount: 4 })),
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  }),
+  "us_f35a_sead": unitPatch({
+    "attack": 2,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "tags": ["战斗机"],
+    "name": "F-35A战斗机",
+    "ruleNote": "【战斗机】：可以攻击所有战线单位。",
+    "effect": "【对地打击】：对一个目标造成 2 点伤害；若目标为地面单位，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "bonuses": DOCX_20260523_SURFACE_DAMAGE_4_BONUSES,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  }),
+  "ru_tornado_s": unitPatch({
+    "attack": 3,
+    "health": 3,
+    "targetValue": 4,
+    "displayTags": ["火箭炮"],
+    "unitAttribute": "火箭炮",
+    "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
+    "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "maxTargets": 3,
+      "sourceExposes": true
+    },
+    "fire": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 3,
+      "secondaryAmount": 1,
+      "requiresAnyTag": SURFACE_OR_LOW_AIR_TAGS,
+      "maxTargets": 3,
+      "sourceExposes": true
+    }
+  }),
+  "ru_su34": unitPatch({
+    "attack": 5,
+    "health": 5,
+    "targetValue": 5,
+    "displayTags": ["轰炸机", "高空"],
+    "unitAttribute": "轰炸机、高空",
+    "tags": ["轰炸机"],
+    "ruleNote": "【轰炸机】：可以攻击所有战线地面单位。",
+    "effect": "【对地空袭】：选择最多两个地面目标造成伤害，主目标 5 点，第二目标 3 点。",
+    "ability": {
+      "kind": "areaDamage",
+      "rows": ["frontline", "support"],
+      "amount": 5,
+      "secondaryAmount": 3,
+      "requiresAnyTag": SURFACE_TARGET_TAGS,
+      "maxTargets": 2,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  }),
+  "ru_su35": unitPatch({
+    "attack": 2,
+    "health": 6,
+    "targetValue": 4,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "tags": ["战斗机"],
+    "ruleNote": "【战斗机】：可以攻击所有战线单位。",
+    "effect": "【空优打击】：对一个目标造成 2 点伤害；若目标为低空或高空单位，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "bonuses": LOW_OR_HIGH_AIR_TAGS.map((tag) => ({ tag, amount: 4 })),
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  }),
+  "ru_su57_sead": unitPatch({
+    "attack": 2,
+    "health": 5,
+    "targetValue": 4,
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "tags": ["战斗机"],
+    "name": "Su-57 SEAD 战斗机",
+    "ruleNote": "【战斗机】：可以攻击所有战线单位。",
+    "effect": "【对地打击】：对一个目标造成 2 点伤害；若目标为地面单位，伤害+2。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 2,
+      "bonuses": DOCX_20260523_SURFACE_DAMAGE_4_BONUSES,
+      "sourceExposes": true,
+      "interceptByTags": ["重型防空"]
+    }
+  })
+};
+
+Object.entries(DOCX_20260523_CARD_PATCHES).forEach(([cardId, patch]) => {
+  const card = CARD_LIBRARY[cardId];
+  if (!card) {
+    return;
+  }
+  Object.assign(card, patch);
+});
+
 [
   "us_electronic_suppression",
   "us_emergency_supply",

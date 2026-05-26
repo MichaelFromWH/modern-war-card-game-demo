@@ -241,7 +241,6 @@ class GameAudio {
         this.systemStart();
         break;
       case "system.pass":
-        this.radioClick();
         this.softThump(0.1, 95, 0.28);
         break;
       case "system.victory":

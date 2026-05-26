@@ -900,9 +900,6 @@ function beginTurnHandoff(battle, fromSide, toSide, options = {}) {
     serial: battle.actionSerial,
   };
 
-  if (!options.opening) {
-    gameAudio.play("ui.switch", { side: toSide });
-  }
   render();
 
   battle.turnTimer = window.setTimeout(() => {
@@ -2573,10 +2570,12 @@ function playUnitFromHand(battle, side, uid, lineId, options = {}) {
     back: instance.hidden,
     duration: DEPLOY_CARD_FLIGHT_MS,
   });
-  gameAudio.playCard(card, { action: "deploy", side, hidden: instance.hidden });
+  if (!instance.hidden) {
+    gameAudio.playCard(card, { action: "deploy", side, hidden: false });
+  }
   battle.log.push(getDeploymentLog(battle, side, instance, card, lineId));
 
-  const deployDelay = shouldDeferCardDeployVideo(side, card, { side, lineId, instance }) ? DEPLOY_VIDEO_START_DELAY_MS : DEPLOY_EFFECT_DELAY_MS;
+  const deployDelay = DEPLOY_EFFECT_DELAY_MS;
   window.setTimeout(() => {
     if (state.battle !== battle || battle.phase !== "battle") {
       return;
@@ -2626,11 +2625,6 @@ function continueUnitDeployment(battle, side, sourceRef, card, options = {}) {
   }
 
   applyDeploySelfBonuses(battle, side, instance, card);
-
-  const deployVideoPlayed = shouldDeferCardDeployVideo(side, card, { side, lineId, instance });
-  if (deployVideoPlayed) {
-    return beginCardDeployVideoTransition(battle, side, { side, lineId, instance }, card);
-  }
 
   resolveDeployBoardEffect(battle, side, instance, card, { skipCardFireVideo: false, pacedFinish: true });
 }
@@ -3382,7 +3376,7 @@ function playRocketSalvoVfx(start, end, amount) {
     const nextEnd = { x: end.x + offset.x, y: end.y + offset.y };
     const nextStart = { x: start.x + offset.x * 0.2, y: start.y - index * 4 };
     playProjectileVfx(nextStart, nextEnd, "rocket", amount, index * 70);
-    window.setTimeout(() => playImpactVfx(nextEnd, "rocket", Math.max(2, amount - 1)), 510 + index * 70);
+    window.setTimeout(() => playImpactVfx(nextEnd, "rocket", amount, { showDamageNumber: false }), 510 + index * 70);
   }
 }
 
@@ -3400,7 +3394,7 @@ function playBurstVfx(start, end, kind, amount) {
   }
 }
 
-function playImpactVfx(point, kind, amount = 1) {
+function playImpactVfx(point, kind, amount = 1, options = {}) {
   if (!refs.fxLayer) {
     return;
   }
@@ -3415,7 +3409,9 @@ function playImpactVfx(point, kind, amount = 1) {
   `;
   refs.fxLayer.append(impact);
   addParticles(point, kind, amount);
-  addDamageNumber(point, amount);
+  if (options.showDamageNumber !== false) {
+    addDamageNumber(point, amount);
+  }
   removeFxElement(impact, kind === "artillery" || kind === "rocket" || kind === "heavy" ? 1050 : 760);
 }
 
@@ -4061,7 +4057,6 @@ function passTurn(side) {
   }
 
   refreshIntelValues(battle);
-  gameAudio.play("system.pass", { side });
   battle.log.push(`${getSideName(battle, side)}结束回合，移交指挥权。`);
   state.selectedHandUid = null;
   state.pending = null;
@@ -5609,6 +5604,46 @@ function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete)
 }
 
 function resolveFrontlineEngagementFirePhase(battle, side, deployedUid, ambusherUids, onComplete) {
+  if (state.battle !== battle || battle.phase !== "battle") {
+    return;
+  }
+  const opponent = side === "player" ? "enemy" : "player";
+  playFrontlineContactLeadAmbusherVideo(battle, opponent, ambusherUids).finally(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    resolveFrontlineEngagementDamagePhase(battle, side, deployedUid, ambusherUids, onComplete);
+  });
+}
+
+function playFrontlineContactLeadAmbusherVideo(battle, opponent, ambusherUids) {
+  const leadAmbusherRef = findBoardInstance(battle, opponent, ambusherUids[0]);
+  if (!leadAmbusherRef) {
+    return Promise.resolve();
+  }
+  const leadAmbusherCard = getCard(leadAmbusherRef.instance.cardId);
+  if (!getCardFireVideoPath(leadAmbusherCard)) {
+    return Promise.resolve();
+  }
+
+  battle.actionAnimation = {
+    kind: "cardFireVideo",
+    side: opponent,
+    sourceUid: leadAmbusherRef.instance.uid,
+    cardId: leadAmbusherCard.id,
+  };
+  render();
+
+  return playCardFireVideo(leadAmbusherRef, leadAmbusherCard).finally(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    battle.actionAnimation = null;
+    render();
+  });
+}
+
+function resolveFrontlineEngagementDamagePhase(battle, side, deployedUid, ambusherUids, onComplete) {
   if (state.battle !== battle || battle.phase !== "battle") {
     return;
   }

@@ -9228,9 +9228,16 @@ button:disabled {
 }
 
 .battle-line__cards .board-card.board-card--thumbnail {
-  width: 78px !important;
-  height: 117px !important;
-  flex: 0 0 78px !important;
+  width: 96px !important;
+  height: 144px !important;
+  flex: 0 0 96px !important;
+  border-radius: 6px !important;
+}
+
+.battle-line__cards .board-card.is-concealed-card {
+  width: 96px !important;
+  height: 144px !important;
+  flex: 0 0 96px !important;
   border-radius: 6px !important;
 }
 
@@ -9317,7 +9324,7 @@ button:disabled {
   position: absolute;
   left: 8px;
   top: 7px;
-  color: #ffd978;
+  color: #f6c86e;
   font-weight: 1000;
   line-height: 0.88;
   text-shadow:
@@ -9329,7 +9336,7 @@ button:disabled {
 .card-thumb-hud__rating b {
   display: block;
   color: #ffd778;
-  background: linear-gradient(180deg, #fff8d5 0%, #ffd66f 42%, #b97720 100%);
+  background: linear-gradient(180deg, #fff7cf 0%, #f3c462 38%, #a65f1a 100%);
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -9351,24 +9358,24 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #ffd978;
+  color: #f2c5af;
   font-weight: 1000;
   line-height: 1;
   text-shadow:
-    0 1px 0 rgba(255, 248, 214, 0.48),
+    0 1px 0 rgba(255, 242, 222, 0.45),
     0 3px 5px rgba(0, 0, 0, 0.95),
-    0 0 10px rgba(241, 174, 72, 0.48);
+    0 0 10px rgba(230, 161, 124, 0.42);
 }
 
 .card-thumb-hud__stat b {
-  color: #ffd978;
+  color: #f2c5af;
   font-size: 1.18em;
 }
 
 .card-thumb-hud__icon {
   display: inline-grid;
   place-items: center;
-  color: #ffd978;
+  color: #f4d2c1;
   font-style: normal;
   line-height: 1;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
@@ -9409,11 +9416,11 @@ button:disabled {
 }
 
 .card-thumb-hud__stat--health.is-damaged b {
-  color: #ffd978;
+  color: #ff4f87;
   text-shadow:
-    0 1px 0 rgba(255, 248, 214, 0.48),
+    0 1px 0 rgba(255, 215, 228, 0.44),
     0 3px 5px rgba(0, 0, 0, 0.95),
-    0 0 12px rgba(241, 174, 72, 0.58);
+    0 0 12px rgba(255, 67, 125, 0.72);
 }
 
 .hand-rail .war-card.war-card--thumbnail .card-thumb-hud__rating {
@@ -9435,7 +9442,7 @@ button:disabled {
 .battle-line__cards .board-card.board-card--thumbnail .card-thumb-hud__rating {
   left: 7px;
   top: 7px;
-  font-size: 1.42rem;
+  font-size: 1.58rem;
 }
 
 .battle-line__cards .board-card.board-card--thumbnail .card-thumb-hud__combat {
@@ -9447,7 +9454,7 @@ button:disabled {
 
 .battle-line__cards .board-card.board-card--thumbnail .card-thumb-hud__stat {
   gap: 3px;
-  font-size: 0.86rem;
+  font-size: 0.94rem;
 }
 
 .hand-rail .war-card.war-card--thumbnail .war-card__deploy-actions {
@@ -9469,9 +9476,15 @@ button:disabled {
 
 @media (max-width: 760px) {
   .battle-line__cards .board-card.board-card--thumbnail {
-    width: 64px !important;
-    height: 96px !important;
-    flex-basis: 64px !important;
+    width: 72px !important;
+    height: 108px !important;
+    flex-basis: 72px !important;
+  }
+
+  .battle-line__cards .board-card.is-concealed-card {
+    width: 72px !important;
+    height: 108px !important;
+    flex-basis: 72px !important;
   }
 
   .hand-rail .war-card.war-card--thumbnail .card-thumb-hud__rating {
@@ -9508,20 +9521,19 @@ button:disabled {
     font-size: 0.82rem;
   }
 }
-
 /* Final deployed-card and hover-preview pass for the May 23 art set. */
 .battle-line__cards .board-card,
 .battle-line__cards .board-card.board-card--modern,
 .battle-line__cards .board-card.board-card--generated-card,
 .battle-line__cards .board-card.board-card--thumbnail,
 .battle-line__cards .board-card.is-concealed-card {
-  width: 78px !important;
-  min-width: 78px !important;
-  max-width: 78px !important;
-  height: 117px !important;
-  min-height: 117px !important;
-  max-height: 117px !important;
-  flex: 0 0 78px !important;
+  width: 96px !important;
+  min-width: 96px !important;
+  max-width: 96px !important;
+  height: 144px !important;
+  min-height: 144px !important;
+  max-height: 144px !important;
+  flex: 0 0 96px !important;
   aspect-ratio: 2 / 3;
   border-radius: 6px !important;
 }
@@ -10010,4 +10022,20 @@ button:disabled {
   color: #ffe4ad;
   font-size: 0.74rem !important;
   font-weight: 1000;
+}
+
+@media (max-width: 760px) {
+  .battle-line__cards .board-card,
+  .battle-line__cards .board-card.board-card--modern,
+  .battle-line__cards .board-card.board-card--generated-card,
+  .battle-line__cards .board-card.board-card--thumbnail,
+  .battle-line__cards .board-card.is-concealed-card {
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
+    height: 108px !important;
+    min-height: 108px !important;
+    max-height: 108px !important;
+    flex: 0 0 72px !important;
+  }
 }
