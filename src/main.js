@@ -1,4 +1,5 @@
 import {
+  CARD_DISPLAY_ORDER,
   CARD_LIBRARY,
   FACTIONS,
   LINES,
@@ -643,8 +644,10 @@ function updateSpotlightPosition() {
   positionDeckBuilderSpotlight();
 }
 
-function isSpotlightSourceHovered(cardId) {
-  return Array.from(document.querySelectorAll(".hand-rail [data-card-id], .battle-board [data-card-id], .codex-overlay [data-card-id], .deck-builder-overlay [data-card-id]")).some(
+const SPOTLIGHT_SOURCE_SELECTOR = ".hand-rail [data-card-id], .battle-board [data-card-id], .codex-overlay [data-card-id], .deck-builder-overlay [data-card-id]";
+
+function getHoveredSpotlightSource(cardId) {
+  return Array.from(document.querySelectorAll(SPOTLIGHT_SOURCE_SELECTOR)).find(
     (element) => element.dataset.cardId === cardId && element.matches(":hover"),
   );
 }
@@ -1501,8 +1504,8 @@ function renderWarCard(card, options = {}) {
   const fan = ((options.index || 0) - ((options.total || 1) - 1) / 2) * spread;
   const generated = hasGeneratedCardImages(card);
   const generatedImages = getGeneratedCardImages(card);
-  const detailArtPath = options.preview && generatedImages?.detail ? generatedImages.detail : "";
-  const previewArtPath = options.preview && !detailArtPath && generatedImages?.art ? generatedImages.art : "";
+  const detailArtPath = "";
+  const previewArtPath = options.preview && generatedImages?.art ? generatedImages.art : "";
   const liveDetailOverlay = false;
   const livePowerOverlay = false;
   const artPath = isHandThumbnail ? getCardThumbnailArtPath(card) : previewArtPath || detailArtPath || getCardArtPath(card);
@@ -1520,6 +1523,7 @@ function renderWarCard(card, options = {}) {
     generated ? "war-card--generated-card" : "",
     detailArtPath ? "war-card--generated-detail" : "",
     liveDetailOverlay ? "war-card--live-detail-overlay" : "",
+    options.preview && generated ? "war-card--visual-preview" : "",
     options.preview ? "war-card--detailed" : "war-card--simple",
     isHandThumbnail ? "war-card--thumbnail" : "",
     options.preview ? "war-card--preview" : "",
@@ -1921,17 +1925,20 @@ function renderSpotlight() {
     clearSpotlight();
     return;
   }
-  if (!isSpotlightSourceHovered(state.hoveredCardId)) {
+  const hoveredSource = getHoveredSpotlightSource(state.hoveredCardId);
+  if (!hoveredSource) {
     clearSpotlight();
     return;
   }
   const card = getCard(state.hoveredCardId);
+  const showRuleAside = canShowInBattle && shouldShowBattleRuleAside(card, hoveredSource);
   refs.spotlight.hidden = false;
   refs.spotlight.classList.toggle("is-overlay-preview", canShowInDeckBuilder);
-  refs.spotlight.classList.toggle("has-rule-aside", false);
+  refs.spotlight.classList.toggle("has-rule-aside", showRuleAside);
   refs.spotlight.innerHTML = `
     <div class="card-spotlight__stage">
       ${renderPreviewCard(card)}
+      ${showRuleAside ? renderCardRuleAside(card) : ""}
     </div>
   `;
   if (canShowInDeckBuilder) {
@@ -1941,12 +1948,28 @@ function renderSpotlight() {
   }
 }
 
+function shouldShowBattleRuleAside(card, hoveredSource) {
+  const boardCard = hoveredSource?.closest("[data-board-card]");
+  if (!boardCard || card.type !== "unit") {
+    return false;
+  }
+  return !(boardCard.dataset.side === "enemy" && boardCard.classList.contains("is-concealed-card"));
+}
+
 function renderCardRuleAside(card) {
-  const ruleNote = String(card.ruleNote || "").trim();
+  const ruleNote = String(card.ruleNote || card.effect || "").trim();
+  const bullets = getCardRuleBullets(card);
   return `
     <aside class="card-rule-aside" aria-label="侧边注释">
       <span>侧边注释</span>
+      <strong>${escapeHtml(card.name)}</strong>
+      <div class="card-rule-aside__stats">
+        <i><b>攻</b>${getCardBaseAttack(card)}</i>
+        <i><b>命</b>${getCardHealth(card)}</i>
+        <i class="is-value-star"><b>值</b>${getCardTargetValue(card)}</i>
+      </div>
       <p>${escapeHtml(ruleNote).replace(/\n/g, "<br>")}</p>
+      ${bullets.length ? `<ul>${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
     </aside>
   `;
 }
@@ -2071,12 +2094,8 @@ function renderCodex() {
   }
 
   const faction = getFaction(state.codexFaction);
-  const cards = Object.values(CARD_LIBRARY)
-    .filter((card) => card.faction === state.codexFaction)
-    .sort((left, right) => {
-      const typeOrder = { unit: 0, tactic: 1, strategy: 2 };
-      return typeOrder[left.type] - typeOrder[right.type] || (left.power || 99) - (right.power || 99) || left.name.localeCompare(right.name, "zh-CN");
-    });
+  const entries = getCodexDeckEntries(state.codexFaction);
+  const totalCards = entries.reduce((total, entry) => total + entry.count, 0);
 
   refs.codex.innerHTML = `
     <div class="codex-panel" style="--accent:${faction.accent}">
@@ -2084,6 +2103,7 @@ function renderCodex() {
         <div>
           <span>牌组预览</span>
           <strong>${escapeHtml(faction.name)}</strong>
+          <p>${totalCards} 张 · ${entries.length} 类</p>
         </div>
         <nav class="codex-tabs" aria-label="阵营筛选">
           ${Object.values(FACTIONS)
@@ -2102,14 +2122,89 @@ function renderCodex() {
         <button class="codex-close" type="button" data-action="close-codex" aria-label="关闭牌组预览">×</button>
       </header>
       <div class="codex-grid">
-        ${cards.map((card) => renderCodexCard(card)).join("")}
+        ${entries.map((entry) => renderCodexCard(entry.card, entry.count, entry.order)).join("")}
       </div>
     </div>
   `;
 }
 
-function renderCodexCard(card) {
-  return renderWarCard(card, { preview: true });
+function getCodexDeckEntries(factionId) {
+  const deckIds = getCodexDeckIds(factionId);
+  const counts = deckIds.reduce((map, cardId) => {
+    const card = CARD_LIBRARY[cardId];
+    if (card && card.faction === factionId) {
+      map[cardId] = (map[cardId] || 0) + 1;
+    }
+    return map;
+  }, {});
+  const orderedIds = CARD_DISPLAY_ORDER[factionId] || [];
+  const ids = [
+    ...orderedIds.filter((cardId) => counts[cardId]),
+    ...Object.keys(counts).filter((cardId) => !orderedIds.includes(cardId)).sort((left, right) => sortDeckCards(CARD_LIBRARY[left], CARD_LIBRARY[right])),
+  ];
+  return ids
+    .map((cardId, index) => ({
+      card: CARD_LIBRARY[cardId],
+      count: counts[cardId],
+      order: CARD_LIBRARY[cardId]?.docOrder || index + 1,
+    }))
+    .filter((entry) => entry.card);
+}
+
+function getCodexDeckIds(factionId) {
+  if (factionId === state.playerFaction && Array.isArray(state.playerDeck) && state.playerDeck.length) {
+    return state.playerDeck.slice();
+  }
+  return getStarterDeckForFaction(factionId);
+}
+
+function renderCodexCard(card, count = 1, order = card.docOrder || 0) {
+  const artPath = getCardThumbnailArtPath(card);
+  const lineLabel = card.line === "instant" ? "即时/无部署线" : getLine(card.line)?.name || card.line;
+  const typeLabel = card.type === "unit" ? "驻场单位" : card.type === "tactic" ? "功能战术" : TYPE_LABELS[card.type];
+  const tags = getCardDisplayTags(card).map((tag) => `<i>${escapeHtml(tag)}</i>`).join("");
+  const ruleNote = String(card.ruleNote || "").trim();
+  const effect = String(card.effect || "").trim();
+  return `
+    <article class="codex-card codex-card--${card.type}" data-card-id="${card.id}" style="--accent:${getFaction(card.faction).accent};--card-art:url('${artPath}')">
+      <div class="codex-card__art" aria-hidden="true">
+        <span>${String(order).padStart(2, "0")}</span>
+      </div>
+      <div class="codex-card__body">
+        <header class="codex-card__head">
+          <div>
+            <strong>${escapeHtml(card.name)}</strong>
+            <em>${escapeHtml(typeLabel)} · ${escapeHtml(lineLabel)}</em>
+          </div>
+          <b aria-label="牌组数量">x${count}</b>
+        </header>
+        <div class="codex-card__meta">
+          ${renderCodexCardStats(card)}
+          <span>${escapeHtml(card.id)}</span>
+        </div>
+        <div class="codex-card__tags">${tags}</div>
+        <section class="codex-card__text">
+          <strong>侧边注释</strong>
+          <p>${escapeHtml(ruleNote).replace(/\n/g, "<br>")}</p>
+        </section>
+        <section class="codex-card__text">
+          <strong>技能/效果</strong>
+          <p>${escapeHtml(effect).replace(/\n/g, "<br>")}</p>
+        </section>
+      </div>
+    </article>
+  `;
+}
+
+function renderCodexCardStats(card) {
+  if (card.type !== "unit") {
+    return "<span>一次性</span>";
+  }
+  return `
+    <span>战 ${getCardBaseAttack(card)}</span>
+    <span>命 ${getCardHealth(card)}</span>
+    <span>价值 ${getCardTargetValue(card)}星</span>
+  `;
 }
 
 function renderGuide() {
@@ -6564,6 +6659,7 @@ function sortDeckCards(left, right) {
   const typeOrder = { unit: 0, tactic: 1, strategy: 2 };
   const lineOrder = { frontline: 0, support: 1, instant: 2 };
   return (
+    (left.docOrder || 999) - (right.docOrder || 999) ||
     typeOrder[left.type] - typeOrder[right.type] ||
     lineOrder[left.line] - lineOrder[right.line] ||
     (left.power || 99) - (right.power || 99) ||

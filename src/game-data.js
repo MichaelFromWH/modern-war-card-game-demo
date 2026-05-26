@@ -4856,6 +4856,399 @@ Object.entries(DOCX_20260523_CARD_PATCHES).forEach(([cardId, patch]) => {
   }
 });
 
+export const CARD_DISPLAY_ORDER = {
+  "usa": [
+    "us_javelin_team",
+    "us_stinger_team",
+    "us_marine_rifle",
+    "us_rangers_target",
+    "us_bradley",
+    "us_stryker",
+    "us_m1a2",
+    "us_apache",
+    "us_reaper",
+    "us_avenger",
+    "us_patriot",
+    "us_himars",
+    "us_m109",
+    "us_tomahawk",
+    "us_atacms",
+    "us_b2",
+    "us_f35",
+    "us_f35a_sead",
+    "us_electronic_suppression",
+    "us_emergency_supply",
+    "us_smoke_screen",
+    "us_battlefield_repair",
+    "us_reposition"
+  ],
+  "russia": [
+    "ru_kornet_team",
+    "ru_motostrelki",
+    "ru_spetsnaz_target",
+    "ru_bmp3m",
+    "ru_bmpt",
+    "ru_t90m",
+    "ru_ka52_unit",
+    "ru_orlan10",
+    "ru_pantsir",
+    "ru_buk_m3",
+    "ru_tornado_s",
+    "ru_2s19",
+    "ru_kalibr",
+    "ru_iskander",
+    "ru_su34",
+    "ru_su35",
+    "ru_su57_sead",
+    "ru_ammo_supply",
+    "ru_electronic_suppression",
+    "ru_smoke_decoys",
+    "ru_battlefield_repair",
+    "ru_reposition"
+  ]
+};
+
+const DOCX_20260523_DISPLAY_TEXT_PATCHES = {
+  "us_javelin_team": {
+    "name": "标枪反甲小组",
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "步兵：可以攻击地面单位。伏击：隐蔽部署时因前线接敌触发反击时，伤害+1。",
+    "effect": "伏击若目标为装甲，伤害+2。"
+  },
+  "us_stinger_team": {
+    "name": "毒刺防空组",
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "步兵：可以攻击地面单位。高射：可以攻击低空目标。",
+    "effect": "高射若目标为低空单位，伤害+3。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline", "support"],
+      "amount": 1,
+      "requiresAnyTag": [...GROUND_UNIT_TAGS, ...LOW_AIR_TAGS],
+      "bonuses": LOW_AIR_TAGS.map((tag) => ({ tag, amount: 4 })),
+      "sourceExposes": true
+    }
+  },
+  "us_marine_rifle": {
+    "name": "海军陆战队",
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "步兵：可以攻击地面单位。",
+    "effect": "若目标为步兵，伤害+1。若己方前线有装甲，伤害+1。"
+  },
+  "us_rangers_target": {
+    "name": "游骑兵渗透小组",
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "步兵：可以攻击地面单位。侦察：选定任意目标，若为隐蔽单位则使其暴露。渗透：本单位不会因前线接敌而暴露。",
+    "effect": "渗透侦察一个目标，若为地面或低空单位，使友方未行动的一个火箭炮、榴弹炮立即攻击一次，否则抽 1 张牌。"
+  },
+  "us_bradley": {
+    "name": "布莱德利步兵战车",
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "装甲：可以攻击地面单位，可执行前线突破。",
+    "effect": "若目标为步兵，伤害+1。"
+  },
+  "us_stryker": {
+    "name": "斯特赖克机动装甲",
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "装甲：可以攻击地面单位，可执行前线突破。高射：可以攻击低空目标。",
+    "effect": "高射若目标为步兵，伤害+1。"
+  },
+  "us_m1a2": {
+    "name": "艾布拉姆斯主战坦克",
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "装甲：可以攻击地面单位，可执行前线突破。",
+    "effect": "若目标为装甲，伤害+1。若己方前线有步兵，伤害+1。"
+  },
+  "us_apache": {
+    "name": "阿帕奇武装直升机",
+    "displayTags": ["直升机", "低空"],
+    "unitAttribute": "直升机、低空",
+    "ruleNote": "直升机：可以攻击地面和低空单位，可执行前线突破。",
+    "effect": "若目标为装甲、直升机，伤害+2。"
+  },
+  "us_reaper": {
+    "name": "死神侦察无人机",
+    "displayTags": ["无人机", "低空"],
+    "unitAttribute": "无人机、低空",
+    "ruleNote": "无人机：无法攻击。侦察：选定任意目标，若为隐蔽单位则使其暴露。",
+    "effect": "侦察一个目标，若为地面或低空单位，使友方本回合未行动的一个远火单位立即攻击一次，否则抽 1 张牌。"
+  },
+  "us_avenger": {
+    "name": "复仇者伴随防空",
+    "displayTags": ["伴随防空"],
+    "unitAttribute": "伴随防空",
+    "ruleNote": "伴随防空：可以攻击低空和高空单位。",
+    "effect": "若目标为低空单位，伤害+1。拦截敌方巡航导弹的攻击，一回合一次。（隐蔽部署时也生效，生效后自身暴露）"
+  },
+  "us_patriot": {
+    "name": "爱国者防空导弹",
+    "displayTags": ["重型防空"],
+    "unitAttribute": "重型防空",
+    "ruleNote": "重型防空：可以攻击高空单位。",
+    "effect": "拦截敌方战斗机、导弹的攻击，一回合一次。（隐蔽部署时也生效，生效后自身暴露）"
+  },
+  "us_himars": {
+    "name": "海马斯火箭炮",
+    "displayTags": ["火箭炮"],
+    "unitAttribute": "火箭炮",
+    "ruleNote": "火箭炮：可以攻击地面和低空单位。",
+    "effect": "选择最多两个目标，对次要目标造成1点伤害，若目标为步兵，伤害+1。"
+  },
+  "us_m109": {
+    "name": "帕拉丁榴弹炮",
+    "displayTags": ["榴弹炮"],
+    "unitAttribute": "榴弹炮",
+    "ruleNote": "榴弹炮：可以攻击地面和低空单位。",
+    "effect": "若目标为步兵，伤害+1。"
+  },
+  "us_tomahawk": {
+    "name": "战斧巡航导弹",
+    "displayTags": ["巡航导弹"],
+    "unitAttribute": "巡航导弹",
+    "ruleNote": "巡航导弹：可以攻击地面和低空单位。",
+    "effect": "若目标在前线区，伤害+1。"
+  },
+  "us_atacms": {
+    "name": "ATACMS 战术弹道导弹",
+    "displayTags": ["弹道导弹"],
+    "unitAttribute": "弹道导弹",
+    "ruleNote": "弹道导弹：可以攻击地面和低空单位。",
+    "effect": "若目标在前线区，伤害+1。"
+  },
+  "us_b2": {
+    "name": "B-2 隐身轰炸机",
+    "displayTags": ["轰炸机", "高空"],
+    "unitAttribute": "轰炸机、高空",
+    "ruleNote": "轰炸机：可以攻击地面单位，一次攻击多个目标。",
+    "effect": "选择最多两个目标，对次要目标造成3点伤害。"
+  },
+  "us_f35": {
+    "name": "F-22 战斗机",
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "ruleNote": "战斗机：可以攻击所有战线单位。",
+    "effect": "若目标为低空或高空单位，伤害+2。"
+  },
+  "us_f35a_sead": {
+    "name": "F-35A 战斗机",
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "ruleNote": "战斗机：可以攻击所有战线单位。",
+    "effect": "若目标为地面单位，伤害+2。"
+  },
+  "us_electronic_suppression": {
+    "name": "电子压制",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。干扰：受影响的目标不能行动，持续一回合。",
+    "effect": "干扰一个目标。"
+  },
+  "us_emergency_supply": {
+    "name": "紧急补给",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "抽 3 张牌，选择 1 张加入手牌，其余放回牌库底。"
+  },
+  "us_smoke_screen": {
+    "name": "烟幕掩护",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点战力。"
+  },
+  "us_battlefield_repair": {
+    "name": "战地维修",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "修复己方一个单位全部战力；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。"
+  },
+  "us_reposition": {
+    "name": "阵地转移",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽，若目标在支援区，修复 1 点战力。"
+  },
+  "ru_kornet_team": {
+    "name": "短号反甲小组",
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "步兵：可以攻击地面单位。伏击：隐蔽部署时因前线接敌触发反击时，伤害+1。",
+    "effect": "伏击若目标为装甲，伤害+2。"
+  },
+  "ru_motostrelki": {
+    "name": "近卫摩托化步兵",
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": "步兵：可以攻击地面单位。",
+    "effect": "若目标为步兵，伤害+1。若己方前线有装甲，伤害+1。",
+    "ability": {
+      "kind": "damage",
+      "rows": ["frontline"],
+      "amount": 2,
+      "requiresAnyTag": GROUND_UNIT_TAGS,
+      "bonuses": [{ "tag": "步兵", "amount": 3 }],
+      "ownTagBonus": { "line": "frontline", "tag": "装甲", "amount": 1 },
+      "sourceExposes": true
+    }
+  },
+  "ru_spetsnaz_target": {
+    "name": "Spetsnaz 渗透小组",
+    "displayTags": ["侦察兵"],
+    "unitAttribute": "侦察兵",
+    "ruleNote": "步兵：可以攻击地面单位。侦察：选定任意目标，若为隐蔽单位则使其暴露。渗透：本单位不会因前线接敌而暴露。",
+    "effect": "渗透侦察一个目标，若为地面或低空单位，使友方未行动的一个火箭炮、榴弹炮立即攻击一次，否则抽 1 张牌。"
+  },
+  "ru_bmp3m": {
+    "name": "BMP-3 步兵战车",
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "装甲：可以攻击地面单位，可执行前线突破。",
+    "effect": "若目标为步兵，伤害+1。"
+  },
+  "ru_bmpt": {
+    "name": "BMPT 终结者支援车",
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "装甲：可以攻击地面单位，可执行前线突破。高射：可以攻击低空目标。",
+    "effect": "高射若目标为步兵，伤害+1。"
+  },
+  "ru_t90m": {
+    "name": "T-90M 主战坦克",
+    "displayTags": ["装甲"],
+    "unitAttribute": "装甲",
+    "ruleNote": "装甲：可以攻击地面单位，可执行前线突破。",
+    "effect": "若目标为装甲，伤害+1。若己方前线有步兵，伤害+1。"
+  },
+  "ru_ka52_unit": {
+    "name": "卡-52 武装直升机",
+    "displayTags": ["直升机", "低空"],
+    "unitAttribute": "直升机、低空",
+    "ruleNote": "直升机：可以攻击地面和低空单位，可执行前线突破。",
+    "effect": "若目标为装甲、直升机，伤害+2。"
+  },
+  "ru_orlan10": {
+    "name": "Orlan-10 侦查无人机",
+    "displayTags": ["无人机", "低空"],
+    "unitAttribute": "无人机、低空",
+    "ruleNote": "无人机：无法攻击。侦察：选定任意目标，若为隐蔽单位则使其暴露。",
+    "effect": "侦察一个目标，若为地面或低空单位，使友方本回合未行动的一个远火单位立即攻击一次，否则抽 1 张牌。"
+  },
+  "ru_pantsir": {
+    "name": "Pantsir-S1 伴随防空",
+    "displayTags": ["伴随防空"],
+    "unitAttribute": "伴随防空",
+    "ruleNote": "伴随防空：可以攻击低空和高空单位。",
+    "effect": "若目标为低空单位，伤害+1。拦截敌方巡航导弹的攻击，一回合一次。（隐蔽部署时也生效，生效后自身暴露）"
+  },
+  "ru_buk_m3": {
+    "name": "Buk-M3 防空导弹",
+    "displayTags": ["重型防空"],
+    "unitAttribute": "重型防空",
+    "ruleNote": "重型防空：可以攻击高空单位。",
+    "effect": "拦截敌方战斗机、导弹的攻击，一回合一次。（隐蔽部署时也生效，生效后自身暴露）"
+  },
+  "ru_tornado_s": {
+    "name": "Tornado-S 火箭炮",
+    "displayTags": ["火箭炮"],
+    "unitAttribute": "火箭炮",
+    "ruleNote": "火箭炮：可以攻击地面和低空单位。",
+    "effect": "选择最多三个地面目标造成伤害，主目标 3 点，其余目标各 1 点。"
+  },
+  "ru_2s19": {
+    "name": "姆斯塔榴弹炮",
+    "displayTags": ["榴弹炮"],
+    "unitAttribute": "榴弹炮",
+    "ruleNote": "榴弹炮：可以攻击地面和低空单位。",
+    "effect": "若目标为步兵，伤害+1。"
+  },
+  "ru_kalibr": {
+    "name": "口径巡航导弹",
+    "displayTags": ["巡航导弹"],
+    "unitAttribute": "巡航导弹",
+    "ruleNote": "巡航导弹：可以攻击地面和低空单位。",
+    "effect": "若目标在前线区，伤害+1。"
+  },
+  "ru_iskander": {
+    "name": "伊斯坎德尔弹道导弹",
+    "displayTags": ["弹道导弹"],
+    "unitAttribute": "弹道导弹",
+    "ruleNote": "弹道导弹：可以攻击地面和低空单位。",
+    "effect": "若目标在前线区，伤害+1。"
+  },
+  "ru_su34": {
+    "name": "Tu-160 轰炸机",
+    "displayTags": ["轰炸机", "高空"],
+    "unitAttribute": "轰炸机、高空",
+    "ruleNote": "轰炸机：可以攻击地面单位，一次攻击多个目标。",
+    "effect": "选择最多两个目标，对次要目标造成3点伤害。"
+  },
+  "ru_su35": {
+    "name": "Su-35 战斗机",
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "ruleNote": "战斗机：可以攻击所有战线单位。",
+    "effect": "若目标为低空或高空单位，伤害+2。"
+  },
+  "ru_su57_sead": {
+    "name": "Su-57 SEAD 战斗机",
+    "displayTags": ["战斗机", "高空"],
+    "unitAttribute": "战斗机、高空",
+    "ruleNote": "战斗机：可以攻击所有战线单位。",
+    "effect": "若目标为地面单位，伤害+2。"
+  },
+  "ru_ammo_supply": {
+    "name": "弹药补给",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "抽 3 张牌，选择 1 张加入手牌，其余放回牌库底。"
+  },
+  "ru_electronic_suppression": {
+    "name": "电子压制",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。干扰：受影响的目标不能行动，持续一回合。",
+    "effect": "干扰一个目标。"
+  },
+  "ru_smoke_decoys": {
+    "name": "烟幕伪装",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽，若目标在前线，修复 1 点战力。"
+  },
+  "ru_battlefield_repair": {
+    "name": "战场维修",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "修复己方一个单位全部战力；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。"
+  },
+  "ru_reposition": {
+    "name": "阵地转移",
+    "displayTags": ["战术"],
+    "ruleNote": "战术：一次性触发，然后进入弃牌堆。",
+    "effect": "指定己方一个已暴露单位，使其重新进入隐蔽，若目标在支援区，修复 1 点战力。"
+  }
+};
+
+Object.entries(DOCX_20260523_DISPLAY_TEXT_PATCHES).forEach(([cardId, patch]) => {
+  const card = CARD_LIBRARY[cardId];
+  if (card) {
+    Object.assign(card, patch);
+  }
+});
+
+Object.entries(CARD_DISPLAY_ORDER).forEach(([factionId, cardIds]) => {
+  cardIds.forEach((cardId, index) => {
+    const card = CARD_LIBRARY[cardId];
+    if (card && card.faction === factionId) {
+      card.docOrder = index + 1;
+    }
+  });
+});
+
 const V07_ACTIVE_CARD_IDS = new Set([
   "us_marine_rifle",
   "us_javelin_team",
