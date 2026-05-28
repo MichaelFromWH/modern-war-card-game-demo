@@ -10,13 +10,9 @@
     />
     <meta name="theme-color" content="#080a0c" />
     <link rel="icon" href="data:," />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="preload" as="image" href="./assets/ui/battlefield-ruins.webp" type="image/webp" fetchpriority="high" />
+    <link rel="preload" as="image" href="./assets/backgrounds/homepage%20v3.png" type="image/png" fetchpriority="high" />
+    <link rel="preload" as="image" href="./assets/backgrounds/details-page%20v3.png" type="image/png" />
+    <link rel="preload" as="image" href="./assets/backgrounds/battlefield-board.png" type="image/png" fetchpriority="high" />
     <link rel="preload" as="image" href="./assets/ui/card-back-frame.webp" type="image/webp" />
     <link rel="preload" as="image" href="./assets/cards/card-shell-frame.webp" type="image/webp" />
     <link rel="stylesheet" href="./styles.css" />
@@ -25,21 +21,38 @@
     <div class="app-shell" id="app" data-screen="briefing">
       <div class="battle-map" aria-hidden="true">
         <picture>
-          <source srcset="./assets/ui/battlefield-ruins.webp" type="image/webp" />
-          <img src="./assets/ui/battlefield-ruins.jpg" alt="" decoding="async" fetchpriority="high" />
+          <img src="./assets/backgrounds/battlefield-board.png" alt="" decoding="async" fetchpriority="high" />
         </picture>
         <div class="battle-map__shade"></div>
         <div class="battle-map__scan"></div>
       </div>
       <audio id="battle-bgm" preload="auto"></audio>
 
-      <main class="battle-board" id="battle-board" aria-label="双层战场"></main>
+      <div class="battle-stage" id="battle-stage">
+        <main class="battle-board" id="battle-board" aria-label="双层战场"></main>
 
-      <header class="score-overlay" id="score-overlay" aria-label="战局状态"></header>
+        <header class="score-overlay" id="score-overlay" aria-label="战局状态"></header>
 
-      <section class="intent-overlay" id="intent-overlay" hidden aria-live="polite"></section>
-      <section class="turn-overlay" id="turn-overlay" hidden aria-live="assertive"></section>
-      <section class="mulligan-overlay" id="mulligan-overlay" hidden aria-live="polite"></section>
+        <section class="intent-overlay" id="intent-overlay" hidden aria-live="polite"></section>
+        <section class="turn-overlay" id="turn-overlay" hidden aria-live="assertive"></section>
+        <section class="mulligan-overlay" id="mulligan-overlay" hidden aria-live="polite"></section>
+        <aside class="action-log-panel" id="action-log-panel" aria-label="行动日志">
+          <button class="action-log-toggle" type="button" data-action="toggle-log" aria-expanded="true">战场日志</button>
+          <div class="battle-log" id="battle-log" aria-live="polite"></div>
+        </aside>
+
+        <footer class="command-overlay" aria-label="玩家指挥区">
+          <section class="card-inspector" id="card-inspector"></section>
+          <section class="hand-rail" id="player-hand" aria-label="玩家手牌"></section>
+          <section class="command-stack">
+            <button class="round-button" type="button" data-action="surrender" id="pass-button">投降</button>
+            <button class="small-button small-button--music" type="button" data-action="toggle-bgm" id="bgm-button">音乐</button>
+            <button class="round-button round-button--end-turn" type="button" data-action="end-turn" id="end-turn-button">回合结束</button>
+            <button class="small-button" type="button" data-action="open-codex" id="codex-button">牌组</button>
+            <button class="small-button" type="button" data-action="reset" id="reset-button" hidden>重置</button>
+          </section>
+        </footer>
+      </div>
       <section class="fx-layer" id="fx-layer" aria-hidden="true"></section>
       <svg class="targeting-line" id="targeting-line" aria-hidden="true" hidden>
         <defs>
@@ -53,24 +66,26 @@
       <section class="codex-overlay" id="codex-overlay" hidden aria-label="牌组预览"></section>
       <section class="guide-overlay" id="guide-overlay" hidden aria-label="新手玩法介绍"></section>
       <section class="deck-builder-overlay" id="deck-builder-overlay" hidden aria-label="自由组卡"></section>
-      <aside class="action-log-panel" id="action-log-panel" aria-label="行动日志">
-        <button class="action-log-toggle" type="button" data-action="toggle-log" aria-expanded="true">行动日志</button>
-        <div class="battle-log" id="battle-log" aria-live="polite"></div>
-      </aside>
-
-      <footer class="command-overlay" aria-label="玩家指挥区">
-        <section class="card-inspector" id="card-inspector"></section>
-        <section class="hand-rail" id="player-hand" aria-label="玩家手牌"></section>
-        <section class="command-stack">
-          <button class="round-button" type="button" data-action="surrender" id="pass-button">退出</button>
-          <button class="small-button small-button--music" type="button" data-action="toggle-bgm" id="bgm-button">音乐</button>
-          <button class="round-button round-button--end-turn" type="button" data-action="end-turn" id="end-turn-button">回合结束</button>
-          <button class="small-button" type="button" data-action="open-codex" id="codex-button">牌组</button>
-          <button class="small-button" type="button" data-action="reset" id="reset-button" hidden>重置</button>
-        </section>
-      </footer>
 
       <section class="briefing" id="briefing">
+        <div class="home-command-card" aria-label="指挥官状态">
+          <img src="./assets/ui/commander-usa.jpg" alt="" decoding="async" />
+          <div>
+            <strong>北境孤牙</strong>
+            <span>上校</span>
+            <em>军衔</em>
+            <i>在线</i>
+          </div>
+        </div>
+        <div class="home-top-actions" aria-label="系统操作">
+          <button type="button" data-action="toggle-bgm">声音</button>
+          <button type="button" data-action="open-guide">设置</button>
+        </div>
+        <div class="home-shortcuts" aria-label="战术终端入口">
+          <button class="home-shortcut home-shortcut--cards" type="button" data-action="open-codex" aria-label="查看阵营卡牌"></button>
+          <button class="home-shortcut home-shortcut--deck" type="button" data-action="open-deck-builder" aria-label="自由组卡"></button>
+          <button class="home-shortcut home-shortcut--rules" type="button" data-action="open-guide" aria-label="游戏规则"></button>
+        </div>
         <div class="home-hero">
           <div class="home-hero__copy">
             <p class="eyebrow">WARZONE CARD PROTOTYPE / V0.5</p>
@@ -79,7 +94,7 @@
               在被摧毁的战区里指挥美俄战斗群：通过侦察、暴露、防空和远程火力链摧毁关键单位，率先取得 50 点战场得分。
             </p>
             <div class="home-actions">
-              <button class="primary-button" type="button" data-action="start">进入战场</button>
+              <button class="primary-button" type="button" data-action="start">开始对战</button>
               <button class="small-button" type="button" data-action="open-codex">查看牌组</button>
               <button class="small-button" type="button" data-action="open-guide">玩法介绍</button>
               <button class="small-button" type="button" data-action="open-deck-builder">自由组卡</button>

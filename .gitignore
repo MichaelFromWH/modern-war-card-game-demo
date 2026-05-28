@@ -8,6 +8,9 @@ dist.zip
 node_modules/
 npm-debug.log*
 output/
+.dev-server.pid
+battle-fix-home-*.png
+workbench-after-key-paste.png
 
 # Local/debug artifacts that should not ship with the web deployment.
 .playwright-mcp/

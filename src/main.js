@@ -71,13 +71,15 @@ const BGM_PLAYLIST = [
 
 const CARD_BACK_ART_PATH = "./assets/ui/card-back-frame.webp";
 const CRITICAL_IMAGE_ASSETS = [
-  "./assets/ui/battlefield-ruins.webp",
+  "./assets/backgrounds/battlefield-board.png",
   CARD_BACK_ART_PATH,
   "./assets/cards/card-shell-frame.webp",
   "./assets/cards/card-hover-frame.webp",
   "./assets/cards/card-selected-frame.webp",
   "./assets/ui/deck-grave-panel.webp",
   "./assets/ui/lane-icons.webp",
+  "./assets/ui/commander-usa.jpg",
+  "./assets/ui/commander-russia.jpg",
 ];
 const ASSET_PRELOAD_CONCURRENCY = 4;
 const TURN_HANDOFF_MS = 2000;
@@ -89,8 +91,13 @@ const DEPLOY_VIDEO_START_DELAY_MS = DEPLOY_CARD_FLIGHT_MS + 120;
 const COMBAT_RESOLUTION_HOLD_MS = 820;
 const TACTIC_PRESENTATION_MS = 1480;
 const MULLIGAN_LIMIT = 2;
+const LINE_CAPACITY = {
+  frontline: 7,
+  support: 6,
+};
 const CARD_FIRE_VIDEO_FALLBACK_MS = 7000;
 const CARD_FIRE_VIDEO_MAX_MS = 7000;
+const CARD_FIRE_VIDEO_READY_TIMEOUT_MS = 1600;
 const CONTACT_REVEAL_HOLD_MS = 720;
 const CONTACT_FIRE_START_MS = 180;
 const CONTACT_CLEANUP_HOLD_MS = 980;
@@ -156,14 +163,16 @@ const AI_DIFFICULTY_PROFILES = {
 };
 const COMMANDER_PROFILES = {
   player: {
-    name: "林昊",
-    rank: "上校",
-    initial: "L",
+    name: "铁镰前锋",
+    rank: "少校",
+    initial: "F",
+    portrait: "./assets/ui/commander-usa.jpg",
   },
   enemy: {
-    name: "索科洛夫",
-    rank: "少将",
-    initial: "S",
+    name: "北境孤牙",
+    rank: "上校",
+    initial: "N",
+    portrait: "./assets/ui/commander-russia.jpg",
   },
 };
 const DECK_RULES = {
@@ -195,17 +204,17 @@ const UNIT_ATTRIBUTE_NOTES = {
   侦查步兵: "主要负责暴露隐蔽目标并引导远程火力，本体不承担常规伤害。",
   侦察兵: "主要负责暴露隐蔽目标并引导远程火力；若目标不适合校射则转为抽牌。",
   装甲: "可打击地面目标；少数装甲支援车可对低空目标造成低额伤害。",
-  直升机: "可打击地面与低空目标，拥有前线支援和突破能力。",
+  直升机: "可打击地面与低空目标，可执行前线突破；敌方前线有单位时不能隐蔽部署。",
   榴弹炮: "可打击所有战线的地面和低空单位，适合被侦察单位校射。",
   火箭炮: "可覆盖所有战线的地面和低空单位，适合压制同一战线多个目标。",
   伴随防空: "可打击低空和高空单位，并可拦截巡航导弹。",
-  重型防空: "可打击高空单位，并可拦截所有类型导弹。",
+  重型防空: "可打击高空单位，并可拦截战斗机和所有类型导弹，不拦截轰炸机。",
   无人机: "主要负责侦查、暴露和校射，默认不承担常规攻击。",
-  巡航导弹: "可打击地面目标和直升机，不能打击无人机、高空单位和对方导弹。",
-  弹道导弹: "可打击地面目标和直升机，不能打击无人机、高空单位和对方导弹。",
-  战斗机: "高空单位，可执行制空和精确打击；会被防空单位拦截。",
-  SEAD战斗机: "可压制伴随防空和重型防空，含隐蔽防空单位；按战斗机而非独立导弹处理。",
-  轰炸机: "高空单位，擅长对地面和后排装备进行范围打击；会被重型防空拦截。",
+  巡航导弹: "可打击地面和低空单位，包括无人机和直升机；不能打击高空单位。",
+  弹道导弹: "可打击地面和低空单位，包括无人机和直升机；不能打击高空单位。",
+  战斗机: "高空单位，可执行制空和精确打击；会被重型防空拦截。",
+  SEAD战斗机: "V0.5.2 已取消专职 SEAD 口径；F-35A/Su-57 按普通战斗机对地打击处理。",
+  轰炸机: "高空单位，擅长对地面和后排装备进行范围打击；不被重型防空拦截。",
   战斗轰炸机: "高空单位，偏重对地打击，也会被防空单位拦截。",
 };
 const DECK_STORAGE_PREFIX = "warzone.customDeck.v1";
@@ -267,6 +276,7 @@ const state = {
     match: null,
     battleSnapshot: null,
     lastEffectSerial: 0,
+    effectPlayback: Promise.resolve(),
     error: "",
     name: loadOnlineName(),
     joinCode: getInitialOnlineRoomCode(),
@@ -731,6 +741,11 @@ function handleAction(action) {
     selectHandCard(action.split(":")[1], { conceal: true });
   } else if (action.startsWith("play-open:")) {
     selectHandCard(action.split(":")[1], { conceal: false });
+  } else if (action.startsWith("choose-target:")) {
+    const [, side, uid] = action.split(":");
+    if (side && uid) {
+      handleBoardTarget(side, uid);
+    }
   } else if (action.startsWith("codex:")) {
     state.codexFaction = action.split(":")[1] || "usa";
     renderCodex();
@@ -951,12 +966,17 @@ function getTurnUiState(battle) {
     return { tone: "neutral", eyebrow: "", title: "", detail: "" };
   }
   if (battle.phase === "match-over") {
-    const result = battle.matchWinner === "draw" ? "平局" : `${getSideLabel(battle.matchWinner)}胜利`;
+    const result =
+      battle.matchWinner === "draw"
+        ? "平局"
+        : battle.matchWinner === "player"
+          ? "已获得胜利"
+          : "作战失败";
     return {
       tone: battle.matchWinner || "neutral",
-      eyebrow: "交火结束",
+      eyebrow: "对局结束",
       title: result,
-      detail: "最终生命与得分结算完成",
+      detail: battle.matchWinner === "player" ? "我方已达到胜利分数" : "最终得分结算完成",
     };
   }
   if (battle.turnTransition) {
@@ -1062,10 +1082,10 @@ function createBattle(options = {}) {
       enemy: 0,
     },
     log: [
-      "V0.5 / 20260521 规则：单位拆分为攻击、生命和目标价值，摧毁后按目标价值获得战场得分。",
-      "巡航导弹、弹道导弹、SEAD 战斗机、轰炸机均为驻场单位，拥有生命、可被摧毁并提供得分。",
-      "巡航导弹仅能打击暴露地面目标或直升机，可被伴随/重型防空拦截；弹道导弹打击规则相同，但只能被重型防空拦截。",
-      "SEAD 战斗机可指定敌方伴随/重型防空，包括隐蔽防空；没有防空目标时转入有限制空。",
+      "V0.5.2 / 20260527 规则：单位拆分为攻击、生命和目标价值，摧毁后按目标价值获得战场得分。",
+      "巡航导弹、弹道导弹、战斗机和轰炸机均为驻场单位，拥有生命、可被摧毁并提供得分。",
+      "巡航导弹和弹道导弹可打击地面与低空单位，包括无人机和直升机；巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截。",
+      "F-35A 与 Su-57 按普通战斗机对地打击处理，不再使用 SEAD、反辐射或隐蔽防空锁定规则。",
       "每个单位每回合最多行动一次；部署单位可立即行动，但本回合不能再次作为场上行动单位，也不能执行前线突破。",
       "敌方前线仍有单位时，前线单位不能越过前线直接攻击支援区目标。",
       "若己方回合开始时敌方前线为空，可用一个回合开始前已部署且未行动的前线单位突破，暴露并打击其可有效攻击的敌方隐蔽支援区单位。",
@@ -1289,8 +1309,6 @@ function renderBoardCard(instance, side, lineId) {
   const modernClass = !concealed && (isModernUnitCard(card) || generated) ? "board-card--modern" : "";
   const generatedClass = !concealed && generated ? "board-card--generated-card" : "";
   const actionAnimation = state.battle?.actionAnimation;
-  const firingClass =
-    !concealed && ["cardDeployVideo", "cardFireVideo"].includes(actionAnimation?.kind) && actionAnimation.sourceUid === instance.uid ? "is-video-firing" : "";
   const contactClass = getContactAnimationClass(actionAnimation, instance.uid);
   const thumbnailClass = !concealed && card.type === "unit" ? "board-card--thumbnail" : "";
   const stateTitle = concealed
@@ -1302,7 +1320,7 @@ function renderBoardCard(instance, side, lineId) {
       : card.name;
   return `
     <article
-      class="board-card ${modernClass} ${generatedClass} ${thumbnailClass} ${firingClass} ${contactClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
+      class="board-card ${modernClass} ${generatedClass} ${thumbnailClass} ${contactClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
       data-board-card="${instance.uid}"
       data-side="${side}"
       ${inspectable ? `data-card-id="${card.id}"` : ""}
@@ -1314,7 +1332,7 @@ function renderBoardCard(instance, side, lineId) {
       ${!concealed && card.type === "unit" ? renderUnitHealthBadge(card, "board-card__health-badge", currentHealth, maxHealth) : ""}
       ${!concealed && card.type === "unit" ? renderUnitValueBadge(card, "board-card__value-badge") : ""}
       ${!concealed && card.type === "unit" ? renderThumbnailCombatOverlay(card, { className: "board-card__thumb-hud", currentHealth, maxHealth }) : ""}
-      ${fireVideoPath ? `<video class="board-card__fire-video" src="${escapeHtml(fireVideoPath)}" playsinline preload="none"></video>` : ""}
+      ${fireVideoPath ? `<video class="board-card__fire-video" src="${escapeHtml(fireVideoPath)}" poster="${escapeHtml(artPath)}" playsinline preload="metadata"></video>` : ""}
       <div class="board-card__art ${artPath ? "" : "is-empty"}" data-glyph="${escapeHtml(getPrimaryGlyph(card))}">
         ${artPath ? "" : `<span>${escapeHtml(TYPE_LABELS[card.type])}</span>`}
       </div>
@@ -1417,11 +1435,12 @@ function renderScore() {
     ${renderCommanderPanel(battle, "player", playerFaction)}
     ${renderDeckPanel(battle, "player")}
   `;
+  const battleOver = battle.phase === "match-over";
   refs.pass.disabled = false;
-  refs.pass.textContent = "退出";
+  refs.pass.textContent = battleOver ? "退出" : "投降";
   refs.endTurn.hidden = false;
-  refs.endTurn.disabled = !canPlayerEndTurn();
-  refs.endTurn.textContent = battle.activeSide === "player" && !battle.turnTransition ? "回合结束" : "等待对方";
+  refs.endTurn.disabled = battleOver || !canPlayerEndTurn();
+  refs.endTurn.textContent = battleOver ? "对局结束" : battle.activeSide === "player" && !battle.turnTransition ? "回合结束" : "等待对方";
   refs.bgmButton.hidden = false;
   refs.bgmButton.classList.toggle("is-active", state.bgmOn);
   refs.bgmButton.textContent = state.bgmOn ? "🔊" : "🔇";
@@ -1433,7 +1452,8 @@ function renderScore() {
 
 function renderTurnOverlay() {
   const battle = state.battle;
-  if (!refs.turnOverlay || !battle || state.screen !== "battle" || (!battle.turnTransition && !battle.aiThinking)) {
+  const showResult = battle?.phase === "match-over";
+  if (!refs.turnOverlay || !battle || state.screen !== "battle" || (!showResult && !battle.turnTransition && !battle.aiThinking)) {
     if (refs.turnOverlay) {
       refs.turnOverlay.hidden = true;
       refs.turnOverlay.innerHTML = "";
@@ -1443,7 +1463,7 @@ function renderTurnOverlay() {
 
   const turn = getTurnUiState(battle);
   refs.turnOverlay.hidden = false;
-  refs.turnOverlay.className = `turn-overlay turn-overlay--${turn.tone} ${battle.aiThinking ? "is-thinking" : "is-handoff"}`;
+  refs.turnOverlay.className = `turn-overlay turn-overlay--${turn.tone} ${showResult ? "is-result" : battle.aiThinking ? "is-thinking" : "is-handoff"}`;
   refs.turnOverlay.innerHTML = `
     <div class="turn-overlay__band">
       <span>${escapeHtml(turn.eyebrow)}</span>
@@ -1481,16 +1501,20 @@ function renderCommanderPanel(battle, side, faction) {
   const profile = COMMANDER_PROFILES[side];
   const player = battle.players?.[side] || {};
   const displayName = player.name || profile.name;
-  const initial = displayName.trim().slice(0, 1).toUpperCase() || profile.initial;
   const turnActive = battle.activeSide === side && battle.phase === "battle";
   const status = battle.phase === "match-over" ? "结算" : turnActive ? (battle.aiThinking && side === "enemy" ? "研判" : "行动") : "待命";
   return `
     <section class="commander-hud commander-hud--${side} ${turnActive ? "is-active-turn" : ""}" style="--accent:${faction.accent}">
-      <div class="commander-hud__portrait commander-hud__portrait--${side}" aria-hidden="true"><span>${escapeHtml(initial)}</span></div>
+      <div class="commander-hud__portrait commander-hud__portrait--${side}" aria-hidden="true">
+        <img src="${escapeHtml(profile.portrait)}" alt="" loading="eager" />
+      </div>
       <div class="commander-hud__body">
         <span class="commander-hud__turn">${escapeHtml(status)}</span>
         <strong>${escapeHtml(displayName)}</strong>
-        <small><b>${escapeHtml(profile.rank)}</b><em>${escapeHtml(faction.shortName)}</em></small>
+        <small class="commander-hud__rank">
+          <span class="commander-hud__rank-line"><em>${escapeHtml(profile.rank)}</em></span>
+          <span class="commander-hud__stars" aria-label="三星">★★★</span>
+        </small>
       </div>
     </section>
   `;
@@ -1847,6 +1871,14 @@ function splitEffectText(effect) {
     .filter(Boolean);
 }
 
+function compactCardEffect(effect, maxLength = 80) {
+  const text = String(effect || "")
+    .replace(/【([^】]+)】：/g, "$1：")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > maxLength ? `${text.slice(0, Math.max(0, maxLength - 1))}…` : text;
+}
+
 function getDeployChipLabel(card) {
   if (card.line === "instant") {
     return "即时";
@@ -1889,6 +1921,9 @@ function renderLog() {
   }
   refs.logPanel?.classList.toggle("is-collapsed", state.logCollapsed);
   refs.logToggle?.setAttribute("aria-expanded", String(!state.logCollapsed));
+  if (refs.logToggle) {
+    refs.logToggle.innerHTML = "<span>战场日志</span><small>全部</small>";
+  }
   refs.log.innerHTML = items.map((item) => `<div>${escapeHtml(item)}</div>`).join("");
 }
 
@@ -1950,7 +1985,11 @@ function renderSpotlight() {
 
 function shouldShowBattleRuleAside(card, hoveredSource) {
   const boardCard = hoveredSource?.closest("[data-board-card]");
-  if (!boardCard || card.type !== "unit") {
+  const handCard = hoveredSource?.closest("[data-hand-card]");
+  if (handCard) {
+    return true;
+  }
+  if (!boardCard) {
     return false;
   }
   return !(boardCard.dataset.side === "enemy" && boardCard.classList.contains("is-concealed-card"));
@@ -1963,11 +2002,13 @@ function renderCardRuleAside(card) {
     <aside class="card-rule-aside" aria-label="侧边注释">
       <span>侧边注释</span>
       <strong>${escapeHtml(card.name)}</strong>
-      <div class="card-rule-aside__stats">
-        <i><b>攻</b>${getCardBaseAttack(card)}</i>
-        <i><b>命</b>${getCardHealth(card)}</i>
-        <i class="is-value-star"><b>值</b>${getCardTargetValue(card)}</i>
-      </div>
+      ${card.type === "unit" ? `
+        <div class="card-rule-aside__stats">
+          <i><b>攻</b>${getCardBaseAttack(card)}</i>
+          <i><b>命</b>${getCardHealth(card)}</i>
+          <i class="is-value-star"><b>值</b>${getCardTargetValue(card)}</i>
+        </div>
+      ` : `<div class="card-rule-aside__stats card-rule-aside__stats--tactic"><i><b>类型</b>${escapeHtml(TYPE_LABELS[card.type] || "战术")}</i></div>`}
       <p>${escapeHtml(ruleNote).replace(/\n/g, "<br>")}</p>
       ${bullets.length ? `<ul>${bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
     </aside>
@@ -1990,10 +2031,10 @@ function getCardRuleBullets(card) {
     bullets.push(attribute === "弹道导弹" ? "只能被重型防空拦截。" : "可被伴随防空或重型防空拦截。");
   }
   if (attribute === "重型防空") {
-    bullets.push("可保护前线和支援区，并可处理高空与导弹威胁。");
+    bullets.push("可保护前线和支援区，拦截战斗机和导弹，不拦截轰炸机。");
   }
   if (attribute === "SEAD战斗机") {
-    bullets.push("SEAD 对防空单位是规则例外：可指定隐蔽防空单位。");
+    bullets.push("V0.5.2 中按普通战斗机处理，不再指定隐蔽防空。");
   }
   if (getCardBaseAttack(card) === 0) {
     bullets.push("本单位的行动价值来自暴露、校射或引导，而不是直接伤害。");
@@ -2019,6 +2060,7 @@ function renderIntentTargetButton(target) {
     <button
       class="intent-target ${concealed ? "intent-target--concealed" : ""}"
       type="button"
+      data-action="choose-target:${target.side}:${target.uid}"
       data-board-card="${target.uid}"
       data-side="${target.side}"
       aria-label="${escapeHtml(targetLabel)}"
@@ -2031,6 +2073,7 @@ function renderIntentTargetButton(target) {
       >
         ${concealed ? "" : `<i>${power}</i><b>${escapeHtml(targetCard.name)}</b>`}
       </span>
+      ${concealed ? "" : `<strong>${escapeHtml(targetCard.name)}</strong>`}
       <span class="intent-target__line">${escapeHtml(side)} / ${escapeHtml(lineLabel)}</span>
     </button>
   `;
@@ -2040,6 +2083,7 @@ function renderIntent() {
   if (!state.pending) {
     refs.intent.hidden = true;
     refs.intent.innerHTML = "";
+    refs.intent.classList.remove("intent-overlay--supply");
     return;
   }
 
@@ -2048,6 +2092,7 @@ function renderIntent() {
     return;
   }
 
+  refs.intent.classList.remove("intent-overlay--supply");
   const card = getCard(state.pending.cardId);
   const targetButtons = state.pending.targets.map((target) => renderIntentTargetButton(target)).join("");
   refs.intent.hidden = false;
@@ -2071,11 +2116,13 @@ function renderSupplyChoice() {
       return `
         <button class="supply-choice-card" type="button" data-action="keep-supply:${instance.uid}">
           ${renderWarCard(card, { preview: true })}
+          ${renderSupplyChoiceSummary(card)}
         </button>
       `;
     })
     .join("");
   refs.intent.hidden = false;
+  refs.intent.classList.add("intent-overlay--supply");
   refs.intent.innerHTML = `
     <div>
       <span>补给调度 · 保留 ${pending.keepAmount}/${pending.drawn.length}</span>
@@ -2083,6 +2130,21 @@ function renderSupplyChoice() {
       <p>选择一张加入手牌，其余放回牌库底。</p>
       <div class="supply-choice-grid">${choiceCards}</div>
     </div>
+  `;
+}
+
+function renderSupplyChoiceSummary(card) {
+  const tags = getCardDisplayTags(card).slice(0, 3);
+  const stats =
+    card.type === "unit"
+      ? `战 ${getCardBaseAttack(card)} · 命 ${getCardHealth(card)} · 价 ${getCardTargetValue(card)}`
+      : TYPE_LABELS[card.type] || "战术";
+  return `
+    <span class="supply-choice-card__info">
+      <strong>${escapeHtml(card.name)}</strong>
+      <small>${escapeHtml(stats)}${tags.length ? ` · ${tags.map(escapeHtml).join(" / ")}` : ""}</small>
+      <em>${escapeHtml(compactCardEffect(card.effect, 72))}</em>
+    </span>
   `;
 }
 
@@ -2098,6 +2160,7 @@ function renderCodex() {
   const totalCards = entries.reduce((total, entry) => total + entry.count, 0);
 
   refs.codex.innerHTML = `
+    ${renderDetailCommanderCard()}
     <div class="codex-panel" style="--accent:${faction.accent}">
       <header class="codex-panel__header">
         <div>
@@ -2236,7 +2299,7 @@ function renderGuide() {
     {
       index: "04",
       title: "火力链",
-      body: "侦察单位先翻开目标，远火、导弹、SEAD 战斗机和轰炸机作为驻场单位兑现伤害；巡航/弹道导弹可打击地面和低空目标，巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截，SEAD 优先压制防空目标。",
+      body: "侦察单位先翻开目标，远火、导弹、战斗机和轰炸机作为驻场单位兑现伤害；巡航/弹道导弹可打击地面和低空目标，巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截；轰炸机不被重型防空拦截。",
     },
     {
       index: "05",
@@ -2246,6 +2309,7 @@ function renderGuide() {
   ];
 
   refs.guide.innerHTML = `
+    ${renderDetailCommanderCard()}
     <div class="guide-panel">
       <header class="guide-panel__header">
         <div>
@@ -2307,6 +2371,20 @@ function renderDeckStatus() {
 
 function renderDeckMetric(label, value, valid) {
   return `<i class="${valid ? "is-valid" : "is-invalid"}"><span>${escapeHtml(label)}</span>${escapeHtml(value)}</i>`;
+}
+
+function renderDetailCommanderCard() {
+  return `
+    <div class="detail-command-card" aria-label="指挥官状态">
+      <img src="./assets/ui/commander-usa.jpg" alt="" decoding="async" />
+      <div>
+        <strong>北境孤牙</strong>
+        <span>上校</span>
+        <em>军衔</em>
+        <i>在线</i>
+      </div>
+    </div>
+  `;
 }
 
 function renderOnlinePanel() {
@@ -2425,6 +2503,7 @@ function renderDeckBuilder() {
     : "<li>卡组满足当前组卡限制，可以直接进入战场。</li>";
 
   refs.deckBuilder.innerHTML = `
+    ${renderDetailCommanderCard()}
     <div class="deck-builder-panel" style="--accent:${faction.accent}">
       <header class="deck-builder-panel__header">
         <div>
@@ -2645,11 +2724,20 @@ function playUnitFromHand(battle, side, uid, lineId, options = {}) {
     return;
   }
 
-  const sourceRect = getHandCardElement(side, uid)?.getBoundingClientRect();
-  const [instance] = hand.splice(index, 1);
+  const instance = hand[index];
   const card = getCard(instance.cardId);
+  if (isLineAtCapacity(battle, side, lineId)) {
+    battle.log.push(`${getLine(lineId)?.name || "战线"}已满，不能继续部署。`);
+    gameAudio.play("ui.error");
+    state.selectedHandUid = null;
+    render();
+    return;
+  }
+
+  const sourceRect = getHandCardElement(side, uid)?.getBoundingClientRect();
+  hand.splice(index, 1);
   markHandActionUsed(battle, side, card);
-  instance.hidden = Boolean(options.hidden && canConcealCardForSide(battle, side, card));
+  instance.hidden = Boolean(options.hidden && canConcealCardForSide(battle, side, card, lineId));
   instance.deployedAtAction = battle.actionSerial;
   instance.actedAction = null;
   battle.board[side][lineId].push(instance);
@@ -3298,6 +3386,38 @@ function beginCardFireVideoTransition(battle, payload, sourceRef, sourceCard) {
   return "pending-animation";
 }
 
+function waitForVideoFirstFrame(video) {
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      video.removeEventListener("loadeddata", handleReady);
+      video.removeEventListener("canplay", handleReady);
+      video.removeEventListener("error", handleError);
+      window.clearTimeout(timer);
+    };
+    const settle = (ready) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      resolve(ready);
+    };
+    const handleReady = () => settle(true);
+    const handleError = () => settle(false);
+    const timer = window.setTimeout(() => settle(false), CARD_FIRE_VIDEO_READY_TIMEOUT_MS);
+
+    video.addEventListener("loadeddata", handleReady, { once: true });
+    video.addEventListener("canplay", handleReady, { once: true });
+    video.addEventListener("error", handleError, { once: true });
+    video.preload = "auto";
+    video.load();
+  });
+}
+
 function playCardFireVideo(sourceRef, sourceCard) {
   return new Promise((resolve) => {
     const element = getBoardCardElement(sourceRef.side, sourceRef.instance.uid);
@@ -3316,7 +3436,11 @@ function playCardFireVideo(sourceRef, sourceCard) {
       settled = true;
       window.clearTimeout(timer);
       video.pause();
-      video.currentTime = 0;
+      try {
+        video.currentTime = 0;
+      } catch (error) {
+        // Ignore media reset failures; the card will reinitialize the video before the next play.
+      }
       element.classList.remove("is-video-firing");
       resolve();
     };
@@ -3331,19 +3455,31 @@ function playCardFireVideo(sourceRef, sourceCard) {
       timer = window.setTimeout(finish, getTimeoutMs());
     };
 
-    element.classList.add("is-video-firing");
     video.muted = false;
     video.volume = 1;
     video.playsInline = true;
-    video.currentTime = 0;
-    video.addEventListener("ended", finish, { once: true });
-    video.addEventListener("error", finish, { once: true });
-    video.addEventListener("loadedmetadata", armTimeout, { once: true });
-    armTimeout();
-    const playPromise = video.play();
-    if (playPromise?.catch) {
-      playPromise.catch(finish);
+    video.pause();
+    try {
+      video.currentTime = 0;
+    } catch (error) {
+      // Some browsers reject seeking before metadata; loading below will still start from the beginning.
     }
+
+    waitForVideoFirstFrame(video).then((ready) => {
+      if (!ready || settled) {
+        finish();
+        return;
+      }
+      element.classList.add("is-video-firing");
+      video.addEventListener("ended", finish, { once: true });
+      video.addEventListener("error", finish, { once: true });
+      video.addEventListener("loadedmetadata", armTimeout, { once: true });
+      armTimeout();
+      const playPromise = video.play();
+      if (playPromise?.catch) {
+        playPromise.catch(finish);
+      }
+    });
   });
 }
 
@@ -4163,8 +4299,11 @@ function surrenderBattle() {
   if (!battle) {
     return;
   }
-  if (isOnlineAuthoritativeBattle()) {
+  const battleOver = battle.phase === "match-over";
+  if (isOnlineAuthoritativeBattle() && !battleOver) {
     sendOnlineBattleAction({ kind: "surrender" });
+    leaveOnlineRoom();
+  } else if (isOnlineAuthoritativeBattle() && battleOver) {
     leaveOnlineRoom();
   }
   clearBattleTimers(battle);
@@ -4173,7 +4312,7 @@ function surrenderBattle() {
   state.hoveredCardId = null;
   state.pending = null;
   clearDragState({ render: false });
-  gameAudio.play("system.defeat");
+  gameAudio.play(battleOver ? "ui.confirm" : "system.defeat");
   if (refs.bgm) {
     refs.bgm.pause();
     refs.bgm.currentTime = 0;
@@ -5299,7 +5438,9 @@ function resolveNoTargetHandEffect(battle, side, uid, card) {
     return "failed";
   }
   markHandActionUsed(battle, side, card);
-  playTacticCardPresentation(side, card);
+  if (card.ability?.kind !== "supply") {
+    playTacticCardPresentation(side, card);
+  }
   moveHandCardToGrave(battle, side, uid);
   battle.log.push(`${getSideName(battle, side)}打出 ${card.name}。`);
   gameAudio.playCard(card, { action: "effect", ability: card.ability, side });
@@ -6138,6 +6279,14 @@ function countAliveUnitsForSide(battle, side) {
   return LINES.reduce((total, line) => total + countAliveUnitsOnLine(battle, side, line.id), 0);
 }
 
+function getLineCapacity(lineId) {
+  return LINE_CAPACITY[lineId] ?? Infinity;
+}
+
+function isLineAtCapacity(battle, side, lineId) {
+  return (battle.board?.[side]?.[lineId]?.length || 0) >= getLineCapacity(lineId);
+}
+
 function refreshIntelValues(battle) {
   void battle;
 }
@@ -6278,8 +6427,12 @@ function canConcealCardFromHand(side, card) {
   return Boolean(battle && canConcealCardForSide(battle, side, card));
 }
 
-function canConcealCardForSide(battle, side, card) {
+function canConcealCardForSide(battle, side, card, lineId = card?.line) {
   if (!battle || card.type !== "unit") {
+    return false;
+  }
+  const opponent = side === "player" ? "enemy" : "player";
+  if (lineId === "frontline" && isFrontlineContactUnit(card) && countAliveUnitsOnLine(battle, opponent, "frontline") > 0) {
     return false;
   }
   if (isHighAirUnit(card) && opponentHasExposedHighAir(battle, side)) {
@@ -6297,7 +6450,7 @@ function isFrontlineContactUnit(card) {
 }
 
 function canStayHiddenDuringFrontlineDeploy(card) {
-  return Boolean(card?.tags?.includes("直升机"));
+  return false;
 }
 
 function isHighAirUnit(card) {
@@ -6890,6 +7043,7 @@ function enterOnlineAuthoritativeBattle(snapshot) {
     return;
   }
   state.online.lastEffectSerial = 0;
+  state.online.effectPlayback = Promise.resolve();
   state.battle = hydrateOnlineBattle(snapshot.battle);
   warmVisibleBattleAssets(state.battle, { priority: true });
   state.screen = "battle";
@@ -6983,6 +7137,16 @@ function playOnlineBattleEffects(effects = []) {
   if (!freshEffects.length) {
     return;
   }
+  state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, ...freshEffects.map((effect) => Number(effect.serial || 0)));
+  state.online.effectPlayback = (state.online.effectPlayback || Promise.resolve())
+    .then(async () => {
+      const videoKeys = new Set();
+      for (const effect of freshEffects) {
+        await playOnlineBattleEffect(effect, videoKeys);
+      }
+    })
+    .catch(() => {});
+  return;
   freshEffects.forEach((effect) => {
     const sourceCard = getCard(effect.sourceCardId) || getCard(effect.targetCardId) || getCard("us_marine_rifle");
     if (effect.type === "damage") {
@@ -7031,6 +7195,92 @@ function playOnlineBattleEffects(effects = []) {
   state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, ...freshEffects.map((effect) => Number(effect.serial || 0)));
 }
 
+async function playOnlineBattleEffect(effect, videoKeys) {
+  const sourceCard = getCard(effect.sourceCardId) || getCard(effect.targetCardId) || getCard("us_marine_rifle");
+  if (effect.type === "damage") {
+    await playOnlineFireVideoForEffect(effect, sourceCard, videoKeys);
+    const targetRef = findBoardInstance(state.battle, effect.targetSide, effect.targetUid) || {
+      side: effect.targetSide,
+      lineId: effect.lineId || "frontline",
+      uid: effect.targetUid,
+      instance: { uid: effect.targetUid, cardId: effect.targetCardId, damage: 0 },
+    };
+    playCombatVfx({
+      attackerSide: effect.attackerSide || "player",
+      sourceCard,
+      targetRef,
+      amount: effect.amount || 1,
+    });
+  } else if (effect.type === "destroyed") {
+    const targetCard = getCard(effect.targetCardId) || sourceCard;
+    const fromPoint = getElementCenter(getBoardCardElement(effect.targetSide, effect.targetUid)) || getFallbackVfxPoint(effect.targetSide, effect.lineId || "frontline");
+    playCardFlightFromPoint(targetCard, effect.targetSide, fromPoint, getPileElement(effect.targetSide, "grave"), { back: true, duration: 760 });
+    playDestroyedVfx(effect.targetSide, effect.targetUid);
+    playImpactVfx(fromPoint, "destroyed", 4);
+  } else if (effect.type === "intercept") {
+    await playOnlineFireVideoForEffect(effect, sourceCard, videoKeys);
+    const interceptorRef = findBoardInstance(state.battle, effect.targetSide, effect.interceptorUid);
+    const targetRef = interceptorRef || findBoardInstance(state.battle, effect.targetSide, effect.targetUid) || {
+      side: effect.targetSide,
+      lineId: effect.lineId || "support",
+      uid: effect.targetUid,
+      instance: { uid: effect.targetUid, cardId: effect.targetCardId || "us_marine_rifle", damage: 0 },
+    };
+    playBlockedVfx(targetRef);
+  } else if (effect.type === "draw") {
+    const side = effect.targetSide || "player";
+    const amount = Math.max(1, Number(effect.amount) || 1);
+    const cardBack = getCard("us_marine_rifle");
+    for (let index = 0; index < amount; index += 1) {
+      window.setTimeout(() => {
+        playCardFlightBetweenElements(cardBack, side, getPileElement(side, "deck"), getHandDestinationElement(side), { back: true, duration: 660 });
+      }, index * 90);
+    }
+  } else if (effect.type === "discard") {
+    const side = effect.targetSide || "player";
+    const discardCard = getCard(effect.targetCardId) || getCard("us_marine_rifle");
+    playCardFlightFromPoint(discardCard, side, getFallbackHandPoint(side), getPileElement(side, "grave"), { back: false, duration: 680 });
+  }
+}
+
+async function playOnlineFireVideoForEffect(effect, sourceCard, videoKeys) {
+  if (!["damage", "intercept"].includes(effect.type) || !sourceCard || !getCardFireVideoPath(sourceCard)) {
+    return;
+  }
+  const sourceRef = getOnlineEffectSourceRef(effect);
+  if (!sourceRef || sourceRef.instance.hidden || sourceRef.instance.masked) {
+    return;
+  }
+  const videoKey = `${effect.atAction || ""}:${effect.sourceSide || effect.attackerSide || ""}:${effect.sourceUid || ""}:${sourceCard.id}`;
+  if (videoKeys.has(videoKey)) {
+    return;
+  }
+  videoKeys.add(videoKey);
+
+  const battle = state.battle;
+  battle.actionAnimation = {
+    kind: "cardFireVideo",
+    side: sourceRef.side,
+    sourceUid: sourceRef.instance.uid,
+    cardId: sourceCard.id,
+  };
+  render();
+  await playCardFireVideo(sourceRef, sourceCard);
+  if (state.battle === battle) {
+    battle.actionAnimation = null;
+    render();
+  }
+}
+
+function getOnlineEffectSourceRef(effect) {
+  const sourceSide = effect.sourceSide || effect.attackerSide || "player";
+  const sourceUid = effect.sourceUid;
+  if (!sourceUid) {
+    return null;
+  }
+  return findBoardInstance(state.battle, sourceSide, sourceUid);
+}
+
 function leaveOnlineRoom() {
   if (state.online.socket?.readyState === WebSocket.OPEN && state.online.roomCode) {
     sendOnlineMessage({ type: "leave_room" });
@@ -7047,6 +7297,7 @@ function leaveOnlineRoom() {
     match: null,
     battleSnapshot: null,
     lastEffectSerial: 0,
+    effectPlayback: Promise.resolve(),
     lastEvent: "已离开线上房间。",
   });
   renderOnlinePanel();

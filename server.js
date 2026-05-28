@@ -553,8 +553,17 @@ function createMatchSeed() {
 function resolvePath(urlPath) {
   const pathname = new URL(urlPath || "/", "http://localhost").pathname;
   const rawPath = pathname === "/" ? "/index.html" : pathname;
-  const safePath = normalize(rawPath).replace(/^(\.\.[/\\])+/, "");
+  const decodedPath = safeDecodePath(rawPath);
+  const safePath = normalize(decodedPath).replace(/^(\.\.[/\\])+/, "");
   return join(rootDir, safePath);
+}
+
+function safeDecodePath(rawPath) {
+  try {
+    return decodeURIComponent(rawPath);
+  } catch {
+    return rawPath;
+  }
 }
 
 function getCacheControl(pathname, type) {
