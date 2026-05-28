@@ -1,5 +1,33 @@
 # 对局排查日志
 
+## 2026-05-28 线上创建房间 UI 可见性修复
+
+来源：Michael 线上验证反馈，“创建房间”功能从用户视角不可用，且该路径应纳入最基本测试用例。
+
+根因：
+
+- WebSocket 服务端创建房间链路实际正常，直连脚本可收到 `room_created`、`match_ready`、`battle_snapshot`。
+- 首页拟物化最终覆盖层为了贴合背景平板，使用 `.briefing .online-card + .online-card { display: none; }` 以及 `.briefing .online-room-code/.online-slots/.online-callout { display: none !important; }` 隐藏了房间状态区。
+- 因此用户点击“创建房间”后已经进入房间，但房间码、玩家槽位、复制邀请链接和提示都不可见，表现为“创建房间无法使用”。
+
+修复：
+
+- `src/main.js` 给 `#online-panel` 同步 `is-in-room` / `is-match-ready` 状态类。
+- `styles.css` 新增首页 PVP 平板的入房状态覆盖：创建成功后隐藏初始输入区，显示当前房间码、复制邀请链接、玩家槽位、准备/进入战场/离开按钮和提示信息。
+- `TEST_CASES.md` 新增 `UI-03A` 和 `NET-01A`，明确要求真实浏览器点击创建房间后房间码必须在 PVP 平板内可见，不能只测 WebSocket 直连。
+
+验证计划：
+
+- Playwright 线上/本地真实点击“创建房间”，检查 `.online-panel.is-in-room`、可见 6 位房间码、可见复制邀请链接和玩家槽位。
+- 保留 WebSocket 双端房间 smoke，用于验证服务端房间协议未回退。
+
+验证结果：
+
+- 本地 1512x900 浏览器真实点击：创建房间后 6 位房间码、复制邀请链接、双方槽位、离开/断开按钮均在 PVP 平板内可见。
+- 本地双标签真实 UI 流程：玩家 A 创建房间，玩家 B 输入房间码加入，双方准备后“进入战场”和“离开/断开”按钮均保持在面板范围内。
+- `node scripts/v052-regression-tests.mjs --output=output/test-reports/v052-regression-results-online-room-fix.json`：18/18 通过。
+- ECS 公网 `http://121.41.9.156/` 真实点击“创建房间”：房间码、复制邀请链接、玩家槽位、离开/断开按钮均可见且无页面溢出；公网 WebSocket 双端创建/加入/准备/战斗快照 smoke 通过。
+
 本文件记录真实对局、线上联机、机制变更和疑难问题排查。它用于复现问题、判断根因、沉淀修复经验。
 
 ## 2026-05-27 战斗字体与 HUD 对齐细化

@@ -2409,6 +2409,9 @@ function renderOnlinePanel() {
   const readyLabel = online.matchReady ? "已准备" : online.ready ? "取消准备" : "准备";
   const statusText = getOnlineStatusText();
 
+  refs.onlinePanel.classList.toggle("is-in-room", inRoom);
+  refs.onlinePanel.classList.toggle("is-match-ready", online.matchReady);
+
   refs.onlinePanel.innerHTML = `
     <div class="online-panel__header">
       <div>
