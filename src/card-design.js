@@ -2,6 +2,7 @@ export const MODERN_CARD_ART_ROOT = "./assets/card-art-v2";
 export const LEGACY_CARD_ART_ROOT = "./assets/card-art";
 export const COMMON_CARD_UI_ROOT = "./assets/common-card-ui";
 export const GENERATED_CARD_ROOT = "./assets/generated-cards/imagegen-us-model-test";
+export const CARD_LIST_THUMB_ROOT = "./assets/generated-cards/card-list-thumbs";
 export const CARD_FIRE_VIDEO_ROOT = "./assets/card-fire-vfx";
 
 export const GENERATED_CARD_IDS = new Set([
@@ -270,6 +271,14 @@ export function getCardThumbnailArtPath(card) {
     return generated.thumb;
   }
   return getCardArtPath(card);
+}
+
+export function getCardListThumbnailArtPath(card) {
+  const id = card?.id;
+  if (id && GENERATED_CARD_IDS.has(id)) {
+    return `${CARD_LIST_THUMB_ROOT}/${id}.webp`;
+  }
+  return getCardThumbnailArtPath(card);
 }
 
 export function getGeneratedCardImages(card) {

@@ -16,6 +16,7 @@ import {
   getFactionMarkPath,
   getCardArtPath,
   getCardFireVideoPath,
+  getCardListThumbnailArtPath,
   getCardThumbnailArtPath,
   getGeneratedCardImages,
   getSkillIconPath,
@@ -75,30 +76,20 @@ const BGM_PLAYLIST = [
   "./assets/audio/bgm/star-sky-instrumental.mp3",
 ];
 
-const BATTLEFIELD_BACKGROUND_PATH = "./assets/backgrounds/battlefield-board.png";
+const BATTLEFIELD_BACKGROUND_PATH = "./assets/backgrounds/battlefield-board.optimized.webp";
 const CARD_BACK_ART_PATH = "./assets/ui/card-back-frame.webp";
 const HOME_BOOT_IMAGE_ASSETS = [
-  "./assets/backgrounds/homepage v3.png",
-  "./assets/backgrounds/details-page v3.png",
+  "./assets/backgrounds/homepage-v3.optimized.webp",
+  "./assets/backgrounds/details-page-v3.optimized.webp",
   "./assets/ui/commander-usa.jpg",
   "./assets/ui/commander-russia.jpg",
-  "./assets/ui/阵营卡牌.png",
-  "./assets/ui/自由组卡.png",
-  "./assets/ui/玩法介绍.png",
-  "./assets/ui/homepage-elements/home-faction-usa.png",
-  "./assets/ui/homepage-elements/home-faction-russia.png",
-  "./assets/ui/homepage-elements/home-deck-back.png",
-  "./assets/ui/homepage-elements/home-deck-card-1.png",
-  "./assets/ui/homepage-elements/home-deck-card-2.png",
-  "./assets/ui/homepage-elements/home-deck-card-3.png",
-  "./assets/ui/homepage-elements/home-deck-card-4.png",
-  "./assets/ui/homepage-elements/home-deck-card-5.png",
-  "./assets/ui/homepage-elements/home-deck-card-6.png",
-  "./assets/ui/homepage-elements/home-rules-blueprint.png",
-  "./assets/ui/homepage-elements/home-rules-row-basic.png",
-  "./assets/ui/homepage-elements/home-rules-row-flow.png",
-  "./assets/ui/homepage-elements/home-rules-row-cards.png",
-  "./assets/ui/homepage-elements/home-rules-row-win.png",
+  "./assets/ui/optimized/home-faction-panel.webp",
+  "./assets/ui/optimized/home-deck-panel.webp",
+  "./assets/ui/optimized/home-rules-panel.webp",
+  "./assets/ui/optimized/duel-button.webp",
+  "./assets/ui/optimized/ai-easy.png",
+  "./assets/ui/optimized/ai-medium.png",
+  "./assets/ui/optimized/ai-hard.png",
   CARD_BACK_ART_PATH,
   "./assets/cards/card-shell-frame.webp",
 ];
@@ -115,7 +106,7 @@ const BATTLE_BOOT_IMAGE_ASSETS = [
   "./assets/ui/commander-usa.jpg",
   "./assets/ui/commander-russia.jpg",
 ];
-const ASSET_PRELOAD_CONCURRENCY = 4;
+const ASSET_PRELOAD_CONCURRENCY = 8;
 const TURN_HANDOFF_MS = 2000;
 const AI_THINK_MS = 1050;
 const CARD_FLIGHT_MS = 760;
@@ -383,7 +374,7 @@ function warmShellAssets() {
 function getInitialInterfaceAssetUrls() {
   const factionIds = ["usa", "russia"];
   const cardUrls = factionIds.flatMap((factionId) =>
-    getFactionCards(factionId).flatMap((card) => getCardImagePreloadUrls(card, { includeFull: false })),
+    getFactionCards(factionId).flatMap((card) => getCardListImagePreloadUrls(card)),
   );
   return [...HOME_BOOT_IMAGE_ASSETS, ...cardUrls];
 }
@@ -393,7 +384,7 @@ async function runInitialResourceLoading() {
     title: "战术终端校准中",
     status: "正在激活各模块并校准终端参数，请稍候...",
     assets: getInitialInterfaceAssetUrls(),
-    minDuration: 900,
+    minDuration: 450,
   });
 }
 
@@ -738,6 +729,10 @@ function getCardImagePreloadUrls(card, options = {}) {
     urls.push(getCardArtPath(card));
   }
   return urls.filter(Boolean);
+}
+
+function getCardListImagePreloadUrls(card) {
+  return [getCardListThumbnailArtPath(card)].filter(Boolean);
 }
 
 function handleInput(event) {
@@ -1410,6 +1405,7 @@ function render() {
   refs.app.dataset.activeSide = state.battle?.activeSide || "none";
   refs.app.dataset.turnLocked = state.battle?.turnTransition || state.battle?.aiThinking || state.battle?.actionAnimation ? "true" : "false";
   refs.app.dataset.mulligan = state.mulligan.active ? "true" : "false";
+  refs.app.dataset.bgm = state.bgmOn ? "on" : "off";
   refs.briefing.hidden = state.screen !== "briefing";
   if (state.battle) {
     warmVisibleBattleAssets(state.battle);
@@ -1428,6 +1424,15 @@ function render() {
   renderCodex();
   renderGuide();
   renderDeckBuilder();
+  renderBgmToggle();
+}
+
+function renderBgmToggle() {
+  const label = state.bgmOn ? "关闭声音" : "开启声音";
+  document.querySelectorAll('[data-action="toggle-bgm"]').forEach((button) => {
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", state.bgmOn ? "true" : "false");
+  });
 }
 
 function renderBoard() {
@@ -2452,7 +2457,7 @@ function getCodexDeckIds(factionId) {
 }
 
 function renderCodexCard(card, count = 1, order = card.docOrder || 0) {
-  const artPath = getCardThumbnailArtPath(card);
+  const artPath = getCardListThumbnailArtPath(card);
   const lineLabel = card.line === "instant" ? "即时/无部署线" : getLine(card.line)?.name || card.line;
   const typeLabel = card.type === "unit" ? "驻场单位" : card.type === "tactic" ? "功能战术" : TYPE_LABELS[card.type];
   const tags = getCardDisplayTags(card).map((tag) => `<i>${escapeHtml(tag)}</i>`).join("");
@@ -2802,7 +2807,7 @@ function renderDeckBuilderCard(card, count) {
   const tags = getCardDisplayTags(card).map((tag) => `<i>${escapeHtml(tag)}</i>`).join("");
   return `
     <article class="deck-card ${count ? "is-in-deck" : ""}" data-card-id="${card.id}" style="--accent:${getFaction(card.faction).accent}">
-      <div class="deck-card__art" style="--card-art:url('${getCardThumbnailArtPath(card)}')"></div>
+      <div class="deck-card__art" style="--card-art:url('${getCardListThumbnailArtPath(card)}')"></div>
       <div class="deck-card__body">
         <div class="deck-card__title">
           <strong>${escapeHtml(card.name)}</strong>
@@ -7850,6 +7855,8 @@ function toggleBgm() {
   } else {
     refs.bgm?.pause();
   }
+  refs.app.dataset.bgm = state.bgmOn ? "on" : "off";
+  renderBgmToggle();
   renderScore();
 }
 
@@ -7866,6 +7873,8 @@ function playBgm(forceNext = false) {
   refs.bgm.volume = 0.34;
   refs.bgm.play().catch(() => {
     state.bgmOn = false;
+    refs.app.dataset.bgm = "off";
+    renderBgmToggle();
     renderScore();
   });
 }

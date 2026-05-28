@@ -11408,7 +11408,7 @@ button:disabled {
   padding: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.08)),
-    url("./assets/backgrounds/homepage%20v3.png") center / 100% 100% no-repeat;
+    url("./assets/backgrounds/homepage-v3.optimized.webp") center / 100% 100% no-repeat;
   transform: translate(-50%, -50%);
   backdrop-filter: none;
 }
@@ -12014,7 +12014,7 @@ button:disabled {
   padding: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.12)),
-    #020303 url("./assets/backgrounds/details-page%20v3.png") center / var(--detail-stage-width) var(--detail-stage-height) no-repeat;
+    #020303 url("./assets/backgrounds/details-page-v3.optimized.webp") center / var(--detail-stage-width) var(--detail-stage-height) no-repeat;
   backdrop-filter: none;
 }
 
@@ -14029,7 +14029,7 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
   top: 66.85% !important;
   width: 18.75% !important;
   height: 22.85% !important;
-  background-image: url("./assets/ui/阵营卡牌.png") !important;
+  background-image: url("./assets/ui/optimized/home-faction-panel.webp") !important;
   background-position: 50% 50% !important;
 }
 
@@ -14038,7 +14038,7 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
   top: 66.85% !important;
   width: 39.25% !important;
   height: 22.95% !important;
-  background-image: url("./assets/ui/自由组卡.png") !important;
+  background-image: url("./assets/ui/optimized/home-deck-panel.webp") !important;
   background-position: 50% 51% !important;
 }
 
@@ -14047,7 +14047,7 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
   top: 66.85% !important;
   width: 19.25% !important;
   height: 22.45% !important;
-  background-image: url("./assets/ui/玩法介绍.png") !important;
+  background-image: url("./assets/ui/optimized/home-rules-panel.webp") !important;
   background-position: 50% 50% !important;
 }
 
@@ -14152,4 +14152,184 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
   padding: 0.65svmin 0.8svmin !important;
   font-size: clamp(8px, 0.82svmin, 10px) !important;
   line-height: 1.25 !important;
+}
+
+/* 2026-05-29: lighter homepage assets and room controls that fit the right tablet. */
+.app-shell[data-screen="briefing"] .home-shortcut--cards {
+  background-image: url("./assets/ui/optimized/home-faction-panel.webp") !important;
+}
+
+.app-shell[data-screen="briefing"] .home-shortcut--deck {
+  background-image: url("./assets/ui/optimized/home-deck-panel.webp") !important;
+}
+
+.app-shell[data-screen="briefing"] .home-shortcut--rules {
+  background-image: url("./assets/ui/optimized/home-rules-panel.webp") !important;
+}
+
+.app-shell[data-screen="briefing"] .home-top-actions [data-action="toggle-bgm"] {
+  width: clamp(46px, 5.4svmin, 64px) !important;
+  min-width: clamp(46px, 5.4svmin, 64px) !important;
+  padding: 0 !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  position: relative;
+}
+
+.app-shell[data-screen="briefing"] .home-top-actions [data-action="toggle-bgm"]::before {
+  content: "";
+  display: block !important;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 78%;
+  height: 78%;
+  background: url("data:image/svg+xml,%3Csvg width='64' height='64' viewBox='0 0 64 64' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 39V25h11l13-11v36L22 39H11Z' fill='%23efe4c8'/%3E%3Cpath d='M42 23c4 5 4 13 0 18M48 17c8 9 8 21 0 30' stroke='%23efe4c8' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  transform: translate(-50%, -50%);
+}
+
+.app-shell[data-bgm="off"][data-screen="briefing"] .home-top-actions [data-action="toggle-bgm"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg width='64' height='64' viewBox='0 0 64 64' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 39V25h11l13-11v36L22 39H11Z' fill='%23efe4c8'/%3E%3Cpath d='M49 18 17 50' stroke='%23d96b55' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.app-shell[data-screen="briefing"] .briefing .home-actions > .primary-button[data-action="start"],
+.app-shell[data-screen="briefing"] .home-final .primary-button[data-action="start"] {
+  border: 0 !important;
+  border-radius: 7px !important;
+  color: #fff2d2 !important;
+  background: url("./assets/ui/optimized/duel-button.webp") center / 100% 100% no-repeat !important;
+  box-shadow: none !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95), 0 0 12px rgba(255, 194, 91, 0.2) !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .difficulty-button {
+  justify-content: space-between !important;
+  gap: clamp(6px, 0.75svmin, 10px) !important;
+  padding: 0 8.5% !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .difficulty-button::before {
+  content: "";
+  flex: 0 0 clamp(18px, 2.25svmin, 28px);
+  width: clamp(18px, 2.25svmin, 28px);
+  height: clamp(18px, 2.25svmin, 28px);
+  background: url("./assets/ui/optimized/ai-easy.png") center / contain no-repeat;
+}
+
+.app-shell[data-screen="briefing"] .briefing .difficulty-button[data-action="ai-difficulty:medium"]::before {
+  background-image: url("./assets/ui/optimized/ai-medium.png");
+}
+
+.app-shell[data-screen="briefing"] .briefing .difficulty-button[data-action="ai-difficulty:hard"]::before {
+  background-image: url("./assets/ui/optimized/ai-hard.png");
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel {
+  left: 71.25% !important;
+  top: 20.05% !important;
+  width: 20.75% !important;
+  height: 38.25% !important;
+  padding: 2.35% 2.45% !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel__header p,
+.app-shell[data-screen="briefing"] .briefing .online-panel__header span,
+.app-shell[data-screen="briefing"] .briefing .online-status {
+  display: none !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel__header strong {
+  display: block !important;
+  max-width: 100% !important;
+  font-size: clamp(16px, 1.58svmin, 23px) !important;
+  line-height: 1.12 !important;
+  text-align: center !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel__body {
+  min-height: 0 !important;
+  margin-top: clamp(8px, 1.25svmin, 15px) !important;
+  overflow: hidden !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-actions {
+  gap: clamp(7px, 0.92svmin, 12px) !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-actions .primary-button,
+.app-shell[data-screen="briefing"] .briefing .online-actions .small-button,
+.app-shell[data-screen="briefing"] .briefing .online-room-actions .primary-button,
+.app-shell[data-screen="briefing"] .briefing .online-room-actions .small-button {
+  width: 100% !important;
+  min-height: clamp(30px, 4.1svmin, 44px) !important;
+  justify-content: center !important;
+  padding: 0 clamp(8px, 1.0svmin, 14px) !important;
+  font-size: clamp(10px, 1.03svmin, 13px) !important;
+  line-height: 1.08 !important;
+  text-align: center !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-actions input {
+  min-height: clamp(27px, 3.55svmin, 38px) !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-card--room {
+  padding: clamp(8px, 1.0svmin, 12px) !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-room-code strong {
+  font-size: clamp(19px, 1.92svmin, 28px) !important;
+  letter-spacing: 0.1em !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-slots {
+  gap: clamp(6px, 0.76svmin, 10px) !important;
+  margin-top: clamp(8px, 0.95svmin, 12px) !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-room-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: clamp(6px, 0.76svmin, 10px) !important;
+  margin-top: clamp(8px, 1.0svmin, 13px) !important;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-room-actions button:disabled {
+  display: flex !important;
+  opacity: 0.46 !important;
+}
+
+.app-shell[data-screen="briefing"] .home-top-actions [data-action="toggle-bgm"]::before {
+  width: clamp(24px, 2.85svmin, 34px) !important;
+  height: clamp(18px, 2.1svmin, 25px) !important;
+  background: #efe4c8 !important;
+  clip-path: polygon(0 31%, 34% 31%, 76% 0, 76% 100%, 34% 69%, 0 69%) !important;
+}
+
+.app-shell[data-screen="briefing"] .home-top-actions [data-action="toggle-bgm"]::after {
+  content: "";
+  position: absolute;
+  left: 58%;
+  top: 50%;
+  width: clamp(11px, 1.35svmin, 17px);
+  height: clamp(20px, 2.5svmin, 30px);
+  border: solid #efe4c8;
+  border-width: 0 clamp(2px, 0.28svmin, 4px) 0 0;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.app-shell[data-bgm="off"][data-screen="briefing"] .home-top-actions [data-action="toggle-bgm"]::after {
+  left: 50%;
+  width: clamp(3px, 0.35svmin, 5px);
+  height: 68%;
+  border: 0;
+  border-radius: 999px;
+  background: #d96b55;
+  transform: translate(-50%, -50%) rotate(-38deg);
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-room-code .small-button {
+  width: 100% !important;
 }
