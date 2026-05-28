@@ -12,16 +12,26 @@
     <link rel="icon" href="data:," />
     <link rel="preload" as="image" href="./assets/backgrounds/homepage%20v3.png" type="image/png" fetchpriority="high" />
     <link rel="preload" as="image" href="./assets/backgrounds/details-page%20v3.png" type="image/png" />
-    <link rel="preload" as="image" href="./assets/backgrounds/battlefield-board.png" type="image/png" fetchpriority="high" />
     <link rel="preload" as="image" href="./assets/ui/card-back-frame.webp" type="image/webp" />
     <link rel="preload" as="image" href="./assets/cards/card-shell-frame.webp" type="image/webp" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <section class="resource-loading" id="resource-loading" aria-live="polite" aria-busy="true">
+      <div class="resource-loading__panel">
+        <div class="resource-loading__chevrons" aria-hidden="true"><span></span><span></span><span></span></div>
+        <strong id="resource-loading-title">战术终端校准中</strong>
+        <p id="resource-loading-status">正在激活各模块并校准终端参数，请稍候...</p>
+        <div class="resource-loading__meter">
+          <i id="resource-loading-fill"></i>
+        </div>
+        <output id="resource-loading-progress">1%</output>
+      </div>
+    </section>
     <div class="app-shell" id="app" data-screen="briefing">
       <div class="battle-map" aria-hidden="true">
         <picture>
-          <img src="./assets/backgrounds/battlefield-board.png" alt="" decoding="async" fetchpriority="high" />
+          <img data-src="./assets/backgrounds/battlefield-board.png" alt="" decoding="async" />
         </picture>
         <div class="battle-map__shade"></div>
         <div class="battle-map__scan"></div>

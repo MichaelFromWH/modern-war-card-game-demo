@@ -28,7 +28,13 @@ import {
 
 const refs = {
   app: document.querySelector("#app"),
+  resourceLoading: document.querySelector("#resource-loading"),
+  resourceLoadingTitle: document.querySelector("#resource-loading-title"),
+  resourceLoadingStatus: document.querySelector("#resource-loading-status"),
+  resourceLoadingProgress: document.querySelector("#resource-loading-progress"),
+  resourceLoadingFill: document.querySelector("#resource-loading-fill"),
   briefing: document.querySelector("#briefing"),
+  battleMapImage: document.querySelector(".battle-map img"),
   board: document.querySelector("#battle-board"),
   hand: document.querySelector("#player-hand"),
   score: document.querySelector("#score-overlay"),
@@ -69,15 +75,43 @@ const BGM_PLAYLIST = [
   "./assets/audio/bgm/star-sky-instrumental.mp3",
 ];
 
+const BATTLEFIELD_BACKGROUND_PATH = "./assets/backgrounds/battlefield-board.png";
 const CARD_BACK_ART_PATH = "./assets/ui/card-back-frame.webp";
-const CRITICAL_IMAGE_ASSETS = [
-  "./assets/backgrounds/battlefield-board.png",
+const HOME_BOOT_IMAGE_ASSETS = [
+  "./assets/backgrounds/homepage v3.png",
+  "./assets/backgrounds/details-page v3.png",
+  "./assets/ui/commander-usa.jpg",
+  "./assets/ui/commander-russia.jpg",
+  "./assets/ui/阵营卡牌.png",
+  "./assets/ui/自由组卡.png",
+  "./assets/ui/玩法介绍.png",
+  "./assets/ui/homepage-elements/home-faction-usa.png",
+  "./assets/ui/homepage-elements/home-faction-russia.png",
+  "./assets/ui/homepage-elements/home-deck-back.png",
+  "./assets/ui/homepage-elements/home-deck-card-1.png",
+  "./assets/ui/homepage-elements/home-deck-card-2.png",
+  "./assets/ui/homepage-elements/home-deck-card-3.png",
+  "./assets/ui/homepage-elements/home-deck-card-4.png",
+  "./assets/ui/homepage-elements/home-deck-card-5.png",
+  "./assets/ui/homepage-elements/home-deck-card-6.png",
+  "./assets/ui/homepage-elements/home-rules-blueprint.png",
+  "./assets/ui/homepage-elements/home-rules-row-basic.png",
+  "./assets/ui/homepage-elements/home-rules-row-flow.png",
+  "./assets/ui/homepage-elements/home-rules-row-cards.png",
+  "./assets/ui/homepage-elements/home-rules-row-win.png",
+  CARD_BACK_ART_PATH,
+  "./assets/cards/card-shell-frame.webp",
+];
+const BATTLE_BOOT_IMAGE_ASSETS = [
+  BATTLEFIELD_BACKGROUND_PATH,
   CARD_BACK_ART_PATH,
   "./assets/cards/card-shell-frame.webp",
   "./assets/cards/card-hover-frame.webp",
   "./assets/cards/card-selected-frame.webp",
   "./assets/ui/deck-grave-panel.webp",
   "./assets/ui/lane-icons.webp",
+  "./assets/ui/end-turn-button.png",
+  "./assets/ui/commander-panel.png",
   "./assets/ui/commander-usa.jpg",
   "./assets/ui/commander-russia.jpg",
 ];
@@ -289,12 +323,13 @@ const state = {
   uidCounter: 0,
 };
 
-bootstrap();
+void bootstrap();
 
-function bootstrap() {
+async function bootstrap() {
   gameAudio.preload();
-  warmShellAssets();
   bindEvents();
+  await runInitialResourceLoading();
+  warmShellAssets();
   updateDifficultyButtons();
   render();
   runWhenIdle(() => {
@@ -342,7 +377,187 @@ function bindEvents() {
 }
 
 function warmShellAssets() {
-  scheduleImagePreload(CRITICAL_IMAGE_ASSETS, { priority: true });
+  scheduleImagePreload(getInitialInterfaceAssetUrls(), { priority: true });
+}
+
+function getInitialInterfaceAssetUrls() {
+  const factionIds = ["usa", "russia"];
+  const cardUrls = factionIds.flatMap((factionId) =>
+    getFactionCards(factionId).flatMap((card) => getCardImagePreloadUrls(card, { includeFull: false })),
+  );
+  return [...HOME_BOOT_IMAGE_ASSETS, ...cardUrls];
+}
+
+async function runInitialResourceLoading() {
+  await runLoadingTask({
+    title: "战术终端校准中",
+    status: "正在激活各模块并校准终端参数，请稍候...",
+    assets: getInitialInterfaceAssetUrls(),
+    minDuration: 900,
+  });
+}
+
+async function runBattlefieldLoading() {
+  const battleAssets = [
+    ...BATTLE_BOOT_IMAGE_ASSETS,
+    ...state.playerDeck.slice(0, 8).flatMap((cardId) => {
+      const card = getCard(cardId);
+      return card ? getCardImagePreloadUrls(card, { includeFull: false }) : [];
+    }),
+  ];
+  await runLoadingTask({
+    title: "战术终端校准中",
+    status: "正在部署战场...",
+    assets: battleAssets,
+    minDuration: 3000,
+  });
+  await ensureBattlefieldBackgroundLoaded();
+}
+
+function setLoadingOverlay(progress, title, status) {
+  if (!refs.resourceLoading) {
+    return;
+  }
+  const nextProgress = Math.max(1, Math.min(100, Math.round(progress)));
+  refs.resourceLoading.hidden = false;
+  refs.resourceLoading.classList.remove("is-complete");
+  refs.resourceLoading.setAttribute("aria-busy", "true");
+  if (refs.resourceLoadingTitle && title) {
+    refs.resourceLoadingTitle.textContent = title;
+  }
+  if (refs.resourceLoadingStatus && status) {
+    refs.resourceLoadingStatus.textContent = status;
+  }
+  if (refs.resourceLoadingProgress) {
+    refs.resourceLoadingProgress.textContent = `${nextProgress}%`;
+  }
+  if (refs.resourceLoadingFill) {
+    refs.resourceLoadingFill.style.width = `${nextProgress}%`;
+  }
+}
+
+function hideLoadingOverlay() {
+  if (!refs.resourceLoading) {
+    return;
+  }
+  refs.resourceLoading.classList.add("is-complete");
+  refs.resourceLoading.setAttribute("aria-busy", "false");
+  window.setTimeout(() => {
+    refs.resourceLoading.hidden = true;
+  }, 220);
+}
+
+async function runLoadingTask({ title, status, assets = [], minDuration = 0 } = {}) {
+  if (!refs.resourceLoading) {
+    await preloadImageAssets(assets, { priority: true });
+    return;
+  }
+
+  const startedAt = performance.now();
+  let taskProgress = 0.01;
+  let done = false;
+  setLoadingOverlay(1, title, status);
+
+  const ticker = window.setInterval(() => {
+    const elapsedRatio = minDuration ? Math.min(1, (performance.now() - startedAt) / minDuration) : 1;
+    const blended = Math.min(taskProgress, Math.max(0.01, elapsedRatio));
+    setLoadingOverlay(done ? 100 : Math.min(99, blended * 100), title, status);
+  }, 50);
+
+  try {
+    await Promise.all([
+      preloadImageAssets(assets, {
+        priority: true,
+        onProgress: (ratio) => {
+          taskProgress = Math.max(taskProgress, ratio || 0.01);
+        },
+      }),
+      waitForMinimumDuration(startedAt, minDuration),
+      waitForFontsReady(),
+    ]);
+  } finally {
+    done = true;
+    window.clearInterval(ticker);
+    setLoadingOverlay(100, title, status);
+    await delay(220);
+    hideLoadingOverlay();
+  }
+}
+
+function waitForMinimumDuration(startedAt, minDuration) {
+  const remaining = Math.max(0, minDuration - (performance.now() - startedAt));
+  return delay(remaining);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, ms)));
+}
+
+function waitForFontsReady() {
+  return document.fonts?.ready?.catch(() => undefined) || Promise.resolve();
+}
+
+async function preloadImageAssets(urls = [], options = {}) {
+  const entries = [...new Set(urls.map(normalizeAssetUrl).filter(Boolean))];
+  if (!entries.length) {
+    options.onProgress?.(1);
+    return;
+  }
+
+  let completed = 0;
+  let cursor = 0;
+  const total = entries.length;
+  const concurrency = Math.min(ASSET_PRELOAD_CONCURRENCY, total);
+
+  const markDone = (src, ok) => {
+    completed += 1;
+    imagePreloadState.queued.delete(src);
+    if (ok) {
+      imagePreloadState.loaded.add(src);
+    } else {
+      imagePreloadState.failed.add(src);
+    }
+    options.onProgress?.(completed / total);
+  };
+
+  const worker = async () => {
+    while (cursor < total) {
+      const src = entries[cursor];
+      cursor += 1;
+      if (imagePreloadState.loaded.has(src)) {
+        markDone(src, true);
+        continue;
+      }
+      try {
+        imagePreloadState.queued.add(src);
+        await preloadImageAsset(src, Boolean(options.priority));
+        markDone(src, true);
+      } catch {
+        markDone(src, false);
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: concurrency }, worker));
+}
+
+async function ensureBattlefieldBackgroundLoaded() {
+  const image = refs.battleMapImage;
+  if (!image) {
+    return;
+  }
+  const src = image.dataset.src || BATTLEFIELD_BACKGROUND_PATH;
+  if (!image.getAttribute("src")) {
+    image.fetchPriority = "high";
+    image.src = src;
+  }
+  if (image.complete && image.naturalWidth > 0) {
+    return;
+  }
+  await new Promise((resolve) => {
+    image.onload = resolve;
+    image.onerror = resolve;
+  });
 }
 
 function runWhenIdle(callback, timeout = 1600) {
@@ -664,7 +879,7 @@ function getHoveredSpotlightSource(cardId) {
 
 function handleAction(action) {
   if (action === "start") {
-    startBattle();
+    void startBattleWithLoading();
   } else if (action.startsWith("ai-difficulty:")) {
     setAiDifficulty(action.split(":")[1] || "medium");
   } else if (action === "confirm-mulligan") {
@@ -729,7 +944,7 @@ function handleAction(action) {
   } else if (action === "online-toggle-ready") {
     toggleOnlineReady();
   } else if (action === "online-start-battle") {
-    startOnlineBattlePreview();
+    void startOnlineBattlePreview();
   } else if (action === "online-leave-room") {
     leaveOnlineRoom();
   } else if (action === "online-copy-code") {
@@ -752,7 +967,7 @@ function handleAction(action) {
   }
 }
 
-function startBattle(options = {}) {
+async function startBattleWithLoading(options = {}) {
   const validation = validateDeck(state.playerDeck, state.playerFaction);
   if (!validation.valid) {
     gameAudio.play("ui.error");
@@ -760,10 +975,25 @@ function startBattle(options = {}) {
     render();
     return;
   }
-  state.battle = createBattle(options);
+  await runBattlefieldLoading();
+  startBattle({ ...options, skipValidation: true });
+}
+
+function startBattle(options = {}) {
+  const { skipValidation = false, ...battleOptions } = options;
+  if (!skipValidation) {
+    const validation = validateDeck(state.playerDeck, state.playerFaction);
+    if (!validation.valid) {
+      gameAudio.play("ui.error");
+      state.deckBuilderOpen = true;
+      render();
+      return;
+    }
+  }
+  state.battle = createBattle(battleOptions);
   warmVisibleBattleAssets(state.battle, { priority: true });
   runWhenIdle(() => warmBattleDeckReserves(state.battle), 900);
-  if (options.mode === "online-preview") {
+  if (battleOptions.mode === "online-preview") {
     const seedText = options.seed ? `Seed ${options.seed}` : "未指定 Seed";
     const opponentText = options.opponentName ? `对手：${options.opponentName}。` : "";
     state.battle.log.push(`线上房间 ${options.roomCode || state.online.roomCode || "未知"} 已生成 ${seedText}。${opponentText}`);
@@ -7018,7 +7248,7 @@ function toggleOnlineReady() {
   renderOnlinePanel();
 }
 
-function startOnlineBattlePreview() {
+async function startOnlineBattlePreview() {
   if (!state.online.matchReady || !state.online.match) {
     state.online.error = "双方准备完成后才能进入战场。";
     renderOnlinePanel();
@@ -7026,6 +7256,7 @@ function startOnlineBattlePreview() {
   }
 
   if (state.online.battleSnapshot) {
+    await runBattlefieldLoading();
     enterOnlineAuthoritativeBattle(state.online.battleSnapshot);
     return;
   }
