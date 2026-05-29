@@ -362,9 +362,11 @@ testCase("TC-V052-034/035/036", "P1", "维修、烟幕、阵地转移修复生�
   const repair = createBattle("repair");
   const damaged = addBoard(repair, "player", "frontline", "us_m1a2", { damage: 3 });
   const card = addHand(repair, "player", "us_battlefield_repair");
+  assert(getCard("us_battlefield_repair").ability.full === true, "battlefield repair should be marked as full repair");
+  assert(getCard("ru_battlefield_repair").ability.full === true, "russian battlefield repair should be marked as full repair");
   assertAction(applyBattleAction(repair, "player", { kind: "play_tactic", handUid: card.uid }), "play repair");
   assertAction(choosePendingTarget(repair, "player", 0), "choose damaged unit");
-  assert(damaged.instance.damage === 1, "repair amount should reduce damage without overheal");
+  assert(damaged.instance.damage === 0, "battlefield repair should restore the target to full life");
 
   const smoke = createBattle("smoke");
   const front = addBoard(smoke, "player", "frontline", "us_marine_rifle", { damage: 1, exposed: true });

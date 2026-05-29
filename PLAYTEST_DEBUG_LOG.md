@@ -1,5 +1,41 @@
 # 对局排查日志
 
+## 2026-05-28 V0.5.2 维修满血口径确认与修复
+
+来源：Michael 确认新规则下战地维修、战场维修应修复目标全部生命，同时要求项目重要标准文件固定存放并在 `AGENTS.md` 记录路径。
+
+根因：
+
+- V0.5.2 可见卡面文案已经写成“修复己方一个单位全部生命”，但最终运行数据仍保留 `ability.amount: 2`。
+- 客户端 `src/main.js` 已有 `ability.full` 分支，线上权威引擎 `src/online-battle-engine.js` 仍只按固定数值维修。
+- 项目缺少明确的飞书资源本地索引和 V0.5.2 内容快照，容易继续引用旧版 `GAME_CONTENT_V0.5.1.md`。
+
+修复：
+
+- `GAME_MECHANICS.md` 新增“维修与生命恢复”规则，明确战地维修、战场维修恢复至满生命，无受损单位时抽 2 留 1。
+- `src/game-data.js` 在 V0.5.2 最终规则覆盖层为美俄维修战术牌设置 `ability.full: true`。
+- `src/online-battle-engine.js` 支持 `ability.full`，按目标当前伤害值清零。
+- `scripts/v052-regression-tests.mjs` 更新维修回归断言，要求战地维修把 3 点伤害修复为 0。
+- 新增 `GAME_CONTENT_V0.5.2.md` 与 `docs/lark-resources.md`，并在 `AGENTS.md`、`README.md` 中记录固定查询路径。
+
+验证计划：
+
+- 执行 V0.5.2 规则回归脚本，确认维修用例通过。
+- 抽查最终卡牌数据，确认两张维修战术牌均带 `ability.full: true`。
+- 后续若继续修复其它 P1，回归测试报告需继续补充。
+
+验证结果：
+
+- `node --check src/game-data.js`
+- `node --check src/online-battle-engine.js`
+- `node --check scripts/v052-regression-tests.mjs`
+- `node scripts/v052-regression-tests.mjs`：18/18 通过，`TC-V052-034/035/036` 通过。
+- 抽查最终数据：`us_battlefield_repair.ability.full === true`，`ru_battlefield_repair.ability.full === true`。
+- `curl http://localhost:3000/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`。
+- 飞书 Bug 表：BUG-0001 已更新为“已关闭 / 回归通过”。
+- 飞书 Bug 表：BUG-0004 已更新为“已关闭 / 回归通过”，对应 V0.5.2 内容快照和固定资源索引。
+- 飞书回归报告：https://my.feishu.cn/docx/IVEcdN4IRoBRJCx4jqXc9iEzn6d
+
 ## 2026-05-28 线上创建房间 UI 可见性修复
 
 来源：Michael 线上验证反馈，“创建房间”功能从用户视角不可用，且该路径应纳入最基本测试用例。

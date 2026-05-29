@@ -3340,11 +3340,11 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_battlefield_repair": {
-    "effect": "修复己方一个单位 2 点生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "effect": "修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
     "ability": {
       "kind": "repair",
       "rows": ["frontline", "support"],
-      "amount": 2,
+      "full": true,
       "drawAlternative": 2,
       "keepAlternative": 1
     }
@@ -3690,11 +3690,11 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_battlefield_repair": {
-    "effect": "修复己方一个单位 2 点生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "effect": "修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
     "ability": {
       "kind": "repair",
       "rows": ["frontline", "support"],
-      "amount": 2,
+      "full": true,
       "drawAlternative": 2,
       "keepAlternative": 1
     }
@@ -5323,7 +5323,14 @@ const V052_20260527_RULE_PATCHES = {
     "effect": "指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点生命。"
   },
   "us_battlefield_repair": {
-    "effect": "修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。"
+    "effect": "修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "ability": {
+      "kind": "repair",
+      "rows": ["frontline", "support"],
+      "full": true,
+      "drawAlternative": 2,
+      "keepAlternative": 1
+    }
   },
   "us_reposition": {
     "effect": "指定己方一个已暴露单位，使其重新进入隐蔽，若目标在支援区，修复 1 点生命。"
@@ -5332,7 +5339,14 @@ const V052_20260527_RULE_PATCHES = {
     "effect": "指定己方一个已暴露单位，使其重新进入隐蔽，若目标在前线，修复 1 点生命。"
   },
   "ru_battlefield_repair": {
-    "effect": "修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。"
+    "effect": "修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。",
+    "ability": {
+      "kind": "repair",
+      "rows": ["frontline", "support"],
+      "full": true,
+      "drawAlternative": 2,
+      "keepAlternative": 1
+    }
   },
   "ru_reposition": {
     "effect": "指定己方一个已暴露单位，使其重新进入隐蔽，若目标在支援区，修复 1 点生命。"

@@ -581,8 +581,8 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
   }
 
   if (ability.kind === "repair") {
-    const amount = ability.amount || 1;
     const before = targetRef.instance.damage || 0;
+    const amount = ability.full ? before : ability.amount || 1;
     targetRef.instance.damage = Math.max(0, before - amount);
     battle.log.push(`${sourceCard.name} 修复 ${getCard(targetRef.instance.cardId).name} ${before - targetRef.instance.damage} 点伤害。`);
     return;

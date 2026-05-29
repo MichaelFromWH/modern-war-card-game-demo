@@ -27,12 +27,31 @@
 修改前优先阅读：
 
 - `README.md`：项目入口、运行方式和结构说明。
+- `MEMORY.md`：长期记忆入口，记录关键决策、Playtest / Debug 索引、飞书入口和会话恢复规则。
 - `GAME_MECHANICS.md`：游戏通用机制真源。涉及机制、卡牌效果、联机裁决和回合体验时必须优先参考并同步更新。
-- `GAME_CONTENT_V0.5.1.md`：当前 V0.5.1 机制与卡牌内容快照，便于查阅全卡牌数值、单位属性、技能文本和预设卡组。
+- `GAME_CONTENT_V0.5.2.md`：当前 V0.5.2 机制与卡牌内容快照，便于查阅全卡牌数值、单位属性、技能文本和预设卡组。
+- `docs/lark-resources.md`：飞书项目文件夹、需求/测试/报告文档、Bug 多维表格和本地标准文件的固定索引。
 - `PLAYTEST_DEBUG_LOG.md`：真实对局反馈、根因、修复和验证记录。排查联机或机制问题时必须更新。
 - `card_design_method.md`：卡牌设计方法、数值档位、文本模板和平衡检查表。
 - `online_1v1_roadmap.md`：线上 1v1 对局的架构、协议草案和推进阶段。
 - `assets/card-design/usa-modern-card-elements.md`：卡牌视觉元素说明。
+
+## 固定文件路径与查询规则
+
+后续遇到不确定内容时，优先自己查询固定文件，不要只依赖对话记忆：
+
+- 长期记忆总入口：`MEMORY.md`。
+- 项目飞书资源入口：`docs/lark-resources.md`。
+- 游戏核心机制真源：`GAME_MECHANICS.md`。
+- 当前卡牌内容快照：`GAME_CONTENT_V0.5.2.md`。
+- 本地基础回归测试清单：`TEST_CASES.md`。
+- 飞书完整测试用例标准：见 `docs/lark-resources.md` 中的“V0.5.2 上线前测试用例标准”链接。
+- 飞书 Bug 管理表：见 `docs/lark-resources.md` 中的“Bug 管理多维表格”链接。
+- 真实对局、缺陷根因、修复和验证记录：`PLAYTEST_DEBUG_LOG.md`。
+
+上下文压缩、换会话或记忆不确定时，先查 `MEMORY.md`；如果 `MEMORY.md` 指向了本地源文档或飞书文档，先阅读对应原文，再执行代码、测试或结论更新。
+
+若本地文档、飞书文档与代码表现冲突，处理顺序为：先查 `GAME_MECHANICS.md` 和飞书需求/测试标准，确认产品口径；再修正 `src/game-data.js`、`src/main.js`、`src/online-battle-engine.js` 等实现；最后同步更新测试用例、内容快照和 Bug 表。
 
 ## 关键源码
 
@@ -60,10 +79,11 @@
 
 当前关键数据源：
 
-- V0.5.1 / 20260523 的实际效果覆盖在 `src/game-data.js` 后半段。
+- V0.5.2 / 20260527 的实际效果覆盖在 `src/game-data.js` 后半段。
 - 当前可用卡池由 `V07_ACTIVE_CARD_IDS` 控制。
 - 当前起始牌组由 `STARTER_DECKS` 控制。
-- 当前攻击、生命、目标价值、卡面标签与部分技能裁决参数由 `DOCX_20260521_CARD_PATCHES` 覆盖；该覆盖层已继续吸收 V0.5.1 / 20260523 更新。
+- 当前攻击、生命、目标价值、卡面标签与部分技能裁决参数由 `DOCX_20260521_CARD_PATCHES`、`DOCX_20260523_CARD_PATCHES` 和 `V052_20260527_RULE_PATCHES` 等覆盖层共同形成最终运行数据。
+- V0.5.2 确认规则：`战地维修`、`战场维修` 修复己方一个受损单位的全部生命；无受损单位时触发抽 2 留 1 的替代补给。
 
 ## 前端体验规则
 

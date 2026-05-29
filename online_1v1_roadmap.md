@@ -22,13 +22,14 @@
 - 调试接口 `window.render_game_to_text`。
 - 新增的 WebSocket 房间基础层：`/ws`。
 - 新增的健康检查接口：`/healthz`。
+- 服务端权威战斗快照与 `battle_action` 裁决基础层。
+- 面向 Unity 客户端的可选断线恢复协议：`enable_resume` / `resume_room`。
 
 当前项目还不具备：
 
 - 真人 1v1 UI。
-- 服务端权威战斗引擎。
 - 双方玩家视角隔离。
-- 断线重连。
+- 浏览器端自动断线重连。
 - 线上部署配置。
 
 ## 为什么 GitHub Pages 不够
@@ -91,7 +92,8 @@ wss://你的域名/ws
 {
   "type": "room_created",
   "roomCode": "ABC123",
-  "side": "player"
+  "side": "player",
+  "resumeToken": "optional-unity-resume-token"
 }
 ```
 
@@ -113,9 +115,46 @@ wss://你的域名/ws
 {
   "type": "room_joined",
   "roomCode": "ABC123",
-  "side": "enemy"
+  "side": "enemy",
+  "resumeToken": "optional-unity-resume-token"
 }
 ```
+
+### enable_resume / resume_room
+
+Unity 客户端可选择开启断线恢复；浏览器旧流程不发送该消息，因此仍保持原行为。
+
+开启恢复：
+
+```json
+{
+  "type": "enable_resume",
+  "resumeToken": ""
+}
+```
+
+服务器返回：
+
+```json
+{
+  "type": "resume_ready",
+  "resumeToken": "token",
+  "graceMs": 180000
+}
+```
+
+WebSocket 非主动断开后，服务端会在 `graceMs` 内保留该席位、卡组、准备状态和权威战斗状态，并在 `room_state.players[].connected` 中标记离线。客户端恢复：
+
+```json
+{
+  "type": "resume_room",
+  "roomCode": "ABC123",
+  "resumeToken": "token",
+  "name": "Michael"
+}
+```
+
+恢复成功后服务器返回 `room_resumed`，随后发送最新 `room_state`；若对局已经开始，还会重新发送 `match_ready` / `match_start` 和 `battle_snapshot`。
 
 ### ready
 

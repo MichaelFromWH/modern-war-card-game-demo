@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
@@ -12,6 +13,7 @@ const rootDir = resolve(process.cwd(), process.env.ROOT_DIR || ".");
 const port = Number(process.env.PORT || 3000);
 const roomTtlMs = Number(process.env.ROOM_TTL_MS || 1000 * 60 * 60 * 6);
 const heartbeatMs = Number(process.env.WS_HEARTBEAT_MS || 30000);
+const roomResumeGraceMs = Number(process.env.ROOM_RESUME_GRACE_MS || 1000 * 60 * 3);
 
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
@@ -125,6 +127,10 @@ wss.on("connection", (ws) => {
     ready: false,
     loadout: null,
     alive: true,
+    connected: true,
+    canResume: false,
+    resumeToken: null,
+    resumeUntil: 0,
   };
 
   sockets.set(client.id, client);
@@ -142,13 +148,11 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    leaveRoom(client);
-    sockets.delete(client.id);
+    handleClientDisconnect(client);
   });
 
   ws.on("error", () => {
-    leaveRoom(client);
-    sockets.delete(client.id);
+    handleClientDisconnect(client);
   });
 });
 
@@ -187,6 +191,16 @@ function handleSocketMessage(client, raw) {
 
   if (message.type === "ping") {
     send(client, "pong", { now: Date.now() });
+    return;
+  }
+
+  if (message.type === "enable_resume") {
+    enableResume(client, message);
+    return;
+  }
+
+  if (message.type === "resume_room") {
+    resumeRoomForClient(client, message);
     return;
   }
 
@@ -249,7 +263,7 @@ function createRoomForClient(client, message) {
 
   rooms.set(room.code, room);
   attachClientToRoom(room, client, "player", message.name);
-  send(client, "room_created", { roomCode: room.code, side: client.side });
+  send(client, "room_created", { roomCode: room.code, side: client.side, resumeToken: client.resumeToken || null });
   broadcastRoomState(room);
 }
 
@@ -269,21 +283,30 @@ function joinRoomForClient(client, message) {
   leaveRoom(client);
   const side = room.clients.size === 0 ? "player" : "enemy";
   attachClientToRoom(room, client, side, message.name);
-  send(client, "room_joined", { roomCode: room.code, side: client.side });
+  send(client, "room_joined", { roomCode: room.code, side: client.side, resumeToken: client.resumeToken || null });
   broadcastRoomState(room);
 }
 
 function attachClientToRoom(room, client, side, name) {
+  if (client.canResume && !client.resumeToken) {
+    client.resumeToken = createResumeToken();
+  }
   client.roomCode = room.code;
   client.side = side;
   client.ready = false;
   client.loadout = null;
   client.name = sanitizeName(name);
+  client.connected = true;
+  client.resumeUntil = 0;
   room.clients.set(client.id, client);
   room.updatedAt = Date.now();
 }
 
 function leaveRoom(client) {
+  removeClientFromRoom(client, { resetBattle: true });
+}
+
+function removeClientFromRoom(client, { resetBattle = true } = {}) {
   if (!client.roomCode) {
     return;
   }
@@ -292,8 +315,10 @@ function leaveRoom(client) {
   if (room) {
     room.clients.delete(client.id);
     room.updatedAt = Date.now();
-    room.match = null;
-    room.battle = null;
+    if (resetBattle) {
+      room.match = null;
+      room.battle = null;
+    }
     broadcastRoomState(room);
     if (!room.clients.size) {
       rooms.delete(room.code);
@@ -304,6 +329,102 @@ function leaveRoom(client) {
   client.side = null;
   client.ready = false;
   client.loadout = null;
+  client.connected = true;
+  client.resumeUntil = 0;
+}
+
+function handleClientDisconnect(client) {
+  sockets.delete(client.id);
+  if (client.canResume && client.roomCode) {
+    reserveClientForResume(client);
+    return;
+  }
+
+  leaveRoom(client);
+}
+
+function enableResume(client, message) {
+  client.canResume = true;
+  const requestedToken = sanitizeResumeToken(message.resumeToken);
+  client.resumeToken = requestedToken || client.resumeToken || createResumeToken();
+  send(client, "resume_ready", {
+    resumeToken: client.resumeToken,
+    roomCode: client.roomCode,
+    side: client.side,
+    graceMs: roomResumeGraceMs,
+  });
+}
+
+function reserveClientForResume(client) {
+  const room = getClientRoom(client);
+  if (!room || !room.clients.has(client.id)) {
+    leaveRoom(client);
+    return;
+  }
+
+  client.connected = false;
+  client.alive = false;
+  client.ws = null;
+  client.resumeUntil = Date.now() + roomResumeGraceMs;
+  room.updatedAt = Date.now();
+  broadcastRoomState(room);
+}
+
+function resumeRoomForClient(client, message) {
+  const code = normalizeRoomCode(message.roomCode);
+  const token = sanitizeResumeToken(message.resumeToken);
+  const room = rooms.get(code);
+  if (!room || !token) {
+    sendError(client, "resume_not_found", "Room resume data was not found.");
+    return;
+  }
+
+  const reserved = [...room.clients.values()].find((item) => item.resumeToken === token && item.canResume);
+  if (!reserved) {
+    sendError(client, "resume_not_found", "Room resume data was not found.");
+    return;
+  }
+
+  if (reserved.connected !== false) {
+    sendError(client, "resume_slot_active", "That room seat is still connected.");
+    return;
+  }
+
+  const transientId = client.id;
+  leaveRoom(client);
+  sockets.delete(transientId);
+  room.clients.delete(reserved.id);
+
+  client.id = reserved.id;
+  client.roomCode = room.code;
+  client.side = reserved.side;
+  client.name = sanitizeName(message.name || reserved.name);
+  client.ready = reserved.ready;
+  client.loadout = reserved.loadout;
+  client.connected = true;
+  client.canResume = true;
+  client.resumeToken = reserved.resumeToken;
+  client.resumeUntil = 0;
+  client.alive = true;
+
+  room.clients.set(client.id, client);
+  room.updatedAt = Date.now();
+  sockets.set(client.id, client);
+
+  send(client, "room_resumed", { clientId: client.id, roomCode: room.code, side: client.side, resumeToken: client.resumeToken });
+  broadcastRoomState(room);
+  if (room.match) {
+    const payload = {
+      roomCode: room.code,
+      match: room.match,
+      sides: getRoomPlayers(room),
+    };
+    send(client, "match_ready", payload);
+    send(client, "match_start", payload);
+  }
+  if (room.battle) {
+    sendBattleSnapshotToClient(client);
+  }
 }
 
 function setReady(client, ready, loadout) {
@@ -322,7 +443,7 @@ function setReady(client, ready, loadout) {
   room.updatedAt = Date.now();
   broadcastRoomState(room);
 
-  if (room.clients.size === 2 && [...room.clients.values()].every((item) => item.ready)) {
+  if (room.clients.size === 2 && [...room.clients.values()].every((item) => item.connected !== false && item.ready)) {
     room.match ||= createRoomMatch(room);
     room.battle ||= createAuthoritativeBattle({
       roomCode: room.code,
@@ -447,6 +568,7 @@ function getRoomPlayers(room) {
     side: client.side,
     name: client.name,
     ready: client.ready,
+    connected: client.connected !== false,
     loadout: summarizeLoadout(client.loadout),
   }));
 }
@@ -461,7 +583,7 @@ function broadcast(room, type, payload = {}, exceptClientId = null) {
 }
 
 function send(client, type, payload = {}) {
-  if (client.ws.readyState !== WebSocket.OPEN) {
+  if (!client.ws || client.ws.readyState !== WebSocket.OPEN) {
     return;
   }
   client.ws.send(JSON.stringify({ type, ...payload }));
@@ -474,6 +596,7 @@ function sendError(client, code, message) {
 function pruneRooms() {
   const now = Date.now();
   for (const [code, room] of rooms.entries()) {
+    expireDisconnectedClients(room, now);
     if (!room.clients.size || now - room.updatedAt > roomTtlMs) {
       for (const client of room.clients.values()) {
         send(client, "room_closed", { roomCode: code });
@@ -484,6 +607,29 @@ function pruneRooms() {
       }
       rooms.delete(code);
     }
+  }
+}
+
+function expireDisconnectedClients(room, now) {
+  let removed = false;
+  for (const client of [...room.clients.values()]) {
+    if (client.connected !== false || !client.resumeUntil || client.resumeUntil > now) {
+      continue;
+    }
+
+    room.clients.delete(client.id);
+    client.roomCode = null;
+    client.side = null;
+    client.ready = false;
+    client.loadout = null;
+    removed = true;
+  }
+
+  if (removed) {
+    room.match = null;
+    room.battle = null;
+    room.updatedAt = now;
+    broadcastRoomState(room);
   }
 }
 
@@ -499,6 +645,10 @@ function createRoomCode() {
   return code;
 }
 
+function createResumeToken() {
+  return randomBytes(18).toString("base64url");
+}
+
 function normalizeRoomCode(value) {
   return String(value || "").trim().toUpperCase();
 }
@@ -506,6 +656,10 @@ function normalizeRoomCode(value) {
 function sanitizeName(value) {
   const name = String(value || "").replace(/\s+/g, " ").trim().slice(0, 32);
   return name || "Player";
+}
+
+function sanitizeResumeToken(value) {
+  return String(value || "").trim().replace(/[^A-Za-z0-9_-]/g, "").slice(0, 96);
 }
 
 function sanitizeLoadout(loadout) {

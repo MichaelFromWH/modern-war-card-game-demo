@@ -43,6 +43,8 @@ AGENTS.md                   AI 协作者项目规约
 - [卡牌设计方法](./card_design_method.md)：新增卡牌、平衡调整和技能文本的核心方法。
 - [线上 1v1 路线](./online_1v1_roadmap.md)：部署为可邀请朋友对局所需的架构和阶段计划。
 - [测试用例](./TEST_CASES.md)：首页、战斗界面、二级页面、核心玩法和线上 1v1 的回归检查清单。
+- [飞书资源索引](./docs/lark-resources.md)：项目飞书文件夹、测试标准、测试报告和 Bug 多维表格的固定入口。
+- [V0.5.2 内容快照](./GAME_CONTENT_V0.5.2.md)：当前版本机制与卡牌内容快照。
 - [美军现代单位牌设计元素](./assets/card-design/usa-modern-card-elements.md)：卡牌插画层和 UI 层的视觉设计说明。
 - [AI 协作者规约](./AGENTS.md)：给 Jarvis/Codex 等 Agent 的项目协作规则。
 

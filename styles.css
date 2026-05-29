@@ -14196,10 +14196,11 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
 .app-shell[data-screen="briefing"] .home-final .primary-button[data-action="start"] {
   border: 0 !important;
   border-radius: 7px !important;
-  color: #fff2d2 !important;
+  color: transparent !important;
   background: url("./assets/ui/optimized/duel-button.webp") center / 100% 100% no-repeat !important;
   box-shadow: none !important;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95), 0 0 12px rgba(255, 194, 91, 0.2) !important;
+  font-size: 0 !important;
+  text-shadow: none !important;
 }
 
 .app-shell[data-screen="briefing"] .briefing .difficulty-button {
