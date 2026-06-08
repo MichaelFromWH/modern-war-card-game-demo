@@ -10,6 +10,7 @@
 | 项目资源索引文档 | https://my.feishu.cn/docx/BdlhdTj5fo2FgCxaWZrc3neDnMe |
 | V0.5.2 上线前测试用例标准 | https://my.feishu.cn/docx/QNordqKeQoN0KuxDDWPcmPFrnsf |
 | V0.5.2 第一次上线前全面测试报告 | https://my.feishu.cn/docx/KNMAd6Xqeoy1Hyxd5iyc0YwCn7f |
+| V0.5.2 2026-06-03 上线前正式测试报告 | https://my.feishu.cn/docx/OfMmdgTggodUomxL4UrcIkKEnof |
 | BUG-0001 维修满血修复回归报告 | https://my.feishu.cn/docx/IVEcdN4IRoBRJCx4jqXc9iEzn6d |
 | Bug 管理多维表格 | https://my.feishu.cn/base/LjzrbtwEsaUS6Vsw0umcD2vRnUg |
 

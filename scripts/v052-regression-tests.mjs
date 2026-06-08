@@ -216,7 +216,45 @@ testCase("TC-DATA-001", "P0", "V0.5.2 关键卡牌数据口径一致", () => {
   ["us_smoke_screen", "us_battlefield_repair", "us_reposition", "ru_smoke_decoys", "ru_battlefield_repair", "ru_reposition"].forEach((id) => {
     assert(!getCard(id).effect.includes("战力"), `${id} must use life-repair wording`);
   });
+  ["us_marine_rifle", "us_m1a2", "ru_motostrelki", "ru_t90m"].forEach((id) => {
+    assert(getCard(id).ability.ownTagBonus?.exposedOnly === true, `${id} own-line bonus must require an exposed unit`);
+  });
+  ["us_reaper", "ru_orlan10"].forEach((id) => {
+    const ability = getCard(id).ability;
+    assert(ability.callFireRequiresFreshExpose === false, `${id} should call fire against an already exposed valid target`);
+    assert(ability.callerTags.includes("榴弹炮") && ability.callerTags.includes("火箭炮"), `${id} should offer howitzer and rocket artillery call-fire units`);
+  });
   return "关键数据字段符合 V0.5.2。";
+});
+
+testCase("TC-DATA-002", "P0", "火箭炮目标路由：可选支援位且溅射不跨线", () => {
+  ["us_himars", "ru_tornado_s"].forEach((id) => {
+    const card = getCard(id);
+    assert(card.ability.allowSupport === true, `${id} must be able to choose support targets directly`);
+    assert(card.ability.sameLineOnly === true, `${id} splash must stay on the chosen line`);
+    assert(card.ability.maxTargets === 2, `${id} rocket splash must be capped at two targets`);
+    assert(card.fire.allowSupport === true, `${id} callable fire must be able to choose support targets directly`);
+    assert(card.fire.sameLineOnly === true, `${id} callable splash must stay on the chosen line`);
+    assert(card.fire.maxTargets === 2, `${id} callable rocket splash must be capped at two targets`);
+  });
+  return "火箭炮支援位目标与同线溅射配置正常。";
+});
+
+testCase("TC-DATA-003", "P0", "前线协同伤害只计算暴露单位", () => {
+  const hiddenAssist = createBattle("hidden-assist");
+  const marineHidden = addBoard(hiddenAssist, "player", "frontline", "us_marine_rifle");
+  addBoard(hiddenAssist, "player", "frontline", "us_bradley", { hidden: true, exposed: false });
+  const infantryHidden = addBoard(hiddenAssist, "enemy", "frontline", "ru_motostrelki");
+  assertAction(activateAndChoose(hiddenAssist, "player", marineHidden, infantryHidden), "marine with hidden armor assist");
+  assert(infantryHidden.instance.damage === 3, "hidden armor should not provide the exposed-assist bonus");
+
+  const exposedAssist = createBattle("exposed-assist");
+  const marineExposed = addBoard(exposedAssist, "player", "frontline", "us_marine_rifle");
+  addBoard(exposedAssist, "player", "frontline", "us_bradley", { exposed: true });
+  const infantryExposed = addBoard(exposedAssist, "enemy", "frontline", "ru_motostrelki");
+  assertAction(activateAndChoose(exposedAssist, "player", marineExposed, infantryExposed), "marine with exposed armor assist");
+  assert(infantryExposed.instance.damage === 4, "exposed armor should provide the assist bonus");
+  return "暴露协同伤害结算正常。";
 });
 
 testCase("TC-V052-015/016", "P0", "前线隐蔽部署口径：敌前线为空可隐蔽，敌前线有单位必须正面", () => {
@@ -234,6 +272,23 @@ testCase("TC-V052-015/016", "P0", "前线隐蔽部署口径：敌前线为空可
   assert(contestedRef.hidden === false && contestedRef.exposed === true, "Apache must be face-up/exposed when enemy frontline is occupied");
   assert(!hasLog(contested, /低空前线支援|保持隐蔽/), "old helicopter exception log must not appear");
   return "直升机旧例外已取消。";
+});
+
+testCase("TC-V052-015A", "P0", "Infiltration units can deploy hidden into a contested frontline", () => {
+  const infiltrate = createBattle("infiltrate-hidden");
+  addBoard(infiltrate, "enemy", "frontline", "ru_motostrelki", { exposed: true });
+  const ranger = addHand(infiltrate, "player", "us_rangers_target");
+  assertAction(applyBattleAction(infiltrate, "player", { kind: "play_unit", handUid: ranger.uid, lineId: "frontline", hidden: true }), "ranger hidden deployment into contested frontline");
+  const rangerRef = findBoard(infiltrate, "player", ranger.uid);
+  assert(rangerRef?.instance.hidden === true && rangerRef.instance.exposed === false, "infiltration unit should stay hidden despite enemy frontline contact");
+
+  const normal = createBattle("normal-contested");
+  addBoard(normal, "enemy", "frontline", "ru_motostrelki", { exposed: true });
+  const marine = addHand(normal, "player", "us_marine_rifle");
+  assertAction(applyBattleAction(normal, "player", { kind: "play_unit", handUid: marine.uid, lineId: "frontline", hidden: true }), "normal infantry deployment into contested frontline");
+  const marineRef = findBoard(normal, "player", marine.uid);
+  assert(marineRef?.instance.hidden === false && marineRef.instance.exposed === true, "normal frontline unit should still be forced face-up");
+  return "infiltration concealment exception is limited to contactException units.";
 });
 
 testCase("TC-V052-005/006", "P0", "前线 7 张与支援 6 张容量上限", () => {
@@ -384,7 +439,7 @@ testCase("TC-V052-034/035/036", "P1", "维修、烟幕、阵地转移修复生�
   return "维修类效果按生命修复。";
 });
 
-testCase("TC-V052-037", "P0", "电子压制持续到目标下一回合并限制主动技能", () => {
+testCase("TC-V052-037", "P0", "电子压制持续到目标下一回合并禁止行动型被动", () => {
   const battle = createBattle("suppression");
   const target = addBoard(battle, "enemy", "support", "ru_tornado_s");
   const suppress = addHand(battle, "player", "us_electronic_suppression");
@@ -393,7 +448,24 @@ testCase("TC-V052-037", "P0", "电子压制持续到目标下一回合并限制�
   assert(target.instance.suppressed === true, "target should be suppressed");
   assertAction(applyBattleAction(battle, "player", { kind: "pass_turn" }), "pass to enemy");
   assertBlocked(applyBattleAction(battle, "enemy", { kind: "activate_unit", sourceUid: target.uid }), "suppressed target activation");
-  return "电子压制阻止目标主动行动。";
+
+  const intercept = createBattle("suppressed-intercept");
+  const buk = addBoard(intercept, "enemy", "support", "ru_buk_m3", { suppressed: true });
+  const missile = addBoard(intercept, "player", "support", "us_atacms");
+  const missileTarget = addBoard(intercept, "enemy", "frontline", "ru_motostrelki");
+  assertAction(activateAndChoose(intercept, "player", missile, missileTarget), "suppressed Buk should not intercept");
+  assert(missileTarget.instance.damage > 0, "suppressed air defense should not cancel missile damage");
+  assert(buk.instance.interceptAction !== intercept.actionSerial, "suppressed air defense must not spend intercept action");
+
+  const recon = createBattle("suppressed-call-fire");
+  const scout = addBoard(recon, "player", "frontline", "us_rangers_target");
+  const artillery = addBoard(recon, "player", "support", "us_m109", { suppressed: true });
+  addDeck(recon, "player", ["us_m1a2"]);
+  const hiddenTarget = addBoard(recon, "enemy", "frontline", "ru_motostrelki", { hidden: true, exposed: false });
+  assertAction(activateAndChoose(recon, "player", scout, hiddenTarget), "suppressed artillery should not be called");
+  assert(recon.hands.player.length === 1, "suppressed callable unit should trigger recon draw fallback");
+  assert(artillery.instance.actedAction !== recon.actionSerial, "suppressed artillery must not act through call fire");
+  return "电子压制阻止主动行动、拦截和侦察校射。";
 });
 
 testCase("TC-V052-038/039/040", "P0", "侦察暴露并调用未行动远火；无可调用远火时抽牌", () => {
@@ -404,6 +476,21 @@ testCase("TC-V052-038/039/040", "P0", "侦察暴露并调用未行动远火；�
   assertAction(activateAndChoose(call, "player", scout, hiddenTarget), "recon with callable artillery");
   assert(hiddenTarget.instance.hidden === false, "recon should expose hidden target");
   assert(hiddenTarget.instance.damage > 0, "callable artillery should damage target");
+
+  const choice = createBattle("uav-call-choice");
+  const reaper = addBoard(choice, "player", "support", "us_reaper");
+  const howitzer = addBoard(choice, "player", "support", "us_m109");
+  const rocket = addBoard(choice, "player", "support", "us_himars");
+  const exposedTarget = addBoard(choice, "enemy", "frontline", "ru_t90m");
+  assertAction(applyBattleAction(choice, "player", { kind: "activate_unit", sourceUid: reaper.uid }), "Reaper should open call-fire choice");
+  assert(choice.pending?.kind === "callFireChoice", "multiple callable fire units should open a call-fire choice");
+  assert(choice.pending.targets.length === 2, "howitzer and rocket artillery should both be offered");
+  const rocketChoiceIndex = choice.pending.targets.findIndex((target) => target.uid === rocket.uid);
+  assert(rocketChoiceIndex >= 0, "HIMARS should be available as the selected call-fire unit");
+  assertAction(choosePendingTarget(choice, "player", rocketChoiceIndex), "choose HIMARS for Reaper call-fire");
+  assert(exposedTarget.instance.damage === 3, "Reaper-selected HIMARS should apply primary rocket damage to the marked target");
+  assert(rocket.instance.actedAction === choice.actionSerial, "chosen rocket artillery should spend its action");
+  assert(howitzer.instance.actedAction !== choice.actionSerial, "unchosen howitzer should remain unused");
 
   const fallback = createBattle("recon-fallback");
   const fallbackScout = addBoard(fallback, "player", "frontline", "us_rangers_target");
@@ -436,14 +523,18 @@ testCase("TC-V052-041/042", "P0", "榴弹炮/火箭炮可打地面和低空，�
 
   const rocket = createBattle("rocket");
   const himars = addBoard(rocket, "player", "support", "us_himars");
-  addBoard(rocket, "enemy", "frontline", "ru_t90m");
-  addBoard(rocket, "enemy", "frontline", "ru_bmpt");
-  addBoard(rocket, "enemy", "frontline", "ru_bmp3m");
+  const screenedFront = addBoard(rocket, "enemy", "frontline", "ru_t90m");
+  const supportPrimary = addBoard(rocket, "enemy", "support", "ru_tornado_s");
+  const supportSecondary = addBoard(rocket, "enemy", "support", "ru_2s19");
+  const supportThird = addBoard(rocket, "enemy", "support", "ru_2s19");
   assertAction(applyBattleAction(rocket, "player", { kind: "activate_unit", sourceUid: himars.uid }), "HIMARS activation");
-  assert(rocket.pending?.targets?.length === 3, "HIMARS should present legal targets before choosing primary");
-  assertAction(choosePendingTarget(rocket, "player", 0), "choose HIMARS primary");
-  const damaged = rocket.board.enemy.frontline.filter((instance) => instance.damage > 0);
-  assert(damaged.length === 2, "HIMARS should damage at most two targets");
+  assert(rocket.pending?.targets?.some((target) => target.uid === supportPrimary.uid), "HIMARS should present support targets even while frontline is occupied");
+  assertAction(choosePendingTarget(rocket, "player", rocket.pending.targets.findIndex((target) => target.uid === supportPrimary.uid)), "choose HIMARS support primary");
+  assert(supportPrimary.instance.damage === 3, "HIMARS should apply primary damage to the chosen support target");
+  assert(screenedFront.instance.damage === 0, "HIMARS same-line splash must not hit frontline when support is chosen");
+  const damagedSupport = [supportPrimary, supportSecondary, supportThird].filter((target) => target.instance.damage > 0);
+  assert(damagedSupport.length === 2, "HIMARS should damage at most two support-line targets");
+  assert([supportSecondary.instance.damage, supportThird.instance.damage].includes(1), "HIMARS should apply secondary damage to only one same-line support target");
   return "远火目标范围和多目标数量正常。";
 });
 
@@ -513,6 +604,38 @@ testCase("TC-V052-046/047/048/049", "P0", "防空主动打击与拦截口径", (
   const fighterTarget = addBoard(fighterIntercept, "enemy", "frontline", "ru_motostrelki");
   assertAction(activateAndChoose(fighterIntercept, "player", fighter, fighterTarget), "fighter intercepted by heavy air defense");
   assert(fighterTarget.instance.damage === 0 && buk.instance.interceptAction === fighterIntercept.actionSerial, "heavy air defense should cancel fighter damage");
+
+  const multipleInterceptors = createBattle("multi-interceptor");
+  const pantsir = addBoard(multipleInterceptors, "enemy", "support", "ru_pantsir");
+  const bukChoice = addBoard(multipleInterceptors, "enemy", "support", "ru_buk_m3");
+  const choiceMissile = addBoard(multipleInterceptors, "player", "support", "us_tomahawk");
+  const choiceTarget = addBoard(multipleInterceptors, "enemy", "frontline", "ru_motostrelki");
+  assertAction(activateAndChoose(multipleInterceptors, "player", choiceMissile, choiceTarget), "Tomahawk target selection before interception");
+  assert(multipleInterceptors.pending?.kind === "interceptChoice", "multiple legal interceptors should open intercept choice");
+  assert(multipleInterceptors.pending.side === "enemy", "intercept choice should be assigned to defender");
+  assert(multipleInterceptors.pending.targets.length === 2, "both Pantsir and Buk should be offered");
+  const bukIndex = multipleInterceptors.pending.targets.findIndex((item) => item.uid === bukChoice.uid);
+  assert(bukIndex >= 0, "Buk should be available as interceptor");
+  assertAction(choosePendingTarget(multipleInterceptors, "enemy", bukIndex), "choose Buk interceptor");
+  assert(choiceTarget.instance.damage === 0, "chosen interceptor should cancel missile damage");
+  assert(bukChoice.instance.interceptAction === multipleInterceptors.actionSerial, "chosen interceptor should spend intercept action");
+  assert(pantsir.instance.interceptAction !== multipleInterceptors.actionSerial, "unchosen interceptor should remain unused");
+
+  const priorAction = createBattle("prior-action-intercept");
+  const priorBuk = addBoard(priorAction, "enemy", "support", "ru_buk_m3", { actedAction: 1 });
+  priorAction.actionSerial = 2;
+  const priorMissile = addBoard(priorAction, "player", "support", "us_atacms");
+  const priorTarget = addBoard(priorAction, "enemy", "frontline", "ru_motostrelki");
+  assertAction(activateAndChoose(priorAction, "player", priorMissile, priorTarget), "Buk acted in previous action sequence can intercept");
+  assert(priorTarget.instance.damage === 0 && priorBuk.instance.interceptAction === priorAction.actionSerial, "previous sequence action should not block new sequence intercept");
+
+  const sameAction = createBattle("same-action-no-intercept");
+  const actedBuk = addBoard(sameAction, "enemy", "support", "ru_buk_m3", { actedAction: sameAction.actionSerial });
+  const sameMissile = addBoard(sameAction, "player", "support", "us_atacms");
+  const sameTarget = addBoard(sameAction, "enemy", "frontline", "ru_motostrelki");
+  assertAction(activateAndChoose(sameAction, "player", sameMissile, sameTarget), "Buk acted in same action sequence should not intercept");
+  assert(sameTarget.instance.damage > 0, "same sequence action should block passive intercept");
+  assert(actedBuk.instance.interceptAction !== sameAction.actionSerial, "same sequence acted Buk must not intercept");
 
   const bomberNoIntercept = createBattle("bomber-no-intercept");
   const heavy = addBoard(bomberNoIntercept, "enemy", "support", "ru_buk_m3");

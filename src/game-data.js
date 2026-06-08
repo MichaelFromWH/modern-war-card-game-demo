@@ -241,18 +241,6 @@ export const CARD_LIBRARY = {
       ],
       "damagedAmount": 4,
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": [
-          "步兵"
-        ],
-        "sourceTags": [
-          "榴弹炮",
-          "火箭炮"
-        ]
-      }
     }
   },
   "us_m1a2": {
@@ -287,18 +275,6 @@ export const CARD_LIBRARY = {
       ],
       "damagedAmount": 5,
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetCards": [
-          "us_m1a2"
-        ],
-        "requiresOwnTag": {
-          "line": "frontline",
-          "tag": "步兵"
-        }
-      }
     }
   },
   "us_m88": {
@@ -789,17 +765,6 @@ export const CARD_LIBRARY = {
       "amount": 3,
       "sourceExposes": true
     },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": [
-          "步兵"
-        ],
-        "sourceTags": [
-          "直升机"
-        ]
-      }
-    },
     "art": "us_lav25"
   },
   "us_smoke_screen": {
@@ -1075,22 +1040,6 @@ export const CARD_LIBRARY = {
         "步兵"
       ],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetLines": [
-          "frontline"
-        ],
-        "targetTags": [
-          "步兵",
-          "装甲"
-        ],
-        "sourceTags": [
-          "榴弹炮",
-          "火箭炮"
-        ]
-      }
     }
   },
   "ru_vdv": {
@@ -1151,18 +1100,6 @@ export const CARD_LIBRARY = {
       ],
       "damagedAmount": 4,
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": [
-          "步兵"
-        ],
-        "sourceTags": [
-          "榴弹炮",
-          "火箭炮"
-        ]
-      }
     }
   },
   "ru_btr82": {
@@ -1189,18 +1126,6 @@ export const CARD_LIBRARY = {
         "步兵"
       ],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": [
-          "步兵"
-        ],
-        "sourceTags": [
-          "榴弹炮",
-          "火箭炮"
-        ]
-      }
     }
   },
   "ru_t90m": {
@@ -1262,17 +1187,6 @@ export const CARD_LIBRARY = {
       ],
       "damagedAmount": 5,
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": [
-          "装甲"
-        ],
-        "sourceTags": [
-          "步兵"
-        ]
-      }
     }
   },
   "ru_ka52_unit": {
@@ -2010,14 +1924,6 @@ const V43_CARD_OVERRIDES = {
       "amount": 1,
       "requiresAnyTag": ["步兵", "装甲"],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetLines": ["frontline"],
-        "targetTags": ["步兵", "装甲"],
-        "sourceTags": ["榴弹炮", "火箭炮"]
-      }
     }
   },
   "us_bradley": {
@@ -2039,13 +1945,6 @@ const V43_CARD_OVERRIDES = {
       "requiresAnyTag": ["步兵", "装甲"],
       "bonuses": [{ "tag": "步兵", "amount": 4 }],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["步兵"],
-        "sourceTags": ["榴弹炮", "火箭炮"]
-      }
     }
   },
   "us_m1a2": {
@@ -2088,13 +1987,6 @@ const V43_CARD_OVERRIDES = {
       "requiresAnyTag": ["步兵"],
       "amount": 3,
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["步兵"],
-        "sourceTags": ["直升机"]
-      }
     }
   },
   "us_apache": {
@@ -2543,13 +2435,6 @@ const V43_CARD_OVERRIDES = {
       "requiresAnyTag": ["步兵", "装甲"],
       "bonuses": [{ "tag": "步兵", "amount": 4 }],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["步兵"],
-        "sourceTags": ["榴弹炮", "火箭炮"]
-      }
     }
   },
   "ru_t90m": {
@@ -2591,13 +2476,6 @@ const V43_CARD_OVERRIDES = {
       "amount": 4,
       "requiresAnyTag": ["步兵"],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["装甲"],
-        "sourceTags": ["步兵"]
-      }
     }
   },
   "ru_btr82": {
@@ -2618,13 +2496,6 @@ const V43_CARD_OVERRIDES = {
       "amount": 3,
       "requiresAnyTag": ["步兵"],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["步兵", "装甲"],
-        "sourceTags": ["榴弹炮", "火箭炮"]
-      }
     }
   },
   "ru_ka52_unit": {
@@ -3030,15 +2901,6 @@ const V07_CARD_OVERRIDES = {
       "amount": 4,
       "requiresAnyTag": LOW_AIR_TAGS,
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetLines": ["frontline"],
-        "sourceTags": ["直升机"],
-        "canReveal": true,
-        "sourceExposes": true
-      }
     }
   },
   "us_rangers_target": {
@@ -3068,13 +2930,6 @@ const V07_CARD_OVERRIDES = {
         { "tag": "无人机", "amount": 2 }
       ],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["步兵"],
-        "sourceTags": ["榴弹炮", "火箭炮"]
-      }
     }
   },
   "us_m1a2": {
@@ -3106,13 +2961,6 @@ const V07_CARD_OVERRIDES = {
         { "tag": "无人机", "amount": 1 }
       ],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["步兵"],
-        "sourceTags": ["直升机"]
-      }
     }
   },
   "us_apache": {
@@ -3418,13 +3266,6 @@ const V07_CARD_OVERRIDES = {
         { "tag": "无人机", "amount": 2 }
       ],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["步兵"],
-        "sourceTags": ["榴弹炮", "火箭炮"]
-      }
     }
   },
   "ru_t90m": {
@@ -3456,13 +3297,6 @@ const V07_CARD_OVERRIDES = {
         { "tag": "无人机", "amount": 2 }
       ],
       "sourceExposes": true
-    },
-    "continuous": {
-      "reduceDamage": {
-        "amount": 1,
-        "targetTags": ["装甲"],
-        "sourceTags": ["步兵"]
-      }
     }
   },
   "ru_ka52_unit": {
@@ -3501,7 +3335,7 @@ const V07_CARD_OVERRIDES = {
   },
   "ru_tornado_s": {
     "power": 4,
-    "effect": "【火力覆盖】：选择最多三个地面目标造成伤害，主目标 3 点，其余目标各 1 点。",
+    "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。",
     "ability": {
       "kind": "areaDamage",
       "rows": ["frontline", "support"],
@@ -3828,7 +3662,7 @@ const LATEST_XLSX_CARD_TEXT = {
   "ru_orlan10": {"name": "Orlan-10 侦查无人机", "ruleNote": "【无人机】：无法攻击。", "effect": "【无人侦扫】：选择一个隐蔽目标，使其暴露。\n【炮兵校射】：若目标为地面单位，且己方有本回合未行动的【榴弹炮】，可立即对该目标进行一次打击，本次伤害 +1；若没有可用火力单位，抽 1 张牌。", "unitAttribute": "无人机"},
   "ru_pantsir": {"name": "Pantsir-S1 伴随防空", "ruleNote": "【伴随防空】：可以攻击所有战线低空和高空单位。", "effect": "【野战防空】：若目标为低空单位，伤害+1。\n【伴随拦截】：敌方【巡航导弹】和【SEAD战斗机】打击造成的伤害无效，一回合一次。", "unitAttribute": "伴随防空"},
   "ru_buk_m3": {"name": "Buk-M3 防空导弹", "ruleNote": "【重型防空】：可以攻击所有战线高空单位。", "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。", "unitAttribute": "重型防空"},
-  "ru_tornado_s": {"name": "Tornado-S 火箭炮", "ruleNote": "【火箭炮】：可以攻击所有战线地面单位。", "effect": "【火力覆盖】：选择最多三个地面目标造成伤害，主目标 3 点，其余目标各 1 点。", "unitAttribute": "火箭炮"},
+  "ru_tornado_s": {"name": "Tornado-S 火箭炮", "ruleNote": "【火箭炮】：可以攻击地面和低空单位。", "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。", "unitAttribute": "火箭炮"},
   "ru_2s19": {"name": "姆斯塔榴弹炮", "ruleNote": "【榴弹炮】：可以攻击所有战线地面单位。", "effect": "【远程炮击】：若目标为【步兵】，伤害+1。", "unitAttribute": "榴弹炮"},
   "ru_kalibr": {"name": "口径巡航导弹", "ruleNote": "【导弹】：可以攻击所有战线地面和低空单位。", "effect": "【巡航打击】：若目标在前线，伤害+1。", "unitAttribute": "导弹"},
   "ru_iskander": {"name": "伊斯坎德尔弹道导弹", "ruleNote": "【导弹】：可以攻击所有战线地面和低空单位。", "effect": "【弹道导弹】：若目标在支援区，伤害+1。", "unitAttribute": "导弹"},
@@ -5157,7 +4991,7 @@ const DOCX_20260523_DISPLAY_TEXT_PATCHES = {
     "displayTags": ["火箭炮"],
     "unitAttribute": "火箭炮",
     "ruleNote": "火箭炮：可以攻击地面和低空单位。",
-    "effect": "选择最多三个地面目标造成伤害，主目标 3 点，其余目标各 1 点。"
+    "effect": "选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。"
   },
   "ru_2s19": {
     "name": "姆斯塔榴弹炮",
@@ -5351,6 +5185,34 @@ const V052_20260527_RULE_PATCHES = {
   "ru_reposition": {
     "effect": "指定己方一个已暴露单位，使其重新进入隐蔽，若目标在支援区，修复 1 点生命。"
   },
+  "us_marine_rifle": {
+    "effect": "若目标为步兵，伤害+1。若己方前线有暴露的装甲，伤害+1。",
+    "ability": {
+      ...CARD_LIBRARY.us_marine_rifle.ability,
+      "ownTagBonus": { ...CARD_LIBRARY.us_marine_rifle.ability.ownTagBonus, "exposedOnly": true }
+    }
+  },
+  "us_m1a2": {
+    "effect": "若目标为装甲，伤害+1。若己方前线有暴露的步兵，伤害+1。",
+    "ability": {
+      ...CARD_LIBRARY.us_m1a2.ability,
+      "ownTagBonus": { ...CARD_LIBRARY.us_m1a2.ability.ownTagBonus, "exposedOnly": true }
+    }
+  },
+  "ru_motostrelki": {
+    "effect": "若目标为步兵，伤害+1。若己方前线有暴露的装甲，伤害+1。",
+    "ability": {
+      ...CARD_LIBRARY.ru_motostrelki.ability,
+      "ownTagBonus": { ...CARD_LIBRARY.ru_motostrelki.ability.ownTagBonus, "exposedOnly": true }
+    }
+  },
+  "ru_t90m": {
+    "effect": "若目标为装甲，伤害+1。若己方前线有暴露的步兵，伤害+1。",
+    "ability": {
+      ...CARD_LIBRARY.ru_t90m.ability,
+      "ownTagBonus": { ...CARD_LIBRARY.ru_t90m.ability.ownTagBonus, "exposedOnly": true }
+    }
+  },
   "us_rangers_target": {
     "ability": {
       ...CARD_LIBRARY.us_rangers_target.ability,
@@ -5359,10 +5221,12 @@ const V052_20260527_RULE_PATCHES = {
     }
   },
   "us_reaper": {
+    "effect": "侦察一个目标，若为地面或低空单位，使友方本回合未行动的一个火箭炮、榴弹炮立即攻击一次，否则抽 1 张牌。",
     "ability": {
       ...CARD_LIBRARY.us_reaper.ability,
       "hiddenOnly": false,
-      "allowExposedTargets": true
+      "allowExposedTargets": true,
+      "callFireRequiresFreshExpose": false
     }
   },
   "ru_spetsnaz_target": {
@@ -5373,10 +5237,43 @@ const V052_20260527_RULE_PATCHES = {
     }
   },
   "ru_orlan10": {
+    "effect": "侦察一个目标，若为地面或低空单位，使友方本回合未行动的一个火箭炮、榴弹炮立即攻击一次，否则抽 1 张牌。",
     "ability": {
       ...CARD_LIBRARY.ru_orlan10.ability,
       "hiddenOnly": false,
-      "allowExposedTargets": true
+      "allowExposedTargets": true,
+      "callerTags": ["榴弹炮", "火箭炮"],
+      "callFireRequiresFreshExpose": false
+    }
+  },
+  "us_himars": {
+    "effect": "选择一个地面或低空目标造成 3 点伤害，并对同一战线至多 1 个次要目标造成 1 点伤害；若目标为步兵，伤害+1。",
+    "ability": {
+      ...CARD_LIBRARY.us_himars.ability,
+      "allowSupport": true,
+      "sameLineOnly": true,
+      "maxTargets": 2
+    },
+    "fire": {
+      ...CARD_LIBRARY.us_himars.fire,
+      "allowSupport": true,
+      "sameLineOnly": true,
+      "maxTargets": 2
+    }
+  },
+  "ru_tornado_s": {
+    "effect": "选择一个地面或低空目标造成 3 点伤害，并对同一战线至多 1 个次要目标造成 1 点伤害。",
+    "ability": {
+      ...CARD_LIBRARY.ru_tornado_s.ability,
+      "allowSupport": true,
+      "sameLineOnly": true,
+      "maxTargets": 2
+    },
+    "fire": {
+      ...CARD_LIBRARY.ru_tornado_s.fire,
+      "allowSupport": true,
+      "sameLineOnly": true,
+      "maxTargets": 2
     }
   }
 };

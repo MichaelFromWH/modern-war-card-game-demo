@@ -114,7 +114,7 @@ const DEPLOY_CARD_FLIGHT_MS = 940;
 const DEPLOY_EFFECT_DELAY_MS = 1700;
 const DEPLOY_VIDEO_START_DELAY_MS = DEPLOY_CARD_FLIGHT_MS + 120;
 const COMBAT_RESOLUTION_HOLD_MS = 820;
-const TACTIC_PRESENTATION_MS = 1480;
+const TACTIC_PRESENTATION_MS = 2000;
 const MULLIGAN_LIMIT = 2;
 const LINE_CAPACITY = {
   frontline: 7,
@@ -123,6 +123,7 @@ const LINE_CAPACITY = {
 const CARD_FIRE_VIDEO_FALLBACK_MS = 7000;
 const CARD_FIRE_VIDEO_MAX_MS = 7000;
 const CARD_FIRE_VIDEO_READY_TIMEOUT_MS = 1600;
+const CALLED_FIRE_REVEAL_HOLD_MS = 520;
 const CONTACT_REVEAL_HOLD_MS = 720;
 const CONTACT_FIRE_START_MS = 180;
 const CONTACT_CLEANUP_HOLD_MS = 980;
@@ -1221,6 +1222,16 @@ function getTurnUiState(battle) {
       detail: `行动序列 ${battle.actionSerial}`,
     };
   }
+  if (battle.pendingSide) {
+    const ownPending = battle.pendingSide === "player";
+    const kindLabel = battle.pendingKind === "interceptChoice" ? "防空拦截窗口" : "目标选择窗口";
+    return {
+      tone: ownPending ? "player" : "enemy",
+      eyebrow: ownPending ? "等待选择" : "等待对手",
+      title: ownPending ? (battle.pendingKind === "interceptChoice" ? "请选择拦截单位" : "请选择目标") : "对手正在选择",
+      detail: `${kindLabel} · 行动序列 ${battle.actionSerial}`,
+    };
+  }
   if (battle.activeSide === "player") {
     return {
       tone: "player",
@@ -1545,6 +1556,7 @@ function renderBoardCard(instance, side, lineId) {
   const generatedClass = !concealed && generated ? "board-card--generated-card" : "";
   const actionAnimation = state.battle?.actionAnimation;
   const contactClass = getContactAnimationClass(actionAnimation, instance.uid);
+  const deployClass = actionAnimation?.kind === "deployHold" && actionAnimation.sourceUid === instance.uid ? "is-deploying" : "";
   const thumbnailClass = !concealed && card.type === "unit" ? "board-card--thumbnail" : "";
   const stateTitle = concealed
     ? side === "player"
@@ -1555,7 +1567,7 @@ function renderBoardCard(instance, side, lineId) {
       : card.name;
   return `
     <article
-      class="board-card ${modernClass} ${generatedClass} ${thumbnailClass} ${contactClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
+      class="board-card ${modernClass} ${generatedClass} ${thumbnailClass} ${contactClass} ${deployClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
       data-board-card="${instance.uid}"
       data-side="${side}"
       ${inspectable ? `data-card-id="${card.id}"` : ""}
@@ -2330,15 +2342,19 @@ function renderIntent() {
   refs.intent.classList.remove("intent-overlay--supply");
   const card = getCard(state.pending.cardId);
   const targetButtons = state.pending.targets.map((target) => renderIntentTargetButton(target)).join("");
+  const isInterceptChoice = state.pending.kind === "interceptChoice";
+  const isCallFireChoice = state.pending.kind === "callFireChoice";
+  const intentLabel = isInterceptChoice ? "选择拦截单位" : isCallFireChoice ? "选择校射单位" : "选择目标";
+  const isForcedChoice = isInterceptChoice || isCallFireChoice;
   refs.intent.hidden = false;
   refs.intent.innerHTML = `
     <div>
-      <span>选择目标 · ${state.pending.targets.length}</span>
+      <span>${intentLabel} · ${state.pending.targets.length}</span>
       <strong>${escapeHtml(card.name)}</strong>
       <p>${escapeHtml(getIntentCopy(card, state.pending))}</p>
       <div class="intent-targets">${targetButtons}</div>
     </div>
-    <button type="button" data-action="cancel">取消</button>
+    ${isForcedChoice ? "" : `<button type="button" data-action="cancel">取消</button>`}
   `;
 }
 
@@ -2350,8 +2366,7 @@ function renderSupplyChoice() {
       const card = getCard(instance.cardId);
       return `
         <button class="supply-choice-card" type="button" data-action="keep-supply:${instance.uid}">
-          ${renderWarCard(card, { preview: true })}
-          ${renderSupplyChoiceSummary(card)}
+          ${renderPreviewCard(card)}
         </button>
       `;
     })
@@ -2360,26 +2375,13 @@ function renderSupplyChoice() {
   refs.intent.classList.add("intent-overlay--supply");
   refs.intent.innerHTML = `
     <div>
-      <span>补给调度 · 保留 ${pending.keepAmount}/${pending.drawn.length}</span>
-      <strong>${escapeHtml(sourceCard.name)}</strong>
-      <p>选择一张加入手牌，其余放回牌库底。</p>
+      <div class="supply-choice-heading">
+        <span>补给调度 · 保留 ${pending.keepAmount}/${pending.drawn.length}</span>
+        <strong>${escapeHtml(sourceCard.name)}</strong>
+        <p>选择一张加入手牌，其余放回牌库底。</p>
+      </div>
       <div class="supply-choice-grid">${choiceCards}</div>
     </div>
-  `;
-}
-
-function renderSupplyChoiceSummary(card) {
-  const tags = getCardDisplayTags(card).slice(0, 3);
-  const stats =
-    card.type === "unit"
-      ? `战 ${getCardBaseAttack(card)} · 命 ${getCardHealth(card)} · 价 ${getCardTargetValue(card)}`
-      : TYPE_LABELS[card.type] || "战术";
-  return `
-    <span class="supply-choice-card__info">
-      <strong>${escapeHtml(card.name)}</strong>
-      <small>${escapeHtml(stats)}${tags.length ? ` · ${tags.map(escapeHtml).join(" / ")}` : ""}</small>
-      <em>${escapeHtml(compactCardEffect(card.effect, 72))}</em>
-    </span>
   `;
 }
 
@@ -2911,7 +2913,7 @@ function selectHandCard(uid, options = {}) {
         ability: card.ability,
         target,
       });
-      if (result === "pending-animation") {
+      if (result === "pending-animation" || result === "pending") {
         return;
       }
       finishAction("player");
@@ -2990,6 +2992,7 @@ function playUnitFromHand(battle, side, uid, lineId, options = {}) {
   playCardFlight(card, side, sourceRect, getBoardCardElement(side, instance.uid)?.getBoundingClientRect(), {
     back: instance.hidden,
     duration: DEPLOY_CARD_FLIGHT_MS,
+    intent: "deploy",
   });
   if (!instance.hidden) {
     gameAudio.playCard(card, { action: "deploy", side, hidden: false });
@@ -3104,7 +3107,7 @@ function resolveDeployBoardEffect(battle, side, instance, card, options = {}) {
           ability: card.ability,
           target: targets[0],
         }, { skipCardFireVideo: Boolean(options.skipCardFireVideo) });
-        if (result === "pending-animation") {
+        if (result === "pending-animation" || result === "pending") {
           return;
         }
         finishActionWithResolutionHold(battle, side, options);
@@ -3130,7 +3133,7 @@ function resolveDeployBoardEffect(battle, side, instance, card, options = {}) {
       ability: card.ability,
       target: side === "enemy" ? chooseAiTarget(battle, card, targets, battle.aiDifficulty || "medium") : chooseBestTarget(battle, targets),
     }, { skipCardFireVideo: Boolean(options.skipCardFireVideo) });
-    if (result === "pending-animation") {
+    if (result === "pending-animation" || result === "pending") {
       return;
     }
   } else if (card.ability && canResolveBoardAbilityWithoutTargets(card)) {
@@ -3190,6 +3193,19 @@ function handleBoardTarget(side, uid) {
   state.pending = null;
   state.selectedHandUid = null;
   gameAudio.play("target.lock");
+  if (pending.kind === "callFireChoice") {
+    const result = resolveCallFireChoice(battle, pending, selectedTarget);
+    if (result === "pending-animation" || result === "pending") {
+      return;
+    }
+    if (pending.originKind === "boardEffect") {
+      finishActionWithResolutionHold(battle, pending.side, { pacedFinish: true });
+      return;
+    }
+    finishAction(pending.side);
+    return;
+  }
+
   const result = resolveEffectOnTarget(battle, {
     side: pending.side,
     handUid: pending.handUid,
@@ -3197,8 +3213,11 @@ function handleBoardTarget(side, uid) {
     cardId: pending.cardId,
     ability: pending.ability,
     target: selectedTarget,
-  }, { skipCardFireVideo: Boolean(pending.skipCardFireVideo) });
-  if (result === "pending-animation") {
+  }, {
+    skipCardFireVideo: Boolean(pending.skipCardFireVideo),
+    pacedFinish: pending.kind === "boardEffect",
+  });
+  if (result === "pending-animation" || result === "pending") {
     return;
   }
   if (pending.kind === "boardEffect") {
@@ -3232,7 +3251,7 @@ function activateOwnBoardUnit(battle, side, uid) {
     return;
   }
   if (source.instance.suppressed) {
-    battle.log.push(`${getCard(source.instance.cardId).name} 受到【电子压制】，本回合不能主动发动技能。`);
+    battle.log.push(`${getCard(source.instance.cardId).name} 受到【电子压制】，本回合不能行动。`);
     gameAudio.play("ui.error");
     render();
     return;
@@ -3281,7 +3300,7 @@ function activateOwnBoardUnit(battle, side, uid) {
         ability: card.ability,
         target: targets[0],
       });
-      if (result === "pending-animation") {
+      if (result === "pending-animation" || result === "pending") {
         return;
       }
       finishAction(side);
@@ -3403,28 +3422,34 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
     if (target.instance.hidden) {
       exposedNow = exposeInstance(battle, target, sourceCard.name);
     }
-    const caller = findCallableUnit(battle, payload.side, ability.callerTags);
-    const fire = caller ? getCalledFireProfile(caller, ability) : null;
-    const canCallFire =
-      caller &&
-      fire &&
-      !target.instance.hidden &&
-      canCallFireAtTarget(battle, payload.side, target, ability, caller, fire) &&
-      (!ability.callFireRequiresFreshExpose || exposedNow);
-    if (canCallFire) {
-      resolveCalledFire(battle, payload.side, sourceCard, caller, target, fire);
+    if (ability.sourceExposes && sourceRef) {
+      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
+    }
+    const availableCallers = getCallableUnits(battle, payload.side, ability.callerTags);
+    const callFireOptions = getCallableFireOptions(battle, payload.side, ability, target, { exposedNow });
+    if (callFireOptions.length > 1 && payload.side === "player") {
+      return openCallFireChoice(battle, payload, sourceCard, target, ability, callFireOptions);
+    }
+    if (callFireOptions.length) {
+      const { caller, fire } = callFireOptions[0];
+      const result = resolveCalledFire(battle, payload.side, sourceCard, caller, target, fire, {
+        onComplete: () => {
+          cleanupDestroyed(battle, payload.side, sourceCard, target);
+          finishDeferredEffectAction(battle, payload.side, options);
+        },
+      });
+      if (result === "pending-animation" || result === "pending") {
+        return result;
+      }
     } else {
-      if (caller && ability.callFireTargetTags?.length && !targetHasAnyTag(target.instance, ability.callFireTargetTags)) {
+      if (availableCallers.length && ability.callFireTargetTags?.length && !targetHasAnyTag(target.instance, ability.callFireTargetTags)) {
         battle.log.push(`${sourceCard.name} 暴露目标，但该目标不适合远程校射。`);
-      } else if (caller && ability.callFireRequiresFreshExpose && !exposedNow) {
+      } else if (availableCallers.length && ability.callFireRequiresFreshExpose && !exposedNow) {
         battle.log.push(`${sourceCard.name} 确认目标已暴露，未触发额外校射。`);
       } else {
         battle.log.push(`${sourceCard.name} 完成坐标引导，但己方没有本回合未行动的远程单位。`);
       }
       resolveNoCallerFallback(battle, payload.side, sourceCard, sourceRef, ability, { exposedNow, target });
-    }
-    if (ability.sourceExposes && sourceRef) {
-      exposeInstance(battle, sourceRef, sourceCard.name, { ignoreDecoy: true });
     }
   }
 
@@ -3481,10 +3506,20 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
     if (!caller) {
       battle.log.push(`${sourceCard.name} 没有可调用单位。`);
     } else {
-      caller.instance.calledAction = battle.actionSerial;
       const callerCard = getCard(caller.instance.cardId);
       const fire = ability.kind === "callFire" ? callerCard.fire : { amount: ability.amount, sourceExposes: true };
-      resolveCalledFire(battle, payload.side, sourceCard, caller, target, fire);
+      const result = resolveCalledFire(battle, payload.side, sourceCard, caller, target, fire, {
+        onComplete: () => {
+          if (ability.kind === "callFire" && fire.splash) {
+            applySplashDamage(battle, payload.side, target, fire.splash, callerCard);
+          }
+          cleanupDestroyed(battle, payload.side, sourceCard, target);
+          finishDeferredEffectAction(battle, payload.side, options);
+        },
+      });
+      if (result === "pending-animation" || result === "pending") {
+        return result;
+      }
       if (ability.kind === "callFire" && fire.splash) {
         applySplashDamage(battle, payload.side, target, fire.splash, callerCard);
       }
@@ -3518,7 +3553,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
   if (ability.kind === "suppress") {
     if (target.instance.hidden || ability.suppressExposedTargets || !ability.damageDebuffIfExposed) {
       target.instance.suppressed = true;
-      battle.log.push(`${sourceCard.name} 压制 ${getCard(target.instance.cardId).name}，其下回合不能主动发动技能。`);
+      battle.log.push(`${sourceCard.name} 压制 ${getCard(target.instance.cardId).name}，其下回合不能行动。`);
     } else {
       target.instance.damageDebuff = Math.max(target.instance.damageDebuff || 0, ability.damageDebuffIfExposed || 1);
       battle.log.push(`${sourceCard.name} 干扰 ${getCard(target.instance.cardId).name}，其下一次造成伤害 -${target.instance.damageDebuff}。`);
@@ -3621,6 +3656,60 @@ function beginCardFireVideoTransition(battle, payload, sourceRef, sourceCard) {
     resolveEffectOnTarget(battle, payload, { skipActionAudio: true, skipCardFireVideo: true });
     finishAction(payload.side);
   });
+  return "pending-animation";
+}
+
+function finishDeferredEffectAction(battle, side, options = {}) {
+  if (options.pacedFinish) {
+    finishActionWithResolutionHold(battle, side, options);
+    return;
+  }
+  finishAction(side);
+}
+
+function shouldDeferCalledFireVideo(caller, callerCard, options = {}) {
+  return Boolean(
+    !options.skipCalledFireVideo &&
+      caller?.instance &&
+      !caller.instance.hidden &&
+      getCardFireVideoPath(callerCard),
+  );
+}
+
+function beginCalledFireVideoTransition(battle, side, sourceCard, caller, target, fire, options = {}) {
+  const callerCard = getCard(caller.instance.cardId);
+  battle.actionAnimation = {
+    kind: "cardFireVideo",
+    side,
+    sourceUid: caller.instance.uid,
+    cardId: callerCard.id,
+  };
+  state.pending = null;
+  state.selectedHandUid = null;
+  clearSpotlight();
+  render();
+
+  window.setTimeout(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    playCardFireVideo(caller, callerCard).finally(() => {
+      if (state.battle !== battle || battle.phase !== "battle") {
+        return;
+      }
+      battle.actionAnimation = null;
+      const result = resolveCalledFire(battle, side, sourceCard, caller, target, fire, {
+        ...options,
+        skipCalledFireVideo: true,
+        onComplete: null,
+      });
+      if (typeof options.onComplete === "function") {
+        options.onComplete(result);
+      } else {
+        render();
+      }
+    });
+  }, options.revealHoldMs ?? CALLED_FIRE_REVEAL_HOLD_MS);
   return "pending-animation";
 }
 
@@ -3751,7 +3840,6 @@ function dealDamage(battle, attackerSide, defenderSide, targetRefOrInstance, raw
   if (amountBeforeInterception > 0 && amount <= 0 && canInterceptionCancelDamage(sourceCard, targetRef)) {
     return;
   }
-  amount = applyContinuousDamageReduction(battle, defenderSide, targetRef, amount, sourceCard);
   amount = applyScreening(battle, defenderSide, targetRef, amount, sourceCard);
   if (amount <= 0) {
     amount = Math.min(1, Math.max(0, rawAmount));
@@ -4074,13 +4162,20 @@ function playCardFlight(card, side, fromRect, toRect, options = {}) {
     return;
   }
   const element = document.createElement("div");
-  element.className = `card-flight card-flight--${side} ${options.back ? "is-back" : "is-front"}`;
+  const width = options.width || (options.intent === "deploy" ? 128 : options.intent === "discard" ? 112 : 104);
+  const height = Math.round(width * 1.5);
+  const intentClass = options.intent ? `card-flight--${options.intent}` : "";
+  element.className = `card-flight card-flight--${side} ${intentClass} ${options.back ? "is-back" : "is-front"}`;
   element.style.setProperty("--from-x", `${from.x}px`);
   element.style.setProperty("--from-y", `${from.y}px`);
   element.style.setProperty("--to-x", `${to.x}px`);
   element.style.setProperty("--to-y", `${to.y}px`);
   element.style.setProperty("--mid-x", `${(from.x + to.x) / 2}px`);
-  element.style.setProperty("--mid-y", `${Math.min(from.y, to.y) - 88}px`);
+  element.style.setProperty("--mid-y", `${Math.min(from.y, to.y) - (options.arc || 128)}px`);
+  element.style.setProperty("--flight-w", `${width}px`);
+  element.style.setProperty("--flight-h", `${height}px`);
+  element.style.setProperty("--flight-half-w", `${width / 2}px`);
+  element.style.setProperty("--flight-half-h", `${height / 2}px`);
   element.style.setProperty("--card-art", options.back ? `url('${CARD_BACK_ART_PATH}')` : `url('${getCardThumbnailArtPath(card)}')`);
   element.style.setProperty("--flight-duration", `${options.duration || CARD_FLIGHT_MS}ms`);
   element.innerHTML = `<span>${options.back ? "" : escapeHtml(card?.name || "")}</span>`;
@@ -4206,8 +4301,9 @@ function applyInterception(battle, defenderSide, targetLineId, amount, sourceCar
         canIntercept &&
         tagAllowed &&
         getCurrentPower(instance) > 0 &&
+        !instance.suppressed &&
         (!instance.hidden || canRevealHiddenInterceptor) &&
-        instance.interceptAction !== battle.actionSerial
+        !hasUnitActedThisTurn(battle, instance)
       ) {
         let appliedIntercept = cancelsDamage ? amount : intercept;
         if (sourceRef?.instance?.airspaceControl && sourceCard.tags.includes("战斗机") && card.tags.includes("伴随防空")) {
@@ -4272,8 +4368,9 @@ function tryConsumeTargetInterceptionCancel(battle, defenderSide, targetLineId, 
     !canProtectLine ||
     !canIntercept ||
     getCurrentPower(instance) <= 0 ||
+    instance.suppressed ||
     (instance.hidden && !canPassiveRevealFromHidden(card.continuous)) ||
-    instance.interceptAction === battle.actionSerial
+    hasUnitActedThisTurn(battle, instance)
   ) {
     return false;
   }
@@ -4287,49 +4384,6 @@ function tryConsumeTargetInterceptionCancel(battle, defenderSide, targetLineId, 
 function getAllowedInterceptorTags(ability, targetRef = null) {
   const conditional = ability?.interceptByTagsByTargetTag?.find((rule) => rule.tag && targetRef?.instance && hasTag(targetRef.instance, rule.tag));
   return conditional?.interceptByTags || ability?.interceptByTags || null;
-}
-
-function applyContinuousDamageReduction(battle, defenderSide, targetRef, amount, sourceCard) {
-  const candidates = [];
-  LINES.forEach((line) => {
-    battle.board[defenderSide][line.id].forEach((instance) => {
-      const card = getCard(instance.cardId);
-      const rule = card.continuous?.reduceDamage;
-      if (!rule || getCurrentPower(instance) <= 0 || (instance.hidden && !canPassiveRevealFromHidden(rule))) {
-        return;
-      }
-      if (rule.targetLines && !rule.targetLines.includes(targetRef.lineId)) {
-        return;
-      }
-      const targetTagMatched = !rule.targetTags || rule.targetTags.some((tag) => hasTag(targetRef.instance, tag));
-      const targetCardMatched = !rule.targetCards || rule.targetCards.includes(targetRef.instance.cardId);
-      if (rule.targetMatch === "any" ? !targetTagMatched && !targetCardMatched : !targetTagMatched || !targetCardMatched) {
-        return;
-      }
-      if (rule.sourceTags && !rule.sourceTags.some((tag) => sourceCard.tags.includes(tag))) {
-        return;
-      }
-      if (rule.requiresOwnTag && !hasOwnTagOnLine(battle, defenderSide, rule.requiresOwnTag.line, rule.requiresOwnTag.tag)) {
-        return;
-      }
-      if (rule.oncePerAction !== false && instance.reductionAction === battle.actionSerial) {
-        return;
-      }
-      candidates.push({ amount: rule.amount || 1, card, instance, line, rule });
-    });
-  });
-  if (!candidates.length) {
-    return amount;
-  }
-  const best = candidates.sort((left, right) => right.amount - left.amount)[0];
-  best.instance.reductionAction = battle.actionSerial;
-  if (best.instance.hidden && canPassiveRevealFromHidden(best.rule)) {
-    exposeInstance(battle, { side: defenderSide, lineId: best.line.id, instance: best.instance }, best.card.name, { ignoreDecoy: true });
-    markUnitActed(battle, best.instance);
-  }
-  const nextAmount = Math.max(1, amount - best.amount);
-  battle.log.push(`${best.card.name} 协同减伤，${sourceCard.name} 伤害 -${amount - nextAmount}。`);
-  return nextAmount;
 }
 
 function applyAssistFire(battle, attackerSide, defenderSide, targetRef, sourceCard, sourceRef = null) {
@@ -4613,7 +4667,7 @@ function performAiHandPlay(battle, play) {
     ability: play.card.ability,
     target: play.target,
   });
-  if (result === "pending-animation") {
+  if (result === "pending-animation" || result === "pending") {
     return;
   }
   finishAction("enemy");
@@ -4659,7 +4713,7 @@ function performAiBoardActivation(battle, play) {
       ability: play.card.ability,
       target,
     });
-    if (result === "pending-animation") {
+    if (result === "pending-animation" || result === "pending") {
       return;
     }
     finishAction("enemy");
@@ -5609,7 +5663,7 @@ function getDamageAmount(battle, side, ability, target, lineId, sourceCard = nul
   }
   if (
     ability.ownTagBonus &&
-    hasOwnTagOnLine(battle, side, ability.ownTagBonus.line, ability.ownTagBonus.tag) &&
+    hasOwnTagOnLine(battle, side, ability.ownTagBonus.line, ability.ownTagBonus.tag, { exposedOnly: Boolean(ability.ownTagBonus.exposedOnly) }) &&
     (!ability.ownTagBonus.targetTags || ability.ownTagBonus.targetTags.some((tag) => hasTag(target, tag)))
   ) {
     amount += ability.ownTagBonus.amount;
@@ -5847,6 +5901,15 @@ function chooseSupplyCard(uid) {
 function completeSupplyDraw(battle, side, sourceCard, drawn, kept) {
   const keptIds = new Set(kept.map((instance) => instance.uid));
   const returned = drawn.filter((instance) => !keptIds.has(instance.uid));
+  kept.forEach((instance) => {
+    const choiceElement = Array.from(refs.intent?.querySelectorAll(".supply-choice-card") || [])
+      .find((element) => element.dataset.action === `keep-supply:${instance.uid}`);
+    playCardFlightBetweenElements(getCard(instance.cardId), side, choiceElement?.querySelector(".war-card") || getPileElement(side, "deck"), getHandDestinationElement(side), {
+      back: side === "enemy",
+      duration: 920,
+      intent: "draw",
+    });
+  });
   battle.hands[side].push(...kept);
   battle.decks[side].push(...returned);
   gameAudio.play(kept.length > 1 ? "card.drawHand" : "card.draw", { count: kept.length, side });
@@ -6041,12 +6104,14 @@ function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete)
   }
 
   const opponent = side === "player" ? "enemy" : "player";
+  const videoSources = [];
   if (deployedRef.instance.hidden && canStayHiddenDuringFrontlineDeploy(deployedCard)) {
     battle.log.push(`${deployedCard.name} 依靠低空前线支援保持隐蔽部署。`);
     return false;
   }
   if (deployedRef.instance.hidden && countAliveUnitsOnLine(battle, opponent, "frontline") > 0) {
     exposeInstance(battle, deployedRef, "前线接敌", { ignoreDecoy: true });
+    videoSources.push({ side, uid: deployedRef.instance.uid });
   }
   if (deployedRef.instance.hidden) {
     return false;
@@ -6054,7 +6119,7 @@ function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete)
 
   const ambushers = battle.board[opponent].frontline.filter((instance) => {
     const card = getCard(instance.cardId);
-    return instance.hidden && getCurrentPower(instance) > 0 && isFrontlineContactUnit(card) && !card.contactException;
+    return instance.hidden && !instance.suppressed && getCurrentPower(instance) > 0 && isFrontlineContactUnit(card) && !card.contactException;
   });
   if (!ambushers.length) {
     return false;
@@ -6062,7 +6127,10 @@ function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete)
 
   battle.log.push(`前线接敌：${deployedCard.name} 进入火线，触发 ${ambushers.length} 个隐蔽前线单位。`);
   const ambusherUids = ambushers.map((instance) => instance.uid);
-  ambushers.forEach((instance) => exposeInstance(battle, { side: opponent, lineId: "frontline", instance }, "前线接敌", { ignoreDecoy: true }));
+  ambushers.forEach((instance) => {
+    exposeInstance(battle, { side: opponent, lineId: "frontline", instance }, "前线接敌", { ignoreDecoy: true });
+    videoSources.push({ side: opponent, uid: instance.uid });
+  });
   battle.actionAnimation = {
     kind: "frontlineContact",
     phase: "reveal",
@@ -6072,17 +6140,16 @@ function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete)
   };
   render();
   window.setTimeout(() => {
-    resolveFrontlineEngagementFirePhase(battle, side, deployedRef.instance.uid, ambusherUids, onComplete);
+    resolveFrontlineEngagementFirePhase(battle, side, deployedRef.instance.uid, ambusherUids, videoSources, onComplete);
   }, CONTACT_REVEAL_HOLD_MS);
   return true;
 }
 
-function resolveFrontlineEngagementFirePhase(battle, side, deployedUid, ambusherUids, onComplete) {
+function resolveFrontlineEngagementFirePhase(battle, side, deployedUid, ambusherUids, videoSources, onComplete) {
   if (state.battle !== battle || battle.phase !== "battle") {
     return;
   }
-  const opponent = side === "player" ? "enemy" : "player";
-  playFrontlineContactLeadAmbusherVideo(battle, opponent, ambusherUids).finally(() => {
+  playFrontlineContactExposureVideos(battle, videoSources).finally(() => {
     if (state.battle !== battle || battle.phase !== "battle") {
       return;
     }
@@ -6090,25 +6157,27 @@ function resolveFrontlineEngagementFirePhase(battle, side, deployedUid, ambusher
   });
 }
 
-function playFrontlineContactLeadAmbusherVideo(battle, opponent, ambusherUids) {
-  const leadAmbusherRef = findBoardInstance(battle, opponent, ambusherUids[0]);
-  if (!leadAmbusherRef) {
-    return Promise.resolve();
-  }
-  const leadAmbusherCard = getCard(leadAmbusherRef.instance.cardId);
-  if (!getCardFireVideoPath(leadAmbusherCard)) {
+function playFrontlineContactExposureVideos(battle, videoSources = []) {
+  const playable = videoSources
+    .map((source) => findBoardInstance(battle, source.side, source.uid))
+    .filter(Boolean)
+    .map((ref) => ({ ref, card: getCard(ref.instance.cardId) }))
+    .filter(({ card }) => getCardFireVideoPath(card));
+  if (!playable.length) {
     return Promise.resolve();
   }
 
   battle.actionAnimation = {
-    kind: "cardFireVideo",
-    side: opponent,
-    sourceUid: leadAmbusherRef.instance.uid,
-    cardId: leadAmbusherCard.id,
+    kind: "cardFireVideoGroup",
+    sources: playable.map(({ ref, card }) => ({
+      side: ref.side,
+      sourceUid: ref.instance.uid,
+      cardId: card.id,
+    })),
   };
   render();
 
-  return playCardFireVideo(leadAmbusherRef, leadAmbusherCard).finally(() => {
+  return Promise.all(playable.map(({ ref, card }) => playCardFireVideo(ref, card))).finally(() => {
     if (state.battle !== battle || battle.phase !== "battle") {
       return;
     }
@@ -6178,6 +6247,9 @@ function resolveFrontlineContactFire(battle, attackerSide, sourceRef, defenderSi
   if (!sourceRef?.instance || !targetRef?.instance) {
     return false;
   }
+  if (sourceRef.instance.suppressed || hasUnitActedThisTurn(battle, sourceRef.instance)) {
+    return false;
+  }
   const sourceCard = getCard(sourceRef.instance.cardId);
   const ability = sourceCard.ability;
   if (!ability || !["damage", "damageOrSelfBonus", "strike"].includes(ability.kind)) {
@@ -6198,8 +6270,13 @@ function resolveFrontlineContactFire(battle, attackerSide, sourceRef, defenderSi
   return true;
 }
 
-function hasOwnTagOnLine(battle, side, lineId, tag) {
-  return battle.board[side][lineId].some((instance) => getCurrentPower(instance) > 0 && !instance.hidden && hasTag(instance, tag));
+function hasOwnTagOnLine(battle, side, lineId, tag, options = {}) {
+  return battle.board[side][lineId].some((instance) =>
+    getCurrentPower(instance) > 0 &&
+      !instance.hidden &&
+      (!options.exposedOnly || instance.exposed) &&
+      hasTag(instance, tag)
+  );
 }
 
 function hasOwnArtillery(battle, side) {
@@ -6298,7 +6375,7 @@ function matchesTargetRequirements(instance, ability) {
   return true;
 }
 
-function findCallableUnit(battle, side, callerTags = []) {
+function getCallableUnits(battle, side, callerTags = []) {
   const candidates = [];
   LINES.forEach((line) => {
     battle.board[side][line.id].forEach((instance) => {
@@ -6306,15 +6383,84 @@ function findCallableUnit(battle, side, callerTags = []) {
       if (
         getCurrentPower(instance) > 0 &&
         card.fire &&
+        !instance.suppressed &&
         !wasUnitDeployedThisTurn(battle, instance) &&
         !hasUnitActedThisTurn(battle, instance) &&
         callerTags.some((tag) => card.tags.includes(tag))
       ) {
-        candidates.push({ side, lineId: line.id, instance, card });
+        candidates.push({ side, lineId: line.id, uid: instance.uid, instance, card });
       }
     });
   });
-  return candidates.sort((left, right) => getCurrentPower(right.instance) - getCurrentPower(left.instance))[0] || null;
+  return candidates.sort((left, right) => getCurrentPower(right.instance) - getCurrentPower(left.instance));
+}
+
+function findCallableUnit(battle, side, callerTags = []) {
+  return getCallableUnits(battle, side, callerTags)[0] || null;
+}
+
+function getCallableFireOptions(battle, side, ability, targetRef, context = {}) {
+  if (targetRef.instance.hidden || (ability.callFireRequiresFreshExpose && !context.exposedNow)) {
+    return [];
+  }
+  return getCallableUnits(battle, side, ability.callerTags)
+    .map((caller) => ({ caller, fire: getCalledFireProfile(caller, ability) }))
+    .filter(({ caller, fire }) => fire && canCallFireAtTarget(battle, side, targetRef, ability, caller, fire));
+}
+
+function openCallFireChoice(battle, payload, sourceCard, targetRef, ability, callFireOptions) {
+  state.pending = {
+    kind: "callFireChoice",
+    originKind: payload.sourceUid ? "boardEffect" : "handEffect",
+    side: payload.side,
+    handUid: payload.handUid,
+    sourceUid: payload.sourceUid,
+    cardId: sourceCard.id,
+    ability,
+    target: {
+      side: targetRef.side,
+      lineId: targetRef.lineId,
+      uid: targetRef.uid,
+    },
+    targets: callFireOptions.map(({ caller }) => caller),
+  };
+  battle.log.push(`${sourceCard.name} 已完成坐标引导，选择一个未行动的火力单位立即校射。`);
+  render();
+  return "pending";
+}
+
+function resolveCallFireChoice(battle, pending, selectedCaller) {
+  const sourceCard = getCard(pending.cardId);
+  const target = findBoardInstance(battle, pending.target.side, pending.target.uid);
+  const callerRef = selectedCaller ? findBoardInstance(battle, pending.side, selectedCaller.uid) : null;
+  if (!target || !callerRef) {
+    battle.log.push(`${sourceCard.name} 的校射目标已失效。`);
+    return "resolved";
+  }
+  const callerCard = getCard(callerRef.instance.cardId);
+  const caller = { ...callerRef, uid: callerRef.instance.uid, card: callerCard };
+  const fire = getCalledFireProfile(caller, pending.ability);
+  if (!getCallableUnits(battle, pending.side, pending.ability.callerTags).some((item) => item.uid === caller.uid) ||
+      !canCallFireAtTarget(battle, pending.side, target, pending.ability, caller, fire)) {
+    battle.log.push(`${sourceCard.name} 的校射单位已不能执行本次打击。`);
+    resolveNoCallerFallback(battle, pending.side, sourceCard, null, pending.ability, { exposedNow: false, target });
+    return "resolved";
+  }
+  const result = resolveCalledFire(battle, pending.side, sourceCard, caller, target, fire, {
+    onComplete: () => {
+      cleanupDestroyed(battle, pending.side, sourceCard, target);
+      if (pending.originKind === "boardEffect") {
+        finishActionWithResolutionHold(battle, pending.side, { pacedFinish: true });
+        return;
+      }
+      finishAction(pending.side);
+    },
+  });
+  if (result === "pending-animation" || result === "pending") {
+    return result;
+  }
+  cleanupDestroyed(battle, pending.side, sourceCard, target);
+  return "resolved";
 }
 
 function canCallFireAtTarget(battle, side, targetRef, ability = {}, caller, fire = {}) {
@@ -6449,7 +6595,7 @@ function deployHandUnitWithTagAndActivate(battle, side, tag, sourceCard) {
       ability: card.ability,
       target: side === "enemy" ? chooseAiTarget(battle, card, targets, battle.aiDifficulty || "medium") : chooseBestTarget(battle, targets),
     });
-    if (result === "pending-animation") {
+    if (result === "pending-animation" || result === "pending") {
       return true;
     }
   } else if (card.ability) {
@@ -6458,13 +6604,16 @@ function deployHandUnitWithTagAndActivate(battle, side, tag, sourceCard) {
   return true;
 }
 
-function resolveCalledFire(battle, side, sourceCard, caller, target, fire) {
-  if (!caller?.instance || getCurrentPower(caller.instance) <= 0 || hasUnitActedThisTurn(battle, caller.instance) || wasUnitDeployedThisTurn(battle, caller.instance)) {
-    return;
+function resolveCalledFire(battle, side, sourceCard, caller, target, fire, options = {}) {
+  if (!caller?.instance || getCurrentPower(caller.instance) <= 0 || caller.instance.suppressed || hasUnitActedThisTurn(battle, caller.instance) || wasUnitDeployedThisTurn(battle, caller.instance)) {
+    return "resolved";
+  }
+  const callerCard = getCard(caller.instance.cardId);
+  if (shouldDeferCalledFireVideo(caller, callerCard, options)) {
+    return beginCalledFireVideoTransition(battle, side, sourceCard, caller, target, fire, options);
   }
   caller.instance.calledAction = battle.actionSerial;
   markUnitActed(battle, caller.instance);
-  const callerCard = getCard(caller.instance.cardId);
   gameAudio.playCard(callerCard, { action: "fire", ability: fire, side });
   if (fire.kind === "areaDamage") {
     getAreaDamageTargets(battle, side, fire, target, { sourceRef: caller, sourceCard: callerCard }).forEach((areaTarget, index) => {
@@ -6484,6 +6633,7 @@ function resolveCalledFire(battle, side, sourceCard, caller, target, fire) {
   if (fire.sourceExposes !== false) {
     exposeInstance(battle, caller, sourceCard.name, { ignoreDecoy: true });
   }
+  return "resolved";
 }
 
 function applySplashDamage(battle, attackerSide, primaryTarget, amount, sourceCard) {
@@ -6595,7 +6745,11 @@ function moveHandCardToGrave(battle, side, uid) {
   }
   const [instance] = hand.splice(index, 1);
   battle.graves[side].push(instance);
-  playCardFlightBetweenElements(getCard(instance.cardId), side, getHandCardElement(side, uid), getPileElement(side, "grave"), { back: true, duration: 680 });
+  playCardFlightBetweenElements(getCard(instance.cardId), side, getHandCardElement(side, uid), getPileElement(side, "grave"), {
+    back: false,
+    duration: 900,
+    intent: "discard",
+  });
   return instance;
 }
 
@@ -6614,8 +6768,11 @@ function drawCards(battle, side, amount, options = {}) {
     }
     battle.hands[side].push(card);
     if (!options.silent) {
-      const destination = side === "player" ? refs.hand : document.querySelector(".enemy-hand-strip");
-      playCardFlightBetweenElements(getCard(card.cardId), side, getPileElement(side, "deck"), destination, { back: true, duration: 620 });
+      playCardFlightBetweenElements(getCard(card.cardId), side, getPileElement(side, "deck"), getHandDestinationElement(side), {
+        back: side === "enemy",
+        duration: 880,
+        intent: "draw",
+      });
     }
     drawn += 1;
   }
@@ -6670,7 +6827,7 @@ function canConcealCardForSide(battle, side, card, lineId = card?.line) {
     return false;
   }
   const opponent = side === "player" ? "enemy" : "player";
-  if (lineId === "frontline" && isFrontlineContactUnit(card) && countAliveUnitsOnLine(battle, opponent, "frontline") > 0) {
+  if (lineId === "frontline" && isFrontlineContactUnit(card) && !canStayHiddenDuringFrontlineDeploy(card) && countAliveUnitsOnLine(battle, opponent, "frontline") > 0) {
     return false;
   }
   if (isHighAirUnit(card) && opponentHasExposedHighAir(battle, side)) {
@@ -6688,7 +6845,7 @@ function isFrontlineContactUnit(card) {
 }
 
 function canStayHiddenDuringFrontlineDeploy(card) {
-  return false;
+  return Boolean(card?.contactException);
 }
 
 function isHighAirUnit(card) {
@@ -6735,6 +6892,7 @@ function canPlayerAct() {
       !battle.turnTransition &&
       !battle.aiThinking &&
       !battle.actionAnimation &&
+      !battle.pendingSide &&
       (!battle.finalActions || battle.finalActions.player > 0),
   );
 }
@@ -6747,6 +6905,7 @@ function canPlayerEndTurn() {
       battle.activeSide === "player" &&
       !state.mulligan.active &&
       !state.pending &&
+      !battle.pendingSide &&
       !battle.turnTransition &&
       !battle.aiThinking &&
       !battle.actionAnimation,
@@ -7466,20 +7625,79 @@ async function playOnlineBattleEffect(effect, videoKeys) {
       instance: { uid: effect.targetUid, cardId: effect.targetCardId || "us_marine_rifle", damage: 0 },
     };
     playBlockedVfx(targetRef);
+  } else if (effect.type === "deploy") {
+    playOnlineDeployEffect(effect, sourceCard);
+  } else if (effect.type === "expose") {
+    playOnlineStatusEffect(effect, "暴露");
+  } else if (effect.type === "shield") {
+    playOnlineStatusEffect(effect, "烟幕");
+  } else if (effect.type === "repair") {
+    playOnlineStatusEffect(effect, `维修${effect.amount ? ` +${effect.amount}` : ""}`);
+  } else if (effect.type === "suppress") {
+    playOnlineStatusEffect(effect, "压制");
+  } else if (effect.type === "supply") {
+    playOnlineDrawEffect(effect);
   } else if (effect.type === "draw") {
-    const side = effect.targetSide || "player";
-    const amount = Math.max(1, Number(effect.amount) || 1);
-    const cardBack = getCard("us_marine_rifle");
-    for (let index = 0; index < amount; index += 1) {
-      window.setTimeout(() => {
-        playCardFlightBetweenElements(cardBack, side, getPileElement(side, "deck"), getHandDestinationElement(side), { back: true, duration: 660 });
-      }, index * 90);
-    }
+    playOnlineDrawEffect(effect);
   } else if (effect.type === "discard") {
     const side = effect.targetSide || "player";
     const discardCard = getCard(effect.targetCardId) || getCard("us_marine_rifle");
     playCardFlightFromPoint(discardCard, side, getFallbackHandPoint(side), getPileElement(side, "grave"), { back: false, duration: 680 });
   }
+}
+
+function playOnlineDeployEffect(effect, sourceCard) {
+  const side = effect.sourceSide || effect.targetSide || "player";
+  const uid = effect.sourceUid || effect.targetUid;
+  const lineId = effect.sourceLineId || effect.lineId || effect.targetLineId || "frontline";
+  const destination = uid ? getBoardCardElement(side, uid) : null;
+  const card = getCard(effect.sourceCardId) || getCard(effect.targetCardId) || sourceCard || getCard("us_marine_rifle");
+  if (destination) {
+    playCardFlightFromPoint(card, side, getFallbackHandPoint(side), destination, {
+      back: !effect.sourceCardId && !effect.targetCardId,
+      duration: 660,
+    });
+    pulseElement(destination, "is-contact-impact", 520);
+    return;
+  }
+
+  playOnlineStatusEffect({ ...effect, targetSide: side, targetUid: uid, lineId }, "部署");
+}
+
+function playOnlineStatusEffect(effect, label) {
+  const targetRef = getOnlineEffectTargetRef(effect);
+  playBlockedVfx(targetRef, label);
+  const element = getBoardCardElement(targetRef.side, targetRef.uid);
+  if (element) {
+    pulseElement(element, "is-contact-impact", 520);
+  }
+}
+
+function playOnlineDrawEffect(effect) {
+  const side = effect.targetSide || effect.attackerSide || "player";
+  const amount = Math.max(1, Number(effect.amount) || 1);
+  const cardBack = getCard("us_marine_rifle");
+  for (let index = 0; index < amount; index += 1) {
+    window.setTimeout(() => {
+      playCardFlightBetweenElements(cardBack, side, getPileElement(side, "deck"), getHandDestinationElement(side), { back: true, duration: 660 });
+    }, index * 90);
+  }
+}
+
+function getOnlineEffectTargetRef(effect) {
+  const side = effect.targetSide || effect.sourceSide || effect.attackerSide || "player";
+  const uid = effect.targetUid || effect.sourceUid || "";
+  const lineId = effect.lineId || effect.targetLineId || effect.sourceLineId || "frontline";
+  return findBoardInstance(state.battle, side, uid) || {
+    side,
+    lineId,
+    uid,
+    instance: {
+      uid,
+      cardId: effect.targetCardId || effect.sourceCardId || "us_marine_rifle",
+      damage: 0,
+    },
+  };
 }
 
 async function playOnlineFireVideoForEffect(effect, sourceCard, videoKeys) {
@@ -7893,7 +8111,7 @@ function pickRandomBgmTrack(previousTrack = null) {
 }
 
 function cancelIntent() {
-  if (state.pending?.kind === "supplyChoice") {
+  if (state.pending?.kind === "supplyChoice" || state.pending?.kind === "interceptChoice") {
     gameAudio.play("ui.error");
     return;
   }
@@ -8002,7 +8220,7 @@ function handleDrop(event) {
     clearDragState({ render: false });
     if (payload) {
       const result = resolveEffectOnTarget(state.battle, payload);
-      if (result === "pending-animation") {
+      if (result === "pending-animation" || result === "pending") {
         return;
       }
       finishAction("player");
@@ -8105,7 +8323,13 @@ function hasPointerPosition(event) {
   return Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY) && (event.clientX !== 0 || event.clientY !== 0);
 }
 
-function getIntentCopy(card) {
+function getIntentCopy(card, pending = null) {
+  if (pending?.kind === "interceptChoice") {
+    return "选择一个合法防空单位执行拦截；当前规则没有放弃拦截。";
+  }
+  if (pending?.kind === "callFireChoice") {
+    return "选择一个本回合未行动的榴弹炮或火箭炮，立即打击已标定目标。";
+  }
   if (card.ability?.kind === "expose" || card.ability?.kind === "exposeOrDamage") {
     return "选择一个合法目标；若其处于【隐蔽】，令其【暴露】。";
   }
@@ -8116,7 +8340,7 @@ function getIntentCopy(card) {
     return "选择敌方目标，调用己方远火单位开火；被调用单位会暴露。";
   }
   if (card.ability?.kind === "suppress") {
-    return "选择敌方合法目标；隐蔽目标下回合不能主动发动技能，暴露目标下一次伤害降低。";
+    return "选择敌方合法目标；目标下回合不能行动。";
   }
   if (card.ability?.kind === "decoy") {
     return "旧版诱饵效果已停用。";

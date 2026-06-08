@@ -1,5 +1,69 @@
 # 对局排查日志
 
+## 2026-06-08 渗透隐蔽、侦察调火视频顺序与接敌演出修复
+
+来源：Michael 实测反馈：渗透单位无法在前线接敌状态下隐蔽部署；侦察暴露后需要先翻牌再播放榴弹炮/火箭炮视频并结算；俄方 hover 卡面技能文本覆盖数值；前线接敌应先播放所有被迫暴露单位的视频。
+
+修复：
+
+- `src/main.js` 与 `src/online-battle-engine.js` 将 `contactException` 单位作为前线接敌隐蔽部署例外；普通步兵、装甲、直升机仍按 V0.5.2 口径被迫正面部署。
+- `src/main.js` 为侦察/渗透调火增加本地视频等待链：侦察视频 -> 目标翻牌 -> 被调用榴弹炮/火箭炮视频 -> 伤害结算。
+- `src/main.js` 将前线接敌表现从只播放第一个伏击者视频，改为本次被迫暴露单位的视频一起播放完再结算。
+- `styles.css` 将 hover / 补给候选卡的技能文本限制在卡牌底部区域，避免覆盖数值 HUD。
+- `scripts/v052-regression-tests.mjs` 增加 `TC-V052-015A`，验证渗透单位可在敌方前线存在时隐蔽部署，普通前线单位仍正面部署。
+
+验证结果：
+
+- `node --check src/main.js`
+- `node --check src/online-battle-engine.js`
+- `node --check scripts/v052-regression-tests.mjs`
+- `node scripts/v052-regression-tests.mjs`：21/21 通过。
+- `http://127.0.0.1:3000/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`。
+- 浏览器 smoke：开始 AI 对局并保留手牌，无 console/page error；敌方前线已有单位时，游骑兵渗透小组手牌“隐蔽”按钮为 enabled，截图见 `artifacts/ranger-hidden-button-20260608.png`。
+- 浏览器 hover 检查：战斗手牌 hover 卡面中，数值 HUD 底部与技能文本顶部间距约 24px，截图见 `artifacts/hand-hover-ui-20260608.png`。
+
+## 2026-06-03 V0.5.2 上线前正式测试与飞书报告
+
+来源：Michael 要求按 2026-06-02 已确认口径正式跑完整上线前测试，并提交 Bug 报告到飞书。
+
+执行结果：
+
+- 确认口径版 Excel 共 360 条用例：344 条通过，16 条平衡数据采集观察项，失败/阻塞 0。
+- P0 263/263 通过，P1 62/62 通过，P2 19 条通过、16 条观察。
+- 本轮未发现新增代码缺陷；Bug 管理表不新增阻塞缺陷记录，平衡样本不足作为观察项写入测试报告。
+
+验证证据：
+
+- `node --check src/game-data.js; node --check src/main.js; node --check src/online-battle-engine.js; node --check server.js; node --check scripts/v052-regression-tests.mjs`：通过。
+- `node scripts/v052-regression-tests.mjs --output=artifacts\prelaunch-v052-regression-20260603.json`：18/18 通过。
+- 数据/卡组静态审计：45 张现役卡、默认卡组、复制上限、旧 SEAD/战力文案扫描，共 531/531 通过，见 `artifacts/prelaunch-v052-data-audit-20260603.json`。
+- 浏览器实操：`http://localhost:3000/` 首页 -> AI 对局 -> 保留手牌 -> 正面部署，支援区计数 0 -> 1，日志写入部署事件。
+- 线上 1v1 smoke：浏览器创建房间显示 6 位房间码；WebSocket 双端创建/加入/双方准备后收到 `match_start` 和 `battle_snapshot`，见 `artifacts/prelaunch-v052-online-smoke-20260603.json`。
+- 正式结果工作簿：`artifacts/prelaunch-v052-results-20260603.xlsx`。
+- 飞书正式测试报告：https://my.feishu.cn/docx/OfMmdgTggodUomxL4UrcIkKEnof
+
+## 2026-06-02 V0.5.2 上线前测试口径确认：防空、压制与低空目标
+
+来源：Michael 根据上线前完整测试用例截图确认 6 条规则口径：只有 1 个合法防空时自动拦截，多个合法防空时进入选择窗口且不存在放弃拦截；电子压制禁主动和行动型被动；行动次数按行动序列；Tornado-S 可打低空；巡航/弹道导弹可打暴露地面、直升机和无人机；高空单位使用隐蔽类战术牌后仍暴露。
+
+修复：
+
+- `GAME_MECHANICS.md` 明确行动序列口径、防空拦截 0/1/多合法者裁决、电子压制禁行动型被动。
+- `src/online-battle-engine.js` 新增 `interceptChoice`：多个合法拦截者时给防守方选择窗口，选择后继续伤害、摧毁、得分和终局结算；被压制或已在当前行动序列行动的单位不再参与拦截、前线接敌或侦察校射。
+- `src/main.js` 同步本地练习压制口径，并让线上等待对手防空选择时禁用发起方继续操作；拦截窗口文案改为“选择拦截单位”，不提供取消/放弃入口。
+- `src/game-data.js` 和 `GAME_CONTENT_V0.5.2.md` 修正 Tornado-S 可见文本为“地面或低空目标”。
+- `styles.css` 修复战斗手牌部署按钮 `pointer-events` 被父层禁用的问题，确保“正面/隐蔽”按钮可真实点击。
+- `TEST_CASES.md` 和 `scripts/v052-regression-tests.mjs` 增加多个防空选择、压制防空不可拦截、压制远火不可被侦察调用、行动序列拦截边界和手牌部署按钮可点性等回归断言。
+
+验证结果：
+
+- `node --check src/online-battle-engine.js`
+- `node --check src/main.js`
+- `node scripts/v052-regression-tests.mjs`：18/18 通过；新增断言覆盖 `interceptChoice`、电子压制禁行动型被动、Tornado-S/导弹低空目标口径。
+- `http://localhost:3000/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`。
+- 浏览器 smoke：打开首页、开始 AI 对战、确认调度、真实点击手牌“正面”部署按钮；手牌 7 -> 6，场上 0 -> 1，无 `NaN` / `undefined`。
+- 线上权威引擎专项 smoke：巡航导弹遇到 Pantsir + Buk 时下发 `interceptChoice`，防守方选择 Buk 后目标伤害为 0，未选 Pantsir 不消耗拦截。
+
 ## 2026-05-28 V0.5.2 维修满血口径确认与修复
 
 来源：Michael 确认新规则下战地维修、战场维修应修复目标全部生命，同时要求项目重要标准文件固定存放并在 `AGENTS.md` 记录路径。
@@ -385,3 +449,305 @@
 - Playwright 覆盖 `1366x768`、`1512x982`（14 寸 Mac 近似）、`1920x1080`、`2560x1440`：三块入口 `childCount = 0`、`textLength = 0`，背景图加载正确，`background-size: cover`，均在视口内且页面无横向/纵向溢出。
 - Playwright 点击验证通过：点击三块热区分别打开 `.codex-panel`、`.deck-builder-panel`、`.guide-panel`。
 - 截图输出到 `output/playwright/home-shortcut-texture-fullscreen-pass-20260527/`。
+
+## 2026-05-29 Unity 迁移：联机权威补给耗尽最终结算补齐
+
+来源：Unity 迁移过程中核对浏览器本地战斗、Unity 本地裁决和 `src/online-battle-engine.js` 的行为差异。Unity 已能映射 `supplyExhausted`、`finalActions` 和 `finalTriggeredAtAction`，但线上权威引擎只标记补给耗尽，没有真正发放和消耗双方最终行动。
+
+修复记录：
+
+- `src/online-battle-engine.js` 增加 `finalTriggeredAtAction`，补给耗尽时设置 `finalActions = { player: 1, enemy: 1 }`。
+- 线上 pass turn / 行动结算在最终行动阶段会消耗当前方最终行动并移交给仍有最终行动的一方。
+- 双方最终行动耗尽后，服务器翻开全部隐藏单位，并按得分优先、得分相同则按场上剩余生命结算胜负。
+- `createBattleSnapshot` 现在下发真实 `finalTriggeredAtAction`，供 Unity 在线快照恢复使用。
+
+验证记录：
+
+- `node --check src/online-battle-engine.js`
+- 内存中服务器权威对局 smoke 通过：玩家牌库为空触发补给耗尽，双方各获得 1 次最终行动；敌方最终 pass 后轮到玩家；玩家最终 pass 后按场上生命结算为玩家胜利；快照包含 `supplyExhausted`、`finalActions` 和 `finalTriggeredAtAction`。
+
+## 2026-05-29 Unity 迁移：线上非伤害演出 effect 补齐
+
+来源：Unity 在线战斗已能播放 3D 部署、暴露、烟幕/护盾、维修和压制演出，但服务器权威 `battle_snapshot.effects` 仍主要覆盖伤害、摧毁、拦截、抽牌和弃牌，导致 Unity 在线模式刷新状态但缺少对应 3D 演出触发。
+
+修复记录：
+
+- `src/online-battle-engine.js` 线上权威引擎新增 `deploy`、`expose`、`shield`、`repair`、`suppress` effect 输出。
+- `createBattleSnapshot` 的 effect 视角归一化增加隐藏单位卡牌 ID 遮罩：对手视角中仍隐蔽的 source / target 不泄露真实 `cardId`。
+- `src/main.js` 线上 effect 播放补齐部署、暴露、烟幕/护盾、维修、压制和 supply 展示反馈，复用现有卡牌飞行与战场浮字演出。
+- Unity 迁移验证的 synthetic online snapshot 增加上述非伤害 effect 类型，确保 Unity mapper 能保留 source/target 元数据并交给 VFX 层播放。
+
+验证记录：
+
+- `node --check src/online-battle-engine.js`
+- `node --check src/main.js`
+- `node --check server.js`
+- 内存中服务器权威对局 smoke 通过：部署单位产生 `deploy`；烟幕产生 `shield` / `repair`；电子压制产生 `suppress`；玩家视角查看敌方仍隐蔽目标的 suppress effect 时，`targetCardId` 保持遮罩。
+- 本地 Web smoke 通过：`http://localhost:3000/healthz` 返回 200；Playwright 打开 `http://localhost:3000/`，页面标题为“现代战争三线卡牌 V0.5 线上测试版”，首页主界面可渲染。
+- Unity Runtime / Editor 直接编译通过；Unity SourceGenerator 仅输出既有 Roslyn 版本警告，无项目代码错误。
+- Unity 批量验证通过：`D:\Unity\BattleVfxSandbox\Temp\ModernWarCardsValidate_online_effect_stream.log`，总验收包含 `online snapshot/effect state mapping`、`VFX launch mirroring` 和 online resume helpers。
+
+## 2026-05-29 Unity 可玩闭环：战斗返回大厅与 HUD 可读性
+
+来源：以 Unity 版本“能被玩家打开并完整试玩一局”为阶段目标复查时发现，当前 Unity 主菜单已经能进入本地/线上战斗，但战斗内没有明确返回大厅入口；玩家误进战斗或一局结束后只能停止 Unity Play Mode，试玩闭环不完整。
+
+修复记录：
+
+- `MwBattleRuntime` 增加“返回大厅”按钮，桌面端放入右上操作区，窄屏端与隐蔽部署、投降、结束回合组成四等分操作行。
+- `MwGameRuntime` 启动本地战斗和线上战斗时注册返回回调，返回后恢复主菜单 Canvas、开场音乐、线上房间偏好和当前界面状态。
+- `MwBattleRuntime` 退出时清理运行时战斗 Canvas；对于战斗运行时创建的 VFX Director，也随战斗退出清理，避免返回大厅后残留旧战斗 UI / 3D 标记。
+- 音乐停止改为重新获取当前 `AudioSource`，避免缓存组件在 Unity Editor / batch 验证中变成 missing reference；非 PlayMode 下跳过实际音乐播放，但资源仍由独立音频资源验证覆盖。
+- 运行时 UI 字体赋值限定到 PlayMode，避免 Editor batch 中内置字体 native 对象不可用导致验证失败。
+- 战斗 HUD 状态栏改为中文展示：回合、行动方、得分、行动额度、战术牌状态；补给耗尽后直接展示双方剩余最终行动。
+- 手牌、场上单位、隐蔽单位和详情面板的开发态英文标签改为中文：`攻 / 命 / 值`、`战术`、`隐蔽单位`、`突破目标`。
+- Unity 迁移验证增加 `battle exit flow` 和 `playable shell round-trip`：前者确认 battle exit handler 会被触发；后者确认有效牌组的主菜单状态能启动本地 battle runtime、隐藏大厅，并能恢复大厅。
+
+验证记录：
+
+- Unity Runtime / Editor 直接编译通过；仅有既有 Unity SourceGenerator / Roslyn 版本警告，无项目代码错误。
+- Unity 批量验证通过：`D:\Unity\BattleVfxSandbox\Temp\ModernWarCardsValidate_playable_roundtrip_handoff.log`，总验收包含 `battle exit flow` 和 `playable shell round-trip`。
+- Web 侧基础检查通过：`node --check src/online-battle-engine.js`、`node --check src/main.js`、`node --check server.js`。
+- V0.5.2 回归脚本通过：`node scripts/v052-regression-tests.mjs`，18/18 通过。
+
+## 2026-05-30 Unity 联机闭环：真实房间 smoke 验证
+
+来源：Unity 在线模式此前已有 WebSocket 客户端、resume helper 和 synthetic snapshot mapper 验证，但还缺一条真实打到本地 Node `/ws` 房间服务的 Unity 端自动验证。为了判断“Unity 版是否接近可玩”，需要验证两端 Unity 客户端能完整走通创建/加入/准备/权威快照/映射链路。
+
+推进记录：
+
+- `MwSceneBootstrapper` 新增 `ValidateOnlineRoomSmokeFromBatch` 和菜单入口 `Modern War Cards/Validate Online Room Smoke`。
+- smoke 使用两个 `MwOnlineClient` 连接同一个 Node 房间服务：Host 创建房间，Guest 加入，双方分别使用美/俄 starter deck 发送 ready，等待 `match_ready` 与 `battle_snapshot`。
+- 收到双方权威快照后，使用 `MwOnlineSnapshotMapper.TryMap` 映射回 Unity `MwBattleState`，并检查玩家手牌、回合和 action serial 等基础战斗状态；随后双方各发送一次空调度 `mulligan` 动作，等待服务端进入正式 battle 状态。
+- 修正 Editor batch 中同步等待 async smoke 可能造成的主线程死锁：线上 smoke 放到后台任务执行，并在等待点使用 `ConfigureAwait(false)`。
+- 线上 smoke 与普通 `ValidateMigrationFromBatch` 分离；普通离线迁移验证仍不依赖 Node 服务。
+
+验证记录：
+
+- Unity Editor 直接编译通过；仅有既有 Unity SourceGenerator / Roslyn 版本警告，无项目代码错误。
+- 本地 Node 服务临时运行在 `PORT=3101`，健康检查 `http://127.0.0.1:3101/healthz` 返回 200。
+- Unity 真实线上房间 smoke 通过：`D:\Unity\BattleVfxSandbox\Temp\ModernWarCardsOnlineSmoke.log`，结果为两个 Unity 客户端创建/加入/准备/收到服务端权威快照/映射快照/发送双方空调度并进入正式战斗状态全部成功。
+- Unity 完整迁移验证通过：`D:\Unity\BattleVfxSandbox\Temp\ModernWarCardsValidate_after_online_action_smoke.log`。
+- Web 侧基础检查通过：`node --check server.js`、`node --check src/main.js`、`node --check src/online-battle-engine.js`。
+- V0.5.2 回归脚本通过：`node scripts/v052-regression-tests.mjs`，18/18 通过。
+
+## 2026-05-30 Unity 主菜单启动失败：Text/Image 冲突与音乐降级
+
+来源：Michael 在 Unity Editor 中点击 Play 后，Game 视图只显示黑/灰背景，无法开始游戏；Console 显示 `MissingComponentException: There is no 'AudioSource' attached`、`Can't add 'Text' ... because a 'Image' is already added` 和 `NullReferenceException`。
+
+根因：
+
+- Unity 6 的 UGUI 限制同一个 GameObject 不能同时挂两个 `Graphic` 组件；当前 `CreateText()` 同时创建 `Image` 和 `Text`，导致 `Text` 添加失败，后续访问 `text.fontSize` 触发空引用。
+- 启动错误兜底界面复用了同一个有缺陷的 `CreateText()`，所以主菜单失败后错误界面也失败，玩家只能看到黑屏。
+- BGM 播放路径不应成为主菜单启动的硬依赖；`AudioSource` 获取/添加异常时应静音降级，而不是阻塞 UI。
+
+修复记录：
+
+- `MwGameRuntime.CreateText()` 和 `MwBattleRuntime.CreateText()` 改为只创建 `RectTransform + Text`，面板/按钮继续由独立 `Image` 承担背景。
+- 修复 `MwBattleRuntime` 中对纯文本对象继续 `GetComponent<Image>()` 的残留访问；敌方手牌占位改为 `Panel + Text` 组合，避免刷新手牌时再次空引用。
+- `MwBattleRuntime` 增加 IMGUI 快速操作面板：显示调度/结束回合、隐蔽开关、投降、手牌/补给候选和场上单位/目标，保证 UGUI 层异常时仍可继续与 AI 对战。
+- `MwRuntimeAudio.PlayMusic()` 增加 `TryGetComponent` / `AddComponent` 异常保护；音频不可用时记录 warning 并返回 null，主菜单继续启动。
+- `MwGameRuntime` 增加场景加载后的运行时兜底：若 `ModernWarGame` 场景中没有可用 `MwGameRuntime`，自动创建入口；启动失败时显示可见错误界面。
+- Unity 迁移验证新增 `playable game shell startup`，用于覆盖主菜单 UI 能被创建这一条此前漏掉的 Play Mode 风险。
+
+验证记录：
+
+- Unity Runtime / Editor 直接编译通过；仅有既有 Unity SourceGenerator / Roslyn 版本警告，无项目代码错误。
+- Michael 复测进入战斗场景后 3D 棋盘可见但操作 UI 仍不可见；根据新截图继续修复手牌刷新残留空引用，并增加 IMGUI 快速操作兜底。修复后 Unity Runtime / Editor 再次直接编译通过。
+- 由于 Michael 当前 Unity Editor 正在打开并处于调试 Play 流程，本轮未强行启动第二个 batch Unity 进程跑完整迁移验证；待退出 Play Mode 后可重跑 `ValidateMigrationFromBatch`。
+
+## 2026-05-30 Unity 战斗可操作性：快速面板空引用与点击反馈修复
+
+来源：Michael 复测进入 Unity 战斗后只能看到 3D 棋盘，看不到卡牌信息；点击手牌或按钮没有明显反馈，Console 中曾出现 `MwBattleRuntime.OnGUI()` 空引用。
+
+根因：
+- IMGUI 快速操作层直接读取 `state.scores`、`resolver.GetValidPendingTargets()`、`state.board[side][line]` 等对象，任何初始化链路里有一个对象暂时缺失，整个兜底操作面板就会在 `OnGUI()` 中断。
+- 点击手牌 / 场上单位时主要依赖 UGUI 详情面板和日志更新；当 UGUI 层不可见或刷新失败时，玩家看不到“点到了什么、当前能做什么”。
+- 战斗摄像机缺少 `AudioListener`，VFX Director 的 `AudioSource` 也没有完整降级保护，导致无关音频警告持续刷屏，掩盖真正的交互错误。
+
+修复记录：
+- `MwBattleRuntime` 的 IMGUI 面板拆为 `DrawQuickPanel()`，外层 `OnGUI()` 增加单次异常捕获与可见 fallback，不再因为单处空引用整体消失。
+- 快速面板新增“反馈”和“详情”两行：点击手牌、补给候选、场上单位、确认调度、结束回合、隐蔽部署和投降时都会立即显示当前点击结果。
+- 手牌列表、场上单位列表、比分、目标列表全部改为安全读取；规则引擎或 VFX 层暂时为空时，操作面板仍能显示可读状态。
+- `ApplyResultThenMaybeAi()`、线上事件播放和 AI 回合播放在 VFX Director 缺失时跳过动画但继续推进战斗裁决，避免“动画层坏了导致游戏不能玩”。
+- `MwBattleVfxDirector` 为战斗摄像机自动补 `AudioListener`，并给 VFX 音效 `AudioSource` 增加 try/catch 降级。
+
+验证记录：
+- Unity Runtime / Editor 直接编译通过；仅有 Unity SourceGenerator / Roslyn 版本警告，无项目代码错误。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_quick_panel.log`，总验收包含 card data、starter decks、local battle flow、enemy AI smoke test、Unity audio resources、battle exit flow、playable shell startup、playable shell round-trip、online resume helpers 等。
+
+## 2026-05-30 Unity 正式战斗 HUD：向浏览器版可玩体验推进
+
+来源：Michael 明确要求继续推进到“真正类似浏览器版本的可玩阶段”。此前 IMGUI 快速面板能兜底操作，但体验仍偏调试工具；正式 Unity 战斗画面需要像浏览器版一样清楚显示战斗状态、手牌、卡牌详情、行动反馈和战斗日志。
+
+推进记录：
+- `MwBattleRuntime` 将战斗 Canvas 提升为高优先级 `ScreenSpaceOverlay`，并为顶部状态、左侧详情、右侧日志和中部反馈条增加深色半透明底板。
+- 重新整理桌面端布局：底部手牌区收窄并与左右详情/日志错开，玩家前线/支援区上移，避免手牌、日志和详情互相遮挡。
+- 手牌按钮改为更接近卡牌的竖向尺寸，并给按钮文字增加 best-fit 与阴影，降低卡名、战线、攻/命/值在卡图上不可读的概率。
+- 点击手牌、补给候选或场上单位时，正式 HUD 的“反馈”和“详情”同步刷新；不是只更新 IMGUI 兜底面板。
+- IMGUI 快速面板改为仅在正式 HUD 未创建时显示，避免正常试玩时看到调试工具覆盖浏览器式 HUD。
+- 普通背景面板的 `Image.raycastTarget` 关闭，降低透明/半透明面板挡住按钮点击的风险。
+- `MwBattleVfxDirector` 改用 `TryGetComponent` 获取音效组件，音频不可用时静默降级，不再在 Console 里刷无关 `AudioSource` warning。
+- `MwSceneBootstrapper` 增加 `ValidatePlayableBattleHud`：自动创建战斗 runtime，检查 HUD Canvas、反馈/详情/日志/手牌/战线面板存在，确认玩家手牌按钮可交互，并验证点击手牌会更新可见反馈与卡牌详情。
+
+验证记录：
+- Unity Runtime 直接编译通过；Unity SourceGenerator 仅输出既有 Roslyn 版本警告，无项目代码错误。
+- Unity Editor 验证程序集直接编译通过；新增 `UnityEngine.UI` 引用后 `Text/Button` 验证代码无编译错误。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_playable_hud_final.log`，总验收包含 `playable battle HUD`，并继续覆盖本地战斗流、AI smoke、战斗退出、主菜单启动、playable shell round-trip、线上快照映射和 online resume helpers。
+
+追加推进：
+- 手牌按钮和场上单位按钮改为按当前数量动态缩放：开局手牌、补给候选和满编战线不再依赖默认大按钮硬挤，降低溢出到详情/日志区的风险。
+- 主操作按钮补齐成功反馈：确认调度、确认补给、结束回合、投降、隐蔽部署开关都会写入正式 HUD 反馈条。
+- `ValidatePlayableBattleHud` 继续增强：自动计算手牌按钮总宽度，若超过手牌面板宽度会失败；并模拟点击主操作按钮，验证反馈条会出现调度反馈。
+
+追加验证：
+- Unity Runtime 直接编译通过；仅有既有 Unity SourceGenerator / Roslyn 版本警告。
+- Unity Editor 验证程序集直接编译通过。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_playable_layout.log`，`playable battle HUD` 覆盖手牌布局不溢出和主操作按钮反馈。
+
+继续推进：
+- 正式 HUD 反馈条升级为上下文引导：开局调度提示“最多换 2 张”、补给阶段提示候选数和保留数、目标阶段提示点击黄色/红色高亮单位、敌方回合提示等待 AI、己方回合提示可部署/打战术/点己方单位/结束回合。
+- 结算动画期间保留刚刚成功的操作反馈，例如“已确认调度：1 张。正在播放结算动画”，避免成功动作被单纯的 busy 文案覆盖。
+- `ValidatePlayableBattleHud` 继续增强：点击主操作按钮后，不只看反馈文本，还通过 runtime state / resolver 补齐双方调度，验证 HUD 能从开局调度推进到正式 `battle` 状态，并显示“你的回合”或“敌方 AI”引导。
+
+继续验证：
+- Unity Runtime 直接编译通过；仅有既有 Unity SourceGenerator / Roslyn 版本警告。
+- Unity Editor 验证程序集直接编译通过。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_battle_guidance.log`，`playable battle HUD` 覆盖初始调度引导、点手牌后的调度进度、主按钮反馈、手牌布局不溢出，以及调度后进入正式 battle 引导。
+
+继续推进：
+- Battle 阶段点击手牌后的反馈从“已点击卡牌”升级为操作语义：单位显示“已部署 X 到前线/支援区”，战术牌显示“已打出 X”。
+- 目标选择和场上单位行动补充成功/失败反馈：选择目标后显示已选择目标，命令己方单位行动后显示已命令单位行动。
+- `ValidatePlayableBattleHud` 继续增强：进入 battle 状态后确定性选择一张单位手牌并触发 UI 按钮，验证该单位从手牌进入场上，同时验证 HUD 反馈出现部署/结算语义。
+
+继续验证：
+- Unity Runtime 直接编译通过；仅有既有 Unity SourceGenerator / Roslyn 版本警告。
+- Unity Editor 验证程序集直接编译通过。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_battle_card_play.log`，`playable battle HUD` 覆盖 battle 阶段单位手牌点击、手牌减少、场上增加和反馈更新。
+
+## 2026-06-01 Unity Editor 可玩性：目标选择、点击反馈与保底操作面板
+
+来源：Michael 复测反馈 Unity 版进场后仍然“基本无法正常游戏”，看不到完整卡牌信息，点击后也缺少明确反馈；目标是让 Unity Editor 里至少能稳定完成一局本地 AI 对战，而不是只看到 3D 棋盘。
+
+根因：
+- 战斗动作如果打开 `state.pending` 目标选择，运行时仍会先进入 `busy` 动画/AI 等待状态，导致 HUD 反馈停留在“正在播放结算动画”，目标按钮也因为 `busy` 被禁用，玩家感觉“点了没反应”。
+- 正式 UGUI HUD 在 Editor Game 视图里仍可能因为布局/缩放/刷新时机让玩家只注意到 3D 棋盘；此前 IMGUI 快速面板只在正式 HUD 缺失时出现，不能作为稳定的人工试玩入口。
+- VFX Director 在 Editor 验证路径里使用 `Destroy()` 清理对象，会产生 `Destroy may not be called from edit mode` 警告，污染 Console，容易掩盖真正的交互错误。
+
+修复记录：
+- `MwBattleRuntime.ApplyResultThenMaybeAi()` 在动作产生 `state.pending` 时立即刷新并退出结算协程，不再把目标选择阶段锁进 busy 状态。
+- `MwBattleRuntime.BuildContextGuidance()` 将补给/目标选择提示置于 busy 提示之前，确保打开 pending 后反馈栏立即告诉玩家“请选择目标”。
+- `MwBattleRuntime.ShouldDrawQuickPanel()` 在 Unity Editor 中始终显示 IMGUI 快速操作面板，作为正式 HUD 之外的保底入口；面板内可查看反馈、卡牌详情、手牌/补给候选、场上单位/目标，并可执行确认调度、结束回合、隐蔽部署和投降。
+- `MwBattleVfxDirector` 增加 `DestroyRuntimeObject()`，运行态用 `Destroy()`，Editor 验证态用 `DestroyImmediate()`，清理 edit mode 销毁警告。
+- `ValidatePlayableBattleHud` 已覆盖：初始 HUD 可读、手牌按钮可点、调度反馈、进入 battle 后点击单位手牌会从手牌部署到场上、打开多目标 pending、目标按钮可交互、点击目标会清空 pending 并造成伤害或摧毁目标。
+
+验证记录：
+- Unity Runtime / Editor 直接编译通过；仅有 Unity SourceGenerator / Roslyn 版本警告，无项目 C# 编译错误。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_target_selection_final.log`，覆盖 `playable battle HUD` 的目标选择与伤害结算链路。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_clean_console.log`，确认 VFX edit mode `Destroy` 警告已移除。
+- Unity 批量迁移验证通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_editor_quick_panel.log`，在启用 Editor 保底快速面板后完整迁移验证仍通过。
+- 追加自动化断言通过：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_editor_fallback_assert.log`，`ValidatePlayableBattleHud` 现在会通过反射检查 `ShouldDrawQuickPanel()`，确保 Unity Editor 人工试玩时保底快速操作面板可用。
+
+## 2026-06-01 Unity 下一步可玩性补丁：按钮级动作标签
+
+推进记录：
+- 当前环境切换为不可请求 D 盘写入授权，无法直接修改 `D:\Unity\BattleVfxSandbox`；因此先在工作区新增 `scripts/apply-unity-action-labels.ps1`，把下一步 Unity HUD 改动固化为可复用补丁脚本。
+- 补丁目标是让 Unity 正式 HUD 的手牌/场上按钮自身显示动作标签：开局显示“点击调度/已选调度”，补给显示“点击保留/已选补给”，正式战斗手牌显示“点击部署到前线区/点击打出战术”，场上单位显示“点击发动行动”，pending 目标显示“点击选择目标/点击突破目标”。
+- 补丁同时会增强 `ValidatePlayableBattleHud`，检查第一个可交互手牌按钮必须带有动作标签，避免 Unity 回退到“看得到卡牌但不知道点了会怎样”的状态。
+
+验证记录：
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\apply-unity-action-labels.ps1 -DryRun` 已通过，说明脚本能命中当前 Unity Runtime / Editor 验证源码结构；尚未实际写入 D 盘。
+
+## 2026-06-01 Unity 正式 HUD：按钮级动作标签落地
+
+来源：继续向“真正类似浏览器版本的可玩阶段”推进。此前 Unity 已能显示详情和操作提示，但手牌/场上按钮本身仍偏静态卡片；玩家需要先读说明才能判断点击会做什么。浏览器版手牌区的优势是卡牌本身就是可操作入口，因此 Unity HUD 也需要把动作语义直接放到按钮上。
+
+修复记录：
+- 已将 `scripts/apply-unity-action-labels.ps1` 实际应用到 `D:\Unity\BattleVfxSandbox`，并改成幂等脚本；重复 dry-run 会报告 `runtime already patched; editor validation already patched`。
+- `MwBattleRuntime` 的手牌按钮现在会按状态显示动作标签：开局调度显示“点击调度/已选调度”，补给候选显示“点击保留/已选补给”，正式战斗手牌显示“点击部署到对应战线”或“点击打出战术”。
+- `MwBattleRuntime` 的场上单位按钮现在会按状态显示动作标签：己方可行动单位显示“点击发动行动”，pending 目标显示“点击选择目标/点击突破目标”，敌方单位标明“敌方单位”。
+- `MwSceneBootstrapper.ValidatePlayableBattleHud` 新增断言：第一个可交互手牌按钮必须包含动作标签，防止回退到“看到卡牌但不知道怎么点”的状态。
+- `scripts/validate-unity-playable-stage.ps1` 修复了验证脚本工作目录问题，并增加 Unity 日志落盘/文件释放等待，后续可一条命令完成 Runtime 编译、Editor 编译和 playable HUD 迁移验证。
+
+验证记录：
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_action_labels_clean2.log'` 通过。
+- 验证覆盖 Unity Runtime 编译、Unity Editor 编译、`ValidateMigrationFromBatch`，日志包含 `playable battle HUD`，结果为 `Modern War Cards migration validation passed`。
+
+## 2026-06-01 Unity 正式 HUD：动作标签断言补强
+
+来源：Michael 已授权直接推进 `D:\Unity\BattleVfxSandbox`。上一轮补齐了手牌/场上按钮动作标签，但自动验证只覆盖了开局第一个手牌按钮；为了让 Unity 版更接近“玩家一进来就知道怎么和 AI 打”的状态，需要把正式 battle 阶段和 pending 目标选择阶段也纳入验收。
+
+推进记录：
+- `MwSceneBootstrapper.ValidatePlayableBattleHud` 继续增强：进入正式 battle 后，选中的单位手牌按钮必须显示“点击 + 部署”动作语义。
+- pending 目标选择打开后，目标单位按钮必须显示“点击 + 目标”动作语义，避免回退到“目标亮了但不知道是否能点”的状态。
+- 验证断言使用 C# Unicode 转义字符串，避免 Windows/Unity 编辑器日志编码差异影响中文动作提示检查。
+
+验证记录：
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_action_label_asserts.log'` 通过。
+- 验证覆盖 Unity Runtime 编译、Unity Editor 编译、`ValidateMigrationFromBatch`、`playable battle HUD`、battle 手牌部署动作标签、pending 目标选择动作标签；结果为 `Modern War Cards migration validation passed`。
+
+## 2026-06-01 Unity 正式 HUD：玩家结束回合到 AI 回合闭环
+
+来源：继续向“真正类似浏览器版本的可玩阶段”推进。按钮动作标签已经解决“我该点哪里”，下一层关键体验是玩家点“结束回合”后必须清楚知道控制权交给 AI，并在 AI 行动结束后知道已经轮回自己，而不是只能盯着棋盘和日志猜状态。
+
+推进记录：
+- `MwBattleRuntime.RunEnemyTurn()` 结束时新增明确反馈：战斗未结束且回到玩家时显示“敌方 AI 已完成行动，轮到你了”，并提示继续看日志、部署、行动或结束回合。
+- AI 行动异常停在敌方回合时会显示“敌方 AI 行动暂停”，避免玩家误以为点击无效。
+- `ValidatePlayableBattleHud` 增加 UI 驱动闭环：通过 HUD “结束回合”按钮把控制权交给敌方 AI，再运行 AI 行动，最后验证控制权回到玩家或正常结算胜负。
+- 验证会检查结束回合反馈包含 AI/结束回合语义，AI 回合结束后反馈包含“AI”和“轮到你”，把“能和 AI 来回打一轮”纳入自动验收。
+
+验证记录：
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_ui_ai_roundtrip.log'` 通过。
+- 验证覆盖 Unity Runtime 编译、Unity Editor 编译、`ValidateMigrationFromBatch`、`playable battle HUD`、玩家结束回合、敌方 AI 行动、回到玩家的 UI 闭环；结果为 `Modern War Cards migration validation passed`。
+
+追加验证：
+- `ValidatePlayableBattleHud` 继续检查 AI 回合结束后玩家仍有可继续操作入口：主按钮必须恢复为可交互的“结束回合”，手牌或己方场上可交互按钮若存在，必须仍带有“点击”动作标签。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_post_ai_controls.log'` 通过。
+
+## 2026-06-01 Unity 正式 HUD：补给选择闭环验收
+
+来源：继续向“真正类似浏览器版本的可玩阶段”推进。此前验证已覆盖开局调度、手牌部署、目标选择、结束回合到 AI 回合闭环；但补给选择是浏览器版中常见的中途交互，如果 Unity 版只显示候选牌却没有选中状态和确认闭环，玩家仍会感觉游戏卡住。
+
+推进记录：
+- `ValidatePlayableBattleHud` 新增补给选择场景：构造 3 张补给候选、保留 2 张，验证手牌区切换成 `Supply` 候选按钮。
+- 候选按钮必须显示“点击保留”，点击后必须刷新为“已选补给”，反馈栏必须显示补给选择进度 `1/2`。
+- 主按钮在补给阶段必须切换为可交互的“确认补给”；点击后必须清空 pending，并把选中的候选牌放回玩家手牌。
+- 初次验证失败暴露出 Unity UI 刷新会销毁并重建按钮，验证不能继续访问旧 `Button` 引用；已改为点击后重新查找 `Supply {uid}`，贴合真实 HUD 刷新方式。
+
+验证记录：
+- 失败定位：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_supply_choice_flow.log` 报告旧按钮引用被销毁后的 `MissingReferenceException`。
+- 修复后通过：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_supply_choice_flow_retry.log'`。
+- 验证覆盖 Unity Runtime 编译、Unity Editor 编译、`ValidateMigrationFromBatch`、`playable battle HUD`、补给候选渲染、选中反馈、确认补给、回到玩家回合；结果为 `Modern War Cards migration validation passed`。
+
+追加修正：
+- `MwBattleRuntime.BuildContextGuidance()` 在玩家回合会保留最近一次“已...”成功回执，再接上当前回合引导，避免补给确认、部署、战术等成功反馈被刷新立刻冲掉。
+- 补给闭环验收同步增强：确认补给后反馈必须同时包含“已选择补给”和“你的回合”。
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_supply_success_feedback.log'` 通过。
+
+## 2026-06-01 Unity 正式 HUD：单位行动结果反馈
+
+来源：继续向“真正类似浏览器版本的可玩阶段”推进。补给、目标选择和 AI 回合闭环已覆盖后，下一块真实对局体验缺口是场上单位行动：玩家点击己方单位后，不能只看到“已命令某单位行动”，还需要立刻知道这次行动造成了伤害、摧毁、修复、掩护、压制或暴露等什么结果。
+
+推进记录：
+- 先按 TDD 增加红灯验收：`ValidatePlayableBattleHud` 构造己方 `us_marine_rifle` 与敌方 `ru_motostrelki` 的确定性场景，点击己方场上单位后，要求敌方目标受到伤害或被摧毁，并要求 HUD 反馈包含“造成/伤害”等结果语义。
+- 红灯验证通过预期失败：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_unit_action_feedback_red.log` 显示反馈仍停在“已命令 海军陆战队 行动。正在播放结算动画”，没有说明战斗结果。
+- `MwBattleRuntime` 新增 `BuildActionResultFeedback()`，将 `damage`、`destroyed`、`repair`、`shield`、`suppress`、`expose` 以及 pending 目标/补给转换为一行玩家可读的行动结果摘要。
+- 场上单位行动现在会显示类似“已命令 X 行动：造成 N 点伤害 / 摧毁目标获得分数 / 等待选择目标”，并继续被玩家回合引导保留。
+
+验证记录：
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_unit_action_feedback_green.log'` 通过。
+- 验证覆盖 Unity Runtime 编译、Unity Editor 编译、`ValidateMigrationFromBatch`、`playable battle HUD`、确定性场上单位行动、伤害/摧毁结果和 HUD 行动结果反馈；结果为 `Modern War Cards migration validation passed`。
+
+## 2026-06-01 Unity 正式 HUD：战斗结束与再开一局闭环
+
+来源：继续向“真正类似浏览器版本的可玩阶段”推进。Unity HUD 已能走通开局、手牌、补给、单位行动、AI 回合往返后，还需要解决一局结束后的体验闭环：玩家必须明确看到谁赢了，并且能从结束态继续玩，而不是只能停在一个禁用的“结束回合”按钮上。
+
+推进记录：
+- 先按 TDD 增加红灯验收：将 battle state 设置为 `match-over`，要求反馈显示“战斗结束/获胜”，并要求本地 AI 对局的主按钮变为可交互的“再开一局”。
+- 红灯验证通过预期失败：`D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_match_restart_red.log` 显示结束态主按钮仍是禁用的“结束回合”。
+- `MwBattleRuntime` 新增本地重开逻辑：结束态下主按钮显示“再开一局”；点击后清空调度/补给选择、重置隐蔽部署、重新创建本地 battle state、恢复战斗 BGM，并显示“已重新开局。开局调度...”。
+- IMGUI 兜底面板也复用同一个主按钮标签与逻辑，Unity Editor 人工试玩时结束态同样能重开。
+- 验证中修正了点击“再开一局”后仍读取旧 `battleState` 引用的问题，改为从 runtime 重新读取新 state。
+
+验证记录：
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_match_restart_green2.log'` 通过。
+- 验证覆盖 Unity Runtime 编译、Unity Editor 编译、`ValidateMigrationFromBatch`、`playable battle HUD`、结束态胜负反馈、本地“再开一局”按钮、点击后回到新的 mulligan 开局；结果为 `Modern War Cards migration validation passed`。

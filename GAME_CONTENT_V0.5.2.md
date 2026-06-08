@@ -40,7 +40,7 @@
 | us_b2 | B-2 隐身轰炸机 | unit | support | 5 | 5 | 5 | 轰炸机/高空 | 选择最多两个目标，对次要目标造成 3 点伤害。 |
 | us_f35 | F-22 战斗机 | unit | support | 2 | 5 | 4 | 战斗机/高空 | 若目标为低空或高空单位，伤害+2。 |
 | us_f35a_sead | F-35A 战斗机 | unit | support | 2 | 5 | 4 | 战斗机/高空 | 若目标为地面单位，伤害+2。 |
-| us_electronic_suppression | 电子压制 | tactic | instant |  |  |  | 战术 | 干扰一个目标。 |
+| us_electronic_suppression | 电子压制 | tactic | instant |  |  |  | 战术 | 干扰一个目标，使其不能行动。 |
 | us_emergency_supply | 紧急补给 | tactic | instant |  |  |  | 战术 | 抽 3 张牌，选择 1 张加入手牌，其余放回牌库底。 |
 | us_smoke_screen | 烟幕掩护 | tactic | instant |  |  |  | 战术 | 指定己方一个已暴露单位，使其重新进入隐蔽；若目标在前线，修复 1 点生命。 |
 | us_battlefield_repair | 战地维修 | tactic | instant |  |  |  | 战术 | 修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。 |
@@ -60,7 +60,7 @@
 | ru_orlan10 | Orlan-10 侦查无人机 | unit | support | 0 | 2 | 2 | 无人机/低空 | 侦察一个目标，若为地面或低空单位，使友方本回合未行动的一个远火单位立即攻击一次，否则抽 1 张牌。 |
 | ru_pantsir | Pantsir-S1 伴随防空 | unit | support | 2 | 3 | 3 | 伴随防空 | 若目标为低空单位，伤害+1。拦截敌方巡航导弹的攻击，一回合一次。 |
 | ru_buk_m3 | Buk-M3 防空导弹 | unit | support | 5 | 3 | 4 | 重型防空 | 拦截敌方战斗机、导弹的攻击，一回合一次；不拦截轰炸机。 |
-| ru_tornado_s | Tornado-S 火箭炮 | unit | support | 3 | 3 | 4 | 火箭炮 | 选择最多三个地面目标造成伤害，主目标 3 点，其余目标各 1 点。 |
+| ru_tornado_s | Tornado-S 火箭炮 | unit | support | 3 | 3 | 4 | 火箭炮 | 选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。 |
 | ru_2s19 | 姆斯塔榴弹炮 | unit | support | 3 | 3 | 3 | 榴弹炮 | 若目标为步兵，伤害+1。 |
 | ru_kalibr | 口径巡航导弹 | unit | support | 4 | 3 | 4 | 巡航导弹 | 若目标在前线区，伤害+1。 |
 | ru_iskander | 伊斯坎德尔弹道导弹 | unit | support | 5 | 3 | 5 | 弹道导弹 | 若目标在前线区，伤害+1。 |
@@ -68,7 +68,7 @@
 | ru_su35 | Su-35 战斗机 | unit | support | 2 | 6 | 4 | 战斗机/高空 | 若目标为低空或高空单位，伤害+2。 |
 | ru_su57_sead | Su-57 战斗机 | unit | support | 2 | 5 | 4 | 战斗机/高空 | 若目标为地面单位，伤害+2。 |
 | ru_ammo_supply | 弹药补给 | tactic | instant |  |  |  | 战术 | 抽 3 张牌，选择 1 张加入手牌，其余放回牌库底。 |
-| ru_electronic_suppression | 电子压制 | tactic | instant |  |  |  | 战术 | 干扰一个目标。 |
+| ru_electronic_suppression | 电子压制 | tactic | instant |  |  |  | 战术 | 干扰一个目标，使其不能行动。 |
 | ru_smoke_decoys | 烟幕伪装 | tactic | instant |  |  |  | 战术 | 指定己方一个已暴露单位，使其重新进入隐蔽，若目标在前线，修复 1 点生命。 |
 | ru_battlefield_repair | 战场维修 | tactic | instant |  |  |  | 战术 | 修复己方一个单位全部生命；若己方没有受损单位，抽 2 张牌，选择 1 张加入手牌，其余放回牌库底。 |
 | ru_reposition | 阵地转移 | tactic | instant |  |  |  | 战术 | 指定己方一个已暴露单位，使其重新进入隐蔽，若目标在支援区，修复 1 点生命。 |
