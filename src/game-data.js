@@ -2640,7 +2640,7 @@ const V43_CARD_OVERRIDES = {
     "rarity": "epic",
     "specialization": "中程防空、反导",
     "tags": ["重型防空"],
-    "effect": "【防空拦截】：敌方【战斗机】、【轰炸机】或【导弹】打击战术牌伤害 -2，一回合仅一次。【区域防空】：本单位在场时，己方前线与支援区均可受到该拦截保护。",
+    "effect": "【防空拦截】：敌方【战斗机】或【导弹】打击战术牌伤害 -2，一回合仅一次。【区域防空】：本单位在场时，己方前线与支援区均可受到该拦截保护。",
     "art": "ru_buk",
     "continuous": {
       "intercept": 2,
@@ -2658,7 +2658,7 @@ const V43_CARD_OVERRIDES = {
     "rarity": "legendary",
     "specialization": "纵深防空、反导",
     "tags": ["重型防空"],
-    "effect": "【防空拦截】：敌方【战斗机】、【轰炸机】或【导弹】打击战术牌伤害 -3，一回合仅一次。【纵深防空】：本单位在场时，己方前线与支援区均可受到该拦截保护。",
+    "effect": "【防空拦截】：敌方【战斗机】或【导弹】打击战术牌伤害 -3，一回合仅一次。【纵深防空】：本单位在场时，己方前线与支援区均可受到该拦截保护。",
     "art": "ru_buk",
     "continuous": {
       "intercept": 3,
@@ -3045,7 +3045,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "us_patriot": {
-    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
+    "effect": "【区域防空】：敌方【战斗机】以及所有类型【导弹】打击造成的伤害无效。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3335,7 +3335,7 @@ const V07_CARD_OVERRIDES = {
   },
   "ru_tornado_s": {
     "power": 4,
-    "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。",
+    "effect": "【火力覆盖】：选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。",
     "ability": {
       "kind": "areaDamage",
       "rows": ["frontline", "support"],
@@ -3378,7 +3378,7 @@ const V07_CARD_OVERRIDES = {
     }
   },
   "ru_buk_m3": {
-    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
+    "effect": "【区域防空】：敌方【战斗机】以及所有类型【导弹】打击造成的伤害无效。\n【雷达截击】：对一个高空目标造成 2 点伤害。",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3639,7 +3639,7 @@ const LATEST_XLSX_CARD_TEXT = {
   "us_apache": {"name": "阿帕奇武装直升机", "ruleNote": "【直升机】：可以攻击前线区地面和低空单位。\n【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。", "effect": "【空中打击】：若目标为【装甲】、【直升机】或【重型防空】，伤害+2。", "unitAttribute": "直升机"},
   "us_reaper": {"name": "死神侦察无人机", "ruleNote": "【无人机】：无法攻击。", "effect": "【无人侦扫】：选择一个隐蔽目标，使其暴露。\n【火力校射】：若目标为地面单位，且己方有本回合未行动的【榴弹炮】或【火箭炮】，可立即对该目标进行一次打击，本次伤害 +1；若没有可用火力单位，抽 1 张牌。", "unitAttribute": "无人机"},
   "us_avenger": {"name": "复仇者伴随防空", "ruleNote": "【伴随防空】：可以攻击所有战线低空和高空单位。", "effect": "【近程拦截】：若目标为低空单位，伤害+1。\n【伴随防空】：敌方【巡航导弹】打击造成的伤害无效，一回合一次。", "unitAttribute": "伴随防空"},
-  "us_patriot": {"name": "爱国者防空导弹", "ruleNote": "【重型防空】：可以攻击所有战线高空单位。", "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。", "unitAttribute": "重型防空"},
+  "us_patriot": {"name": "爱国者防空导弹", "ruleNote": "【重型防空】：可以攻击所有战线高空单位。", "effect": "【区域防空】：敌方【战斗机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。", "unitAttribute": "重型防空"},
   "us_himars": {"name": "海马斯火箭炮", "ruleNote": "【火箭炮】：可以攻击所有战线地面单位。", "effect": "【火力覆盖】：选择最多两个目标造成伤害，主目标 3 点，第二目标 1 点，若目标为【步兵】，伤害+1。", "unitAttribute": "火箭炮"},
   "us_m109": {"name": "帕拉丁榴弹炮", "ruleNote": "【榴弹炮】：可以攻击所有战线地面单位。", "effect": "【远程炮击】：若目标为【步兵】，伤害+1。", "unitAttribute": "榴弹炮"},
   "us_tomahawk": {"name": "战斧巡航导弹", "ruleNote": "【导弹】：可以攻击所有战线地面和低空单位。", "effect": "【巡航打击】：若目标在支援区，伤害+1。", "unitAttribute": "导弹"},
@@ -3661,8 +3661,8 @@ const LATEST_XLSX_CARD_TEXT = {
   "ru_ka52_unit": {"name": "卡-52 武装直升机", "ruleNote": "【直升机】：可以攻击前线区地面和低空单位。\n【前线支援】：敌方前线有单位时，本单位也可以隐蔽部署。", "effect": "【空中打击】：若目标为【装甲】、【直升机】或【重型防空】，伤害+2。", "unitAttribute": "直升机"},
   "ru_orlan10": {"name": "Orlan-10 侦查无人机", "ruleNote": "【无人机】：无法攻击。", "effect": "【无人侦扫】：选择一个隐蔽目标，使其暴露。\n【炮兵校射】：若目标为地面单位，且己方有本回合未行动的【榴弹炮】，可立即对该目标进行一次打击，本次伤害 +1；若没有可用火力单位，抽 1 张牌。", "unitAttribute": "无人机"},
   "ru_pantsir": {"name": "Pantsir-S1 伴随防空", "ruleNote": "【伴随防空】：可以攻击所有战线低空和高空单位。", "effect": "【野战防空】：若目标为低空单位，伤害+1。\n【伴随拦截】：敌方【巡航导弹】和【SEAD战斗机】打击造成的伤害无效，一回合一次。", "unitAttribute": "伴随防空"},
-  "ru_buk_m3": {"name": "Buk-M3 防空导弹", "ruleNote": "【重型防空】：可以攻击所有战线高空单位。", "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。", "unitAttribute": "重型防空"},
-  "ru_tornado_s": {"name": "Tornado-S 火箭炮", "ruleNote": "【火箭炮】：可以攻击地面和低空单位。", "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。", "unitAttribute": "火箭炮"},
+  "ru_buk_m3": {"name": "Buk-M3 防空导弹", "ruleNote": "【重型防空】：可以攻击所有战线高空单位。", "effect": "【区域防空】：敌方【战斗机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。", "unitAttribute": "重型防空"},
+  "ru_tornado_s": {"name": "Tornado-S 火箭炮", "ruleNote": "【火箭炮】：可以攻击地面和低空单位。", "effect": "【火力覆盖】：选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。", "unitAttribute": "火箭炮"},
   "ru_2s19": {"name": "姆斯塔榴弹炮", "ruleNote": "【榴弹炮】：可以攻击所有战线地面单位。", "effect": "【远程炮击】：若目标为【步兵】，伤害+1。", "unitAttribute": "榴弹炮"},
   "ru_kalibr": {"name": "口径巡航导弹", "ruleNote": "【导弹】：可以攻击所有战线地面和低空单位。", "effect": "【巡航打击】：若目标在前线，伤害+1。", "unitAttribute": "导弹"},
   "ru_iskander": {"name": "伊斯坎德尔弹道导弹", "ruleNote": "【导弹】：可以攻击所有战线地面和低空单位。", "effect": "【弹道导弹】：若目标在支援区，伤害+1。", "unitAttribute": "导弹"},
@@ -3913,7 +3913,7 @@ const DOCX_20260521_CARD_PATCHES = {
     "displayTags": ["重型防空"],
     "unitAttribute": "重型防空",
     "ruleNote": "【重型防空】：可以攻击所有战线高空单位。",
-    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
+    "effect": "【区域防空】：敌方【战斗机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -3936,7 +3936,7 @@ const DOCX_20260521_CARD_PATCHES = {
     "displayTags": ["火箭炮"],
     "unitAttribute": "火箭炮",
     "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
-    "effect": "【火力覆盖】：选择最多两个地面或低空目标造成伤害，主目标 3 点，第二目标 1 点，若目标为【步兵】，伤害+1。",
+    "effect": "【火力覆盖】：选择最多两个目标，对次要目标攻击力为1，若目标为【步兵】，伤害+1。",
     "ability": {
       "kind": "areaDamage",
       "rows": ["frontline", "support"],
@@ -4276,7 +4276,7 @@ const DOCX_20260521_CARD_PATCHES = {
     "targetValue": 4,
     "displayTags": ["重型防空"],
     "unitAttribute": "重型防空",
-    "effect": "【区域防空】：敌方【战斗机】、【轰炸机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
+    "effect": "【区域防空】：敌方【战斗机】以及所有类型【导弹】打击造成的伤害无效，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
     "ability": {
       "kind": "damage",
       "rows": ["frontline", "support"],
@@ -4299,7 +4299,7 @@ const DOCX_20260521_CARD_PATCHES = {
     "displayTags": ["火箭炮"],
     "unitAttribute": "火箭炮",
     "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
-    "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。",
+    "effect": "【火力覆盖】：选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。",
     "ability": {
       "kind": "areaDamage",
       "rows": ["frontline", "support"],
@@ -4497,7 +4497,7 @@ const DOCX_20260523_CARD_PATCHES = {
     "displayTags": ["火箭炮"],
     "unitAttribute": "火箭炮",
     "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
-    "effect": "【火力覆盖】：选择最多两个地面或低空目标造成伤害，主目标 3 点，第二目标 1 点；若目标为【步兵】，伤害+1。",
+    "effect": "【火力覆盖】：选择最多两个目标，对次要目标攻击力为1，若目标为【步兵】，伤害+1。",
     "ability": {
       "kind": "areaDamage",
       "rows": ["frontline", "support"],
@@ -4585,7 +4585,7 @@ const DOCX_20260523_CARD_PATCHES = {
     "displayTags": ["火箭炮"],
     "unitAttribute": "火箭炮",
     "ruleNote": "【火箭炮】：可以攻击所有战线地面和低空单位。",
-    "effect": "【火力覆盖】：选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。",
+    "effect": "【火力覆盖】：选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。",
     "ability": {
       "kind": "areaDamage",
       "rows": ["frontline", "support"],
@@ -4991,7 +4991,7 @@ const DOCX_20260523_DISPLAY_TEXT_PATCHES = {
     "displayTags": ["火箭炮"],
     "unitAttribute": "火箭炮",
     "ruleNote": "火箭炮：可以攻击地面和低空单位。",
-    "effect": "选择最多三个地面或低空目标造成伤害，主目标 3 点，其余目标各 1 点。"
+    "effect": "选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。"
   },
   "ru_2s19": {
     "name": "姆斯塔榴弹炮",
@@ -5112,14 +5112,14 @@ const V052_20260527_RULE_PATCHES = {
     }
   },
   "us_patriot": {
-    "effect": "拦截敌方战斗机、导弹的攻击，一回合一次；不拦截轰炸机。（隐蔽部署时也生效，生效后自身暴露）",
+    "effect": "拦截敌方战斗机、导弹的攻击，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
     "continuous": {
       ...CARD_LIBRARY.us_patriot.continuous,
       "interceptTags": ["战斗机", ...MISSILE_TAGS]
     }
   },
   "ru_buk_m3": {
-    "effect": "拦截敌方战斗机、导弹的攻击，一回合一次；不拦截轰炸机。（隐蔽部署时也生效，生效后自身暴露）",
+    "effect": "拦截敌方战斗机、导弹的攻击，一回合一次。（隐蔽部署时也生效，生效后自身暴露）",
     "continuous": {
       ...CARD_LIBRARY.ru_buk_m3.continuous,
       "interceptTags": ["战斗机", ...MISSILE_TAGS]
@@ -5247,33 +5247,29 @@ const V052_20260527_RULE_PATCHES = {
     }
   },
   "us_himars": {
-    "effect": "选择一个地面或低空目标造成 3 点伤害，并对同一战线至多 1 个次要目标造成 1 点伤害；若目标为步兵，伤害+1。",
+    "effect": "选择最多两个目标，对次要目标攻击力为1，若目标为步兵，伤害+1。",
     "ability": {
       ...CARD_LIBRARY.us_himars.ability,
       "allowSupport": true,
-      "sameLineOnly": true,
       "maxTargets": 2
     },
     "fire": {
       ...CARD_LIBRARY.us_himars.fire,
       "allowSupport": true,
-      "sameLineOnly": true,
       "maxTargets": 2
     }
   },
   "ru_tornado_s": {
-    "effect": "选择一个地面或低空目标造成 3 点伤害，并对同一战线至多 1 个次要目标造成 1 点伤害。",
+    "effect": "选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。",
     "ability": {
       ...CARD_LIBRARY.ru_tornado_s.ability,
       "allowSupport": true,
-      "sameLineOnly": true,
-      "maxTargets": 2
+      "maxTargets": 3
     },
     "fire": {
       ...CARD_LIBRARY.ru_tornado_s.fire,
       "allowSupport": true,
-      "sameLineOnly": true,
-      "maxTargets": 2
+      "maxTargets": 3
     }
   }
 };

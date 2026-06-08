@@ -10968,6 +10968,24 @@ button:disabled {
   opacity: 1;
 }
 
+.battle-stage .no-mans-land.is-breakthrough-ready {
+  gap: 0.25svmin;
+  pointer-events: auto;
+}
+
+.battle-stage .no-mans-land.is-breakthrough-ready button {
+  min-height: clamp(20px, 2.5svmin, 30px);
+  padding: 0 clamp(10px, 1.2svmin, 16px);
+  border: 1px solid rgba(255, 218, 139, 0.5);
+  border-radius: 4px;
+  color: #fff2c6;
+  background: rgba(8, 10, 9, 0.72);
+  box-shadow: 0 0 16px rgba(255, 175, 64, 0.18), inset 0 0 14px rgba(255, 218, 139, 0.08);
+  font-size: clamp(9px, 1.05svmin, 13px);
+  font-weight: 900;
+  pointer-events: auto;
+}
+
 .battle-stage .battle-line__cards .board-card,
 .battle-stage .battle-line__cards .board-card.board-card--modern,
 .battle-stage .battle-line__cards .board-card.board-card--generated-card,
@@ -11059,7 +11077,7 @@ button:disabled {
   display: block;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: 3.0% 4.4% 0;
+  padding: 3.0% 2.6% 0 6.2%;
   background: transparent;
   scrollbar-width: thin;
 }
@@ -11351,8 +11369,36 @@ button:disabled {
 }
 
 .battle-stage .intent-overlay .intent-target {
+  position: relative;
   min-height: clamp(168px, 19svmin, 224px) !important;
   padding: clamp(8px, 1svmin, 12px) !important;
+}
+
+.battle-stage .intent-overlay .intent-target.is-selected {
+  border-color: rgba(255, 221, 136, 0.9) !important;
+  background: rgba(27, 23, 12, 0.72) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 238, 188, 0.18),
+    0 0 26px rgba(255, 184, 72, 0.28) !important;
+}
+
+.battle-stage .intent-target__order {
+  position: absolute;
+  right: clamp(7px, 0.9svmin, 12px);
+  top: clamp(7px, 0.9svmin, 12px);
+  width: clamp(20px, 2.25svmin, 28px);
+  height: clamp(20px, 2.25svmin, 28px);
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 232, 168, 0.72);
+  border-radius: 999px;
+  color: #1b1306;
+  background: #ffd978;
+  font-size: clamp(11px, 1.25svmin, 15px);
+  font-style: normal;
+  font-weight: 1000;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 
 .battle-stage .intent-target__card {
@@ -14249,6 +14295,27 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
   text-align: center;
 }
 
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-invite-link {
+  display: grid !important;
+  gap: 0.25svmin;
+  width: 100%;
+  min-width: 0;
+}
+
+.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-invite-link input {
+  width: 100%;
+  min-width: 0;
+  height: clamp(22px, 2.7svmin, 30px);
+  padding: 0 0.65svmin;
+  border: 1px solid rgba(232, 207, 145, 0.28);
+  border-radius: 3px;
+  color: rgba(255, 244, 211, 0.92);
+  background: rgba(0, 0, 0, 0.32);
+  font-size: clamp(7px, 0.76svmin, 10px);
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
 .app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-room-code span,
 .app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-slot span {
   display: block !important;
@@ -14299,7 +14366,6 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
 }
 
 .app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-room-actions button:disabled,
-.app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-callout:not(.is-error),
 .app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-match-start {
   display: none !important;
 }

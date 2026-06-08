@@ -110,7 +110,7 @@ function makeInstance(battle, side, cardId, options = {}) {
     damage: options.damage || 0,
     exposed: options.exposed ?? !options.hidden,
     hidden: Boolean(options.hidden),
-    shield: false,
+    shield: Boolean(options.shield),
     fortified: false,
     decoy: false,
     suppressed: Boolean(options.suppressed),
@@ -178,6 +178,25 @@ function choosePendingTarget(battle, side, index = 0) {
   });
 }
 
+function choosePendingTargets(battle, side, targetRefs = []) {
+  assert(battle.pending, "expected pending target selection");
+  assert(targetRefs.length, "expected at least one selected target");
+  const selectedTargets = targetRefs.map((targetRef) => {
+    const target = battle.pending.targets.find((item) => item.uid === targetRef.uid && item.side === targetRef.side);
+    assert(target, `expected target ${targetRef.uid} in pending list`);
+    return {
+      side: viewerSide(target.side, side),
+      uid: target.uid,
+    };
+  });
+  return applyBattleAction(battle, side, {
+    kind: "choose_target",
+    targetSide: selectedTargets[0].side,
+    targetUid: selectedTargets[0].uid,
+    selectedTargets,
+  });
+}
+
 function activateAndChoose(battle, side, sourceRef, targetRef = null) {
   const result = applyBattleAction(battle, side, {
     kind: "activate_unit",
@@ -227,17 +246,25 @@ testCase("TC-DATA-001", "P0", "V0.5.2 关键卡牌数据口径一致", () => {
   return "关键数据字段符合 V0.5.2。";
 });
 
-testCase("TC-DATA-002", "P0", "火箭炮目标路由：可选支援位且溅射不跨线", () => {
-  ["us_himars", "ru_tornado_s"].forEach((id) => {
-    const card = getCard(id);
-    assert(card.ability.allowSupport === true, `${id} must be able to choose support targets directly`);
-    assert(card.ability.sameLineOnly === true, `${id} splash must stay on the chosen line`);
-    assert(card.ability.maxTargets === 2, `${id} rocket splash must be capped at two targets`);
-    assert(card.fire.allowSupport === true, `${id} callable fire must be able to choose support targets directly`);
-    assert(card.fire.sameLineOnly === true, `${id} callable splash must stay on the chosen line`);
-    assert(card.fire.maxTargets === 2, `${id} callable rocket splash must be capped at two targets`);
-  });
-  return "火箭炮支援位目标与同线溅射配置正常。";
+testCase("TC-DATA-002", "P0", "Rocket artillery targeting uses ordered selected targets across rows", () => {
+  const himars = getCard("us_himars");
+  assert(himars.effect === "选择最多两个目标，对次要目标攻击力为1，若目标为步兵，伤害+1。", "HIMARS visible effect must match the V0.5.2 docx");
+  assert(himars.ability.allowSupport === true, "HIMARS must be able to choose support targets directly");
+  assert(himars.ability.sameLineOnly !== true, "HIMARS must not be locked to the primary target row");
+  assert(himars.ability.maxTargets === 2, "HIMARS must select up to two targets");
+  assert(himars.fire.allowSupport === true, "HIMARS callable fire must be able to choose support targets directly");
+  assert(himars.fire.sameLineOnly !== true, "HIMARS callable fire must not be locked to the primary target row");
+  assert(himars.fire.maxTargets === 2, "HIMARS callable fire must select up to two targets");
+
+  const tornado = getCard("ru_tornado_s");
+  assert(tornado.effect === "选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。", "Tornado-S visible effect must match the V0.5.2 docx");
+  assert(tornado.ability.allowSupport === true, "Tornado-S must be able to choose support targets directly");
+  assert(tornado.ability.sameLineOnly !== true, "Tornado-S must not be locked to the primary target row");
+  assert(tornado.ability.maxTargets === 3, "Tornado-S must select up to three targets per the V0.5.2 docx");
+  assert(tornado.fire.allowSupport === true, "Tornado-S callable fire must be able to choose support targets directly");
+  assert(tornado.fire.sameLineOnly !== true, "Tornado-S callable fire must not be locked to the primary target row");
+  assert(tornado.fire.maxTargets === 3, "Tornado-S callable fire must select up to three targets per the V0.5.2 docx");
+  return "rocket artillery data allows ordered cross-row multi-target selection.";
 });
 
 testCase("TC-DATA-003", "P0", "前线协同伤害只计算暴露单位", () => {
@@ -523,18 +550,15 @@ testCase("TC-V052-041/042", "P0", "榴弹炮/火箭炮可打地面和低空，�
 
   const rocket = createBattle("rocket");
   const himars = addBoard(rocket, "player", "support", "us_himars");
-  const screenedFront = addBoard(rocket, "enemy", "frontline", "ru_t90m");
+  const frontSecondary = addBoard(rocket, "enemy", "frontline", "ru_motostrelki");
   const supportPrimary = addBoard(rocket, "enemy", "support", "ru_tornado_s");
   const supportSecondary = addBoard(rocket, "enemy", "support", "ru_2s19");
-  const supportThird = addBoard(rocket, "enemy", "support", "ru_2s19");
   assertAction(applyBattleAction(rocket, "player", { kind: "activate_unit", sourceUid: himars.uid }), "HIMARS activation");
   assert(rocket.pending?.targets?.some((target) => target.uid === supportPrimary.uid), "HIMARS should present support targets even while frontline is occupied");
-  assertAction(choosePendingTarget(rocket, "player", rocket.pending.targets.findIndex((target) => target.uid === supportPrimary.uid)), "choose HIMARS support primary");
+  assertAction(choosePendingTargets(rocket, "player", [supportPrimary, frontSecondary]), "choose HIMARS support primary and frontline secondary");
   assert(supportPrimary.instance.damage === 3, "HIMARS should apply primary damage to the chosen support target");
-  assert(screenedFront.instance.damage === 0, "HIMARS same-line splash must not hit frontline when support is chosen");
-  const damagedSupport = [supportPrimary, supportSecondary, supportThird].filter((target) => target.instance.damage > 0);
-  assert(damagedSupport.length === 2, "HIMARS should damage at most two support-line targets");
-  assert([supportSecondary.instance.damage, supportThird.instance.damage].includes(1), "HIMARS should apply secondary damage to only one same-line support target");
+  assert(frontSecondary.instance.damage === 2, "HIMARS should apply infantry secondary damage to the explicitly selected frontline target");
+  assert(supportSecondary.instance.damage === 0, "HIMARS should not auto-splash an unselected support target");
   return "远火目标范围和多目标数量正常。";
 });
 
@@ -667,15 +691,117 @@ testCase("TC-V052-050/051/052", "P0", "战斗机、F-35A/Su-57 取消 SEAD、轰
 
   const bomber = createBattle("bomber-two-targets");
   const b2 = addBoard(bomber, "player", "support", "us_b2");
-  addBoard(bomber, "enemy", "frontline", "ru_t90m");
-  addBoard(bomber, "enemy", "frontline", "ru_bmpt");
-  addBoard(bomber, "enemy", "frontline", "ru_bmp3m");
+  const supportPrimary = addBoard(bomber, "enemy", "support", "ru_buk_m3");
+  const frontSecondary = addBoard(bomber, "enemy", "frontline", "ru_t90m");
+  const unselectedFront = addBoard(bomber, "enemy", "frontline", "ru_bmpt");
   assertAction(applyBattleAction(bomber, "player", { kind: "activate_unit", sourceUid: b2.uid }), "B-2 activation");
-  assertAction(choosePendingTarget(bomber, "player", 0), "B-2 choose primary");
-  const damaged = bomber.board.enemy.frontline.filter((instance) => instance.damage > 0);
-  assert(damaged.length === 2, "B-2 should damage at most two targets");
-  assert(damaged.some((instance) => instance.damage === 5) && damaged.some((instance) => instance.damage === 3), "B-2 should use 5 primary / 3 secondary damage");
+  assertAction(choosePendingTargets(bomber, "player", [supportPrimary, frontSecondary]), "B-2 choose support primary and frontline secondary");
+  assert(supportPrimary.instance.damage === 5, "B-2 should apply primary damage to the first selected support target");
+  assert(frontSecondary.instance.damage === 3, "B-2 should apply secondary damage to the second selected frontline target");
+  assert(unselectedFront.instance.damage === 0, "B-2 should not auto-pick an unselected target");
   return "航空兵口径通过。";
+});
+
+testCase("TC-V052-052A", "P0", "Smoke shield clears on hit but does not reduce documented damage", () => {
+  const f35Shield = createBattle("f35-shield");
+  const f35a = addBoard(f35Shield, "player", "support", "us_f35a_sead");
+  const infantry = addBoard(f35Shield, "enemy", "frontline", "ru_motostrelki", { shield: true, exposed: true });
+  assertAction(activateAndChoose(f35Shield, "player", f35a, infantry), "F-35A attacks shielded infantry");
+  assert(infantry.instance.damage === 4, "F-35A should still deal 4 damage to a shielded ground unit");
+  assert(infantry.instance.shield === false, "shield should be cleared by the hit");
+
+  const himarsShield = createBattle("himars-shield");
+  const himars = addBoard(himarsShield, "player", "support", "us_himars");
+  const patriot = addBoard(himarsShield, "enemy", "support", "ru_buk_m3", { shield: true, exposed: true });
+  assertAction(activateAndChoose(himarsShield, "player", himars, patriot), "HIMARS attacks shielded heavy AD");
+  assert(patriot.instance.damage === 3, "HIMARS should still deal 3 primary damage to a shielded heavy AD");
+  assert(patriot.instance.shield === false, "shield should be cleared by rocket damage");
+  return "shield no longer subtracts one point from documented damage.";
+});
+
+testCase("TC-V052-015B", "P0", "Hidden infiltration deploy reveals enemy frontline non-infiltration units without exposing itself", () => {
+  const battle = createBattle("infiltration-front-reveal");
+  const hiddenEnemy = addBoard(battle, "enemy", "frontline", "ru_motostrelki", { hidden: true, exposed: false });
+  const enemyScout = addBoard(battle, "enemy", "frontline", "ru_spetsnaz_target", { hidden: true, exposed: false });
+  const ranger = addHand(battle, "player", "us_rangers_target");
+  assertAction(applyBattleAction(battle, "player", { kind: "play_unit", handUid: ranger.uid, lineId: "frontline", hidden: true }), "hidden Ranger deploys into contested frontline");
+  const rangerRef = findBoard(battle, "player", ranger.uid);
+  assert(rangerRef?.instance.hidden === true && rangerRef.instance.exposed === false, "infiltration unit should remain hidden");
+  assert(hiddenEnemy.instance.hidden === false && hiddenEnemy.instance.exposed === true, "enemy non-infiltration frontline unit should be forced exposed");
+  assert(enemyScout.instance.hidden === true && enemyScout.instance.exposed === false, "enemy infiltration unit should not be forced exposed");
+  assert(battle.effects.some((effect) => effect.type === "expose" && effect.targetUid === hiddenEnemy.uid), "forced reveal should emit an expose effect");
+  return "infiltration frontline reveal is asymmetric and preserves infiltrator concealment.";
+});
+
+testCase("TC-V052-023A", "P0", "Frontline breakthrough is an explicit expose-first support-zone action", () => {
+  const exposeOnly = createBattle("breakthrough-explicit-expose");
+  exposeOnly.turnActions.player.enemyFrontlineEmptyAtStart = true;
+  exposeOnly.turnActions.player.ownBoardEmptyAtStart = false;
+  const bradley = addBoard(exposeOnly, "player", "frontline", "us_bradley", { deployedAtAction: 0 });
+  const hiddenFighter = addBoard(exposeOnly, "enemy", "support", "ru_su35", { hidden: true, exposed: false });
+  assertAction(applyBattleAction(exposeOnly, "player", {
+    kind: "frontline_breakthrough",
+    sourceUid: bradley.uid,
+    targetSide: "enemy",
+    targetUid: hiddenFighter.uid,
+  }), "Bradley breakthrough exposes an unsupported high-air target");
+  assert(hiddenFighter.instance.hidden === false && hiddenFighter.instance.exposed === true, "breakthrough should reveal the support target");
+  assert(hiddenFighter.instance.damage === 0, "Bradley should not damage a target its normal ability cannot legally hit");
+  assert(exposeOnly.turnActions.player.breakthroughUsed === true, "explicit breakthrough should consume the once-per-turn flag");
+
+  const damageCase = createBattle("breakthrough-explicit-damage");
+  damageCase.turnActions.player.enemyFrontlineEmptyAtStart = true;
+  damageCase.turnActions.player.ownBoardEmptyAtStart = false;
+  const tank = addBoard(damageCase, "player", "frontline", "us_m1a2", { deployedAtAction: 0 });
+  const hiddenArmor = addBoard(damageCase, "enemy", "support", "ru_bmpt", { hidden: true, exposed: false });
+  assertAction(applyBattleAction(damageCase, "player", {
+    kind: "frontline_breakthrough",
+    sourceUid: tank.uid,
+    targetSide: "enemy",
+    targetUid: hiddenArmor.uid,
+  }), "M1A2 breakthrough exposes and damages a support armor target");
+  assert(hiddenArmor.instance.hidden === false && hiddenArmor.instance.damage === 5, "legal breakthrough strike should use the source ability damage");
+  return "explicit breakthrough separates reveal-only and reveal-plus-damage cases.";
+});
+
+testCase("TC-V052-038A", "P0", "Recon call-fire effects order plays scout mark before reveal before called-fire damage", () => {
+  const battle = createBattle("recon-effect-order");
+  const scout = addBoard(battle, "player", "frontline", "us_rangers_target");
+  const howitzer = addBoard(battle, "player", "support", "us_m109");
+  const hiddenTarget = addBoard(battle, "enemy", "frontline", "ru_motostrelki", { hidden: true, exposed: false });
+  assertAction(activateAndChoose(battle, "player", scout, hiddenTarget), "Ranger marks a hidden target for howitzer fire");
+  const targetExpose = battle.effects.find((effect) => effect.type === "expose" && effect.targetUid === hiddenTarget.uid);
+  const calledDamage = battle.effects.find((effect) => effect.type === "damage" && effect.sourceUid === howitzer.uid && effect.targetUid === hiddenTarget.uid);
+  assert(targetExpose, "target reveal effect should be emitted");
+  assert(calledDamage, "called-fire damage effect should be emitted");
+  assert(targetExpose.playSourceVideo === true, "target reveal effect should request scout source video playback");
+  assert(targetExpose.serial < calledDamage.serial, "target reveal must precede called-fire damage");
+  return "recon effects carry the sequencing metadata needed by online playback.";
+});
+
+testCase("TC-V052-060A", "P0", "Heavy air defense visible card text matches the docx wording without bomber caveat", () => {
+  ["us_patriot", "ru_buk_m3"].forEach((id) => {
+    const card = getCard(id);
+    const visible = `${card.effect || ""}\n${card.ruleNote || ""}`;
+    assert(!/轰炸机/.test(visible), `${id} visible text must not mention bombers`);
+    assert(/拦截敌方战斗机、导弹的攻击，一回合一次/.test(visible), `${id} must keep the docx intercept wording`);
+  });
+  return "heavy air defense text is docx-aligned.";
+});
+
+testCase("TC-V052-060B", "P0", "Active card visible text does not expose old-version combat wording", () => {
+  const legacyPattern = /减伤|不提供减伤|隐身突防|SEAD|反辐射|布兰杰|轰炸机不被/;
+  Object.values(CARD_LIBRARY).forEach((card) => {
+    const visible = [
+      card.name,
+      card.unitAttribute,
+      card.ruleNote,
+      card.effect,
+      ...(card.displayTags || []),
+    ].filter(Boolean).join("\n");
+    assert(!legacyPattern.test(visible), `${card.id} visible text contains old-version wording: ${visible}`);
+  });
+  return "active visible card text is free of known V0.5.2 legacy wording.";
 });
 
 testCase("TC-V052-001/002/004/015", "P0", "摧毁得分、50 分胜利、牌库耗尽不直接判负", () => {

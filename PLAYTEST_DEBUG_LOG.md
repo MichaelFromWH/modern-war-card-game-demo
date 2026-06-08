@@ -1,5 +1,28 @@
 # 对局排查日志
 
+## 2026-06-09 线上 PVP 与 AI 对战交互/裁决一致性修复
+
+来源：Michael 线上 PVP 实测反馈：复制邀请链接未进入剪贴板且不展示地址；渗透单位前线接敌时仍无法完整执行隐蔽部署与强制暴露；复仇者打击无人机时先入弃牌堆再播放打击；轰炸机/远火多目标只打默认前排或一个单位；补给选择卡面仍保留旧 UI；F-35A/HIMARS 对烟幕目标伤害少 1；重型防空卡面出现文档中不存在的轰炸机文字；前线突破无法显式执行。
+
+修复：
+
+- `src/online-battle-engine.js` 增加显式 `frontline_breakthrough` 服务端动作，海马斯/Tornado-S/B-2/Tu-160 支持按玩家选择顺序结算多目标，烟幕护盾只清除状态不再减伤。
+- `src/main.js` 对齐 AI/PVP 前端流程：多目标需确认且第一个选择为主目标；联机快照先在旧战场播放暴露/打击/摧毁动画，再应用服务器结算后战场；渗透部署前线会迫使敌方非渗透隐蔽单位暴露但自身保持隐蔽；前线突破改为点击突破窗口后依次选突破单位和支援区目标。
+- `src/game-data.js`、`GAME_MECHANICS.md`、`GAME_CONTENT_V0.5.2.md` 同步 V0.5.2 docx 文本：重型防空不再在卡面提“轰炸机”，海马斯/Tornado-S 使用文档目标描述。
+- `styles.css` 修正补给选择卡面为 hover 同款视觉预览、显示线上邀请链接、补充多目标选中序号和前线突破按钮样式。
+
+验证结果：
+
+- `node --check server.js`
+- `node --check src/main.js`
+- `node --check src/card-design.js`
+- `node --check src/online-battle-engine.js`
+- `node --check scripts/v052-regression-tests.mjs`
+- `node scripts/v052-regression-tests.mjs`：27/27 通过。
+- `http://127.0.0.1:3000/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`。
+- 浏览器 smoke：AI 对战进入开局调度，战地维修在无受损单位时打开补给选择，候选卡为 `war-card--visual-preview war-card--detailed war-card--preview`，补给候选阵营角标隐藏。
+- 浏览器 smoke：线上 1v1 创建房间后邀请链接输入框可见，点击“复制邀请链接”后剪贴板读取到完整邀请 URL。
+
 ## 2026-06-08 渗透隐蔽、侦察调火视频顺序与接敌演出修复
 
 来源：Michael 实测反馈：渗透单位无法在前线接敌状态下隐蔽部署；侦察暴露后需要先翻牌再播放榴弹炮/火箭炮视频并结算；俄方 hover 卡面技能文本覆盖数值；前线接敌应先播放所有被迫暴露单位的视频。

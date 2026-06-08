@@ -234,13 +234,13 @@ const UNIT_ATTRIBUTE_NOTES = {
   榴弹炮: "可打击所有战线的地面和低空单位，适合被侦察单位校射。",
   火箭炮: "可覆盖所有战线的地面和低空单位，适合压制同一战线多个目标。",
   伴随防空: "可打击低空和高空单位，并可拦截巡航导弹。",
-  重型防空: "可打击高空单位，并可拦截战斗机和所有类型导弹，不拦截轰炸机。",
+  重型防空: "可打击高空单位，并可拦截战斗机和所有类型导弹。",
   无人机: "主要负责侦查、暴露和校射，默认不承担常规攻击。",
   巡航导弹: "可打击地面和低空单位，包括无人机和直升机；不能打击高空单位。",
   弹道导弹: "可打击地面和低空单位，包括无人机和直升机；不能打击高空单位。",
   战斗机: "高空单位，可执行制空和精确打击；会被重型防空拦截。",
   SEAD战斗机: "V0.5.2 已取消专职 SEAD 口径；F-35A/Su-57 按普通战斗机对地打击处理。",
-  轰炸机: "高空单位，擅长对地面和后排装备进行范围打击；不被重型防空拦截。",
+  轰炸机: "高空单位，擅长对地面和后排装备进行范围打击。",
   战斗轰炸机: "高空单位，偏重对地打击，也会被防空单位拦截。",
 };
 const DECK_STORAGE_PREFIX = "warzone.customDeck.v1";
@@ -303,6 +303,8 @@ const state = {
     battleSnapshot: null,
     lastEffectSerial: 0,
     effectPlayback: Promise.resolve(),
+    effectPlaybackActive: false,
+    pendingSnapshot: null,
     error: "",
     name: loadOnlineName(),
     joinCode: getInitialOnlineRoomCode(),
@@ -931,6 +933,8 @@ function handleAction(action) {
   } else if (action === "toggle-log") {
     gameAudio.play("ui.switch");
     toggleLogPanel();
+  } else if (action === "frontline-breakthrough") {
+    startFrontlineBreakthroughSelection();
   } else if (action === "online-focus") {
     focusOnlinePanel();
   } else if (action === "online-create-room") {
@@ -957,6 +961,8 @@ function handleAction(action) {
     if (side && uid) {
       handleBoardTarget(side, uid);
     }
+  } else if (action === "confirm-targets") {
+    confirmPendingTargets();
   } else if (action.startsWith("codex:")) {
     state.codexFaction = action.split(":")[1] || "usa";
     renderCodex();
@@ -1477,6 +1483,7 @@ function renderNoMansLand(battle) {
       <span>NO MAN'S LAND</span>
       <strong>前线突破窗口</strong>
       <small>${getSideName(battle, breakthrough.side)}可突破${getSideName(battle, breakthrough.opponent)}支援区</small>
+      ${breakthrough.side === "player" ? `<button type="button" data-action="frontline-breakthrough">执行突破</button>` : ""}
     </div>
   `;
 }
@@ -1794,7 +1801,7 @@ function renderWarCard(card, options = {}) {
     generated ? "war-card--generated-card" : "",
     detailArtPath ? "war-card--generated-detail" : "",
     liveDetailOverlay ? "war-card--live-detail-overlay" : "",
-    options.preview && generated ? "war-card--visual-preview" : "",
+    options.preview ? "war-card--visual-preview" : "",
     options.preview ? "war-card--detailed" : "war-card--simple",
     isHandThumbnail ? "war-card--thumbnail" : "",
     options.preview ? "war-card--preview" : "",
@@ -2278,7 +2285,7 @@ function getCardRuleBullets(card) {
     bullets.push(attribute === "弹道导弹" ? "只能被重型防空拦截。" : "可被伴随防空或重型防空拦截。");
   }
   if (attribute === "重型防空") {
-    bullets.push("可保护前线和支援区，拦截战斗机和导弹，不拦截轰炸机。");
+    bullets.push("可保护前线和支援区，拦截战斗机和导弹。");
   }
   if (attribute === "SEAD战斗机") {
     bullets.push("V0.5.2 中按普通战斗机处理，不再指定隐蔽防空。");
@@ -2302,10 +2309,12 @@ function renderIntentTargetButton(target) {
   const artPath = concealed ? CARD_BACK_ART_PATH : getCardThumbnailArtPath(targetCard);
   const targetLabel = concealed ? `${side}${lineLabel}隐蔽单位` : `${side}${lineLabel}${targetCard.name}`;
   const cardClass = concealed ? "intent-target__card intent-target__card--back" : "intent-target__card";
+  const selectionIndex = getPendingTargetSelectionIndex(target);
+  const selectedClass = selectionIndex >= 0 ? " is-selected" : "";
 
   return `
     <button
-      class="intent-target ${concealed ? "intent-target--concealed" : ""}"
+      class="intent-target ${concealed ? "intent-target--concealed" : ""}${selectedClass}"
       type="button"
       data-action="choose-target:${target.side}:${target.uid}"
       data-board-card="${target.uid}"
@@ -2320,10 +2329,19 @@ function renderIntentTargetButton(target) {
       >
         ${concealed ? "" : `<i>${power}</i><b>${escapeHtml(targetCard.name)}</b>`}
       </span>
+      ${selectionIndex >= 0 ? `<em class="intent-target__order">${selectionIndex + 1}</em>` : ""}
       ${concealed ? "" : `<strong>${escapeHtml(targetCard.name)}</strong>`}
       <span class="intent-target__line">${escapeHtml(side)} / ${escapeHtml(lineLabel)}</span>
     </button>
   `;
+}
+
+function getPendingTargetSelectionIndex(target) {
+  const selected = state.pending?.selectedTargets;
+  if (!Array.isArray(selected)) {
+    return -1;
+  }
+  return selected.findIndex((item) => item.side === target.side && item.uid === target.uid);
 }
 
 function renderIntent() {
@@ -2344,18 +2362,214 @@ function renderIntent() {
   const targetButtons = state.pending.targets.map((target) => renderIntentTargetButton(target)).join("");
   const isInterceptChoice = state.pending.kind === "interceptChoice";
   const isCallFireChoice = state.pending.kind === "callFireChoice";
-  const intentLabel = isInterceptChoice ? "选择拦截单位" : isCallFireChoice ? "选择校射单位" : "选择目标";
+  const isBreakthroughSource = state.pending.kind === "breakthroughSource";
+  const isBreakthroughTarget = state.pending.kind === "breakthroughTarget";
+  const isMultiTarget = isMultiTargetPending(state.pending);
+  const selectedCount = state.pending.selectedTargets?.length || 0;
+  const maxTargets = getPendingMaxTargets(state.pending);
+  const intentLabel = isInterceptChoice
+    ? "选择拦截单位"
+    : isCallFireChoice
+      ? "选择校射单位"
+      : isBreakthroughSource
+        ? "选择突破单位"
+        : isBreakthroughTarget
+          ? "选择支援区目标"
+          : isMultiTarget
+            ? "选择多个目标"
+            : "选择目标";
   const isForcedChoice = isInterceptChoice || isCallFireChoice;
   refs.intent.hidden = false;
   refs.intent.innerHTML = `
     <div>
-      <span>${intentLabel} · ${state.pending.targets.length}</span>
+      <span>${intentLabel} · ${isMultiTarget ? `${selectedCount}/${maxTargets}` : state.pending.targets.length}</span>
       <strong>${escapeHtml(card.name)}</strong>
       <p>${escapeHtml(getIntentCopy(card, state.pending))}</p>
       <div class="intent-targets">${targetButtons}</div>
     </div>
-    ${isForcedChoice ? "" : `<button type="button" data-action="cancel">取消</button>`}
+    ${isMultiTarget ? `<button type="button" data-action="confirm-targets" ${selectedCount ? "" : "disabled"}>确认目标</button>` : isForcedChoice ? "" : `<button type="button" data-action="cancel">取消</button>`}
   `;
+}
+
+function isMultiTargetPending(pending = state.pending) {
+  return Boolean(pending?.ability?.kind === "areaDamage" && getPendingMaxTargets(pending) > 1);
+}
+
+function getPendingMaxTargets(pending = state.pending) {
+  return Math.max(1, Number(pending?.ability?.maxTargets) || 1);
+}
+
+function togglePendingTargetSelection(side, uid) {
+  const pending = state.pending;
+  if (!pending || !isMultiTargetPending(pending)) {
+    return false;
+  }
+  const target = pending.targets.find((item) => item.side === side && item.uid === uid);
+  if (!target) {
+    return false;
+  }
+  pending.selectedTargets ||= [];
+  const existingIndex = pending.selectedTargets.findIndex((item) => item.side === side && item.uid === uid);
+  if (existingIndex >= 0) {
+    pending.selectedTargets.splice(existingIndex, 1);
+  } else if (pending.selectedTargets.length < getPendingMaxTargets(pending)) {
+    pending.selectedTargets.push({ side, uid });
+  } else {
+    gameAudio.play("ui.error");
+    return true;
+  }
+  gameAudio.play("target.lock");
+  render();
+  return true;
+}
+
+function getPendingSelectedTargetRefs(pending = state.pending) {
+  if (!pending) {
+    return [];
+  }
+  return (pending.selectedTargets || [])
+    .map((selected) => pending.targets.find((target) => target.side === selected.side && target.uid === selected.uid))
+    .filter(Boolean);
+}
+
+function confirmPendingTargets() {
+  const battle = state.battle;
+  const pending = state.pending;
+  if (!battle || !pending || !isMultiTargetPending(pending)) {
+    return;
+  }
+  const selectedTargets = getPendingSelectedTargetRefs(pending);
+  if (!selectedTargets.length) {
+    gameAudio.play("ui.error");
+    return;
+  }
+  if (isOnlineAuthoritativeBattle()) {
+    sendOnlineBattleAction({
+      kind: "choose_target",
+      targetSide: selectedTargets[0].side,
+      targetUid: selectedTargets[0].uid,
+      selectedTargets: selectedTargets.map((target) => ({ side: target.side, uid: target.uid })),
+    });
+    return;
+  }
+  state.pending = null;
+  state.selectedHandUid = null;
+  const result = resolveEffectOnTarget(battle, {
+    side: pending.side,
+    handUid: pending.handUid,
+    sourceUid: pending.sourceUid,
+    cardId: pending.cardId,
+    ability: pending.ability,
+    target: selectedTargets[0],
+    selectedTargets,
+  }, {
+    skipCardFireVideo: Boolean(pending.skipCardFireVideo),
+    pacedFinish: pending.kind === "boardEffect",
+  });
+  if (result === "pending-animation" || result === "pending") {
+    return;
+  }
+  if (pending.kind === "boardEffect") {
+    finishActionWithResolutionHold(battle, pending.side, { pacedFinish: true });
+    return;
+  }
+  finishAction(pending.side);
+}
+
+function startFrontlineBreakthroughSelection() {
+  const battle = state.battle;
+  const visualState = getBreakthroughVisualState(battle);
+  if (!battle || !visualState || visualState.side !== "player" || !canPlayerAct()) {
+    gameAudio.play("ui.error");
+    return;
+  }
+  const targets = battle.board.player.frontline
+    .map((instance) => ({ side: "player", lineId: "frontline", uid: instance.uid, instance }))
+    .filter((target) => canSourceUseBreakthrough(battle, "player", target));
+  if (!targets.length) {
+    gameAudio.play("ui.error");
+    return;
+  }
+  const cardId = targets[0].instance.cardId;
+  state.selectedHandUid = null;
+  state.pending = {
+    kind: "breakthroughSource",
+    side: "player",
+    cardId,
+    targets,
+  };
+  gameAudio.play("target.lock");
+  render();
+}
+
+function openBreakthroughTargetSelection(sourceTarget) {
+  const battle = state.battle;
+  if (!battle || !sourceTarget?.instance) {
+    state.pending = null;
+    render();
+    return;
+  }
+  const sourceRef = findBoardInstance(battle, "player", sourceTarget.uid);
+  if (!canSourceUseBreakthrough(battle, "player", sourceRef)) {
+    state.pending = null;
+    gameAudio.play("ui.error");
+    render();
+    return;
+  }
+  const targets = getAllBoardTargets(battle, "enemy")
+    .filter((target) => target.lineId === "support" && getCurrentPower(target.instance) > 0);
+  if (!targets.length) {
+    state.pending = null;
+    gameAudio.play("ui.error");
+    battle.log.push("敌方支援区没有可突破目标。");
+    render();
+    return;
+  }
+  state.pending = {
+    kind: "breakthroughTarget",
+    side: "player",
+    sourceUid: sourceRef.instance.uid,
+    cardId: sourceRef.instance.cardId,
+    targets,
+  };
+  gameAudio.play("target.lock");
+  render();
+}
+
+function executeFrontlineBreakthrough(targetSide, targetUid) {
+  const battle = state.battle;
+  const pending = state.pending;
+  if (!battle || pending?.kind !== "breakthroughTarget") {
+    return;
+  }
+  const sourceRef = findBoardInstance(battle, "player", pending.sourceUid);
+  const target = findBoardInstance(battle, targetSide, targetUid);
+  if (!canSourceUseBreakthrough(battle, "player", sourceRef) || !target || target.side !== "enemy" || target.lineId !== "support") {
+    state.pending = null;
+    gameAudio.play("ui.error");
+    render();
+    return;
+  }
+  if (isOnlineAuthoritativeBattle()) {
+    sendOnlineBattleAction({
+      kind: "frontline_breakthrough",
+      sourceUid: sourceRef.instance.uid,
+      targetSide,
+      targetUid,
+    });
+    state.pending = null;
+    render();
+    return;
+  }
+  const sourceCard = getCard(sourceRef.instance.cardId);
+  markBoardActionUsed(battle, "player");
+  markUnitActed(battle, sourceRef.instance);
+  state.pending = null;
+  const result = resolveBreakthroughAction(battle, "player", sourceCard, sourceRef, target, sourceCard.ability);
+  if (result === "pending-animation" || result === "pending") {
+    return;
+  }
+  finishActionWithResolutionHold(battle, "player", { pacedFinish: true });
 }
 
 function renderSupplyChoice() {
@@ -2536,7 +2750,7 @@ function renderGuide() {
     {
       index: "04",
       title: "火力链",
-      body: "侦察单位先翻开目标，远火、导弹、战斗机和轰炸机作为驻场单位兑现伤害；巡航/弹道导弹可打击地面和低空目标，巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截；轰炸机不被重型防空拦截。",
+      body: "侦察单位先翻开目标，远火、导弹、战斗机和轰炸机作为驻场单位兑现伤害；巡航/弹道导弹可打击地面和低空目标，巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截。",
     },
     {
       index: "05",
@@ -2645,6 +2859,7 @@ function renderOnlinePanel() {
   const matchSeed = online.match?.seed || "";
   const readyLabel = online.matchReady ? "已准备" : online.ready ? "取消准备" : "准备";
   const statusText = getOnlineStatusText();
+  const inviteUrl = inRoom ? getOnlineInviteUrl(online.roomCode) : "";
 
   refs.onlinePanel.classList.toggle("is-in-room", inRoom);
   refs.onlinePanel.classList.toggle("is-match-ready", online.matchReady);
@@ -2677,6 +2892,7 @@ function renderOnlinePanel() {
         <div class="online-room-code">
           <span>当前房间</span>
           <strong>${inRoom ? escapeHtml(online.roomCode) : "未创建"}</strong>
+          ${inRoom ? `<label class="online-invite-link"><span>邀请链接</span><input type="text" readonly value="${escapeHtml(inviteUrl)}" aria-label="线上房间邀请链接" /></label>` : ""}
           <button class="small-button" type="button" data-action="online-copy-code" ${inRoom ? "" : "disabled"}>复制邀请链接</button>
         </div>
         <div class="online-slots">
@@ -3156,9 +3372,29 @@ function handleBoardTarget(side, uid) {
     return;
   }
 
+  if (state.pending?.kind === "breakthroughSource") {
+    if (!isPendingTarget(side, uid) || side !== "player") {
+      return;
+    }
+    const selectedSource = state.pending.targets.find((target) => target.side === side && target.uid === uid);
+    openBreakthroughTargetSelection(selectedSource);
+    return;
+  }
+
+  if (state.pending?.kind === "breakthroughTarget") {
+    if (!isPendingTarget(side, uid)) {
+      return;
+    }
+    executeFrontlineBreakthrough(side, uid);
+    return;
+  }
+
   if (isOnlineAuthoritativeBattle()) {
     if (state.pending) {
       if (!isPendingTarget(side, uid)) {
+        return;
+      }
+      if (togglePendingTargetSelection(side, uid)) {
         return;
       }
       sendOnlineBattleAction({
@@ -3185,6 +3421,9 @@ function handleBoardTarget(side, uid) {
   }
 
   if (!isPendingTarget(side, uid)) {
+    return;
+  }
+  if (togglePendingTargetSelection(side, uid)) {
     return;
   }
 
@@ -3481,7 +3720,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
   }
 
   if (ability.kind === "areaDamage") {
-    const areaTargets = getAreaDamageTargets(battle, payload.side, ability, target, { sourceRef, sourceCard });
+    const areaTargets = getAreaDamageTargets(battle, payload.side, ability, target, { sourceRef, sourceCard, selectedTargets: payload.selectedTargets });
     areaTargets.forEach((areaTarget, index) => {
       if (areaTarget.instance.hidden && canRevealHiddenTargetForAbility(ability, areaTarget.instance)) {
         exposeInstance(battle, areaTarget, sourceCard.name);
@@ -6079,6 +6318,14 @@ function resolveHighAirEngagement(battle, side, deployedRef) {
 }
 
 function getAreaDamageTargets(battle, side, ability, primaryTarget, context = {}) {
+  const maxTargets = Number.isFinite(ability.maxTargets) ? Math.max(1, ability.maxTargets) : Infinity;
+  if (Array.isArray(context.selectedTargets) && context.selectedTargets.length) {
+    return context.selectedTargets
+      .map((target) => findBoardInstance(battle, target.side, target.uid))
+      .filter(Boolean)
+      .filter((target) => canTargetForAbility(battle, side, target, ability, context) && matchesTargetRequirements(target.instance, ability))
+      .slice(0, maxTargets === Infinity ? undefined : maxTargets);
+  }
   const rows = ability.sameLineOnly ? [primaryTarget.lineId] : ability.rows || [primaryTarget.lineId];
   const candidates = getAllBoardTargets(battle, primaryTarget.side).filter((target) => {
     if (!rows.includes(target.lineId)) {
@@ -6094,13 +6341,16 @@ function getAreaDamageTargets(battle, side, ability, primaryTarget, context = {}
     if (right.uid === primaryTarget.uid) return 1;
     return getCurrentPower(right.instance) - getCurrentPower(left.instance);
   });
-  return ordered.slice(0, ability.maxTargets || ordered.length);
+  return ordered.slice(0, maxTargets === Infinity ? undefined : maxTargets);
 }
 
 function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete) {
   const deployedCard = getCard(deployedRef.instance.cardId);
-  if (deployedRef.lineId !== "frontline" || !isFrontlineContactUnit(deployedCard) || deployedCard.contactException) {
+  if (deployedRef.lineId !== "frontline" || !isFrontlineContactUnit(deployedCard)) {
     return false;
+  }
+  if (deployedCard.contactException) {
+    return startInfiltrationFrontlineRevealSequence(battle, side, deployedRef, onComplete);
   }
 
   const opponent = side === "player" ? "enemy" : "player";
@@ -6141,6 +6391,49 @@ function startFrontlineEngagementSequence(battle, side, deployedRef, onComplete)
   render();
   window.setTimeout(() => {
     resolveFrontlineEngagementFirePhase(battle, side, deployedRef.instance.uid, ambusherUids, videoSources, onComplete);
+  }, CONTACT_REVEAL_HOLD_MS);
+  return true;
+}
+
+function startInfiltrationFrontlineRevealSequence(battle, side, deployedRef, onComplete) {
+  if (!deployedRef.instance.hidden) {
+    return false;
+  }
+  const deployedCard = getCard(deployedRef.instance.cardId);
+  const opponent = side === "player" ? "enemy" : "player";
+  const targets = battle.board[opponent].frontline.filter((instance) => {
+    const card = getCard(instance.cardId);
+    return instance.hidden && getCurrentPower(instance) > 0 && !card.contactException;
+  });
+  if (!targets.length) {
+    return false;
+  }
+
+  const targetUids = targets.map((instance) => instance.uid);
+  targets.forEach((instance) => {
+    exposeInstance(battle, { side: opponent, lineId: "frontline", instance }, deployedCard.name, { ignoreDecoy: true });
+  });
+  battle.log.push(`${deployedCard.name} 渗透进入前线，迫使 ${targets.length} 个敌方前线单位暴露。`);
+  battle.actionAnimation = {
+    kind: "frontlineContact",
+    phase: "reveal",
+    side,
+    sourceUid: deployedRef.instance.uid,
+    targetUids,
+  };
+  render();
+  window.setTimeout(() => {
+    if (state.battle !== battle || battle.phase !== "battle") {
+      return;
+    }
+    playFrontlineContactExposureVideos(battle, [{ side, uid: deployedRef.instance.uid }]).finally(() => {
+      if (state.battle !== battle || battle.phase !== "battle") {
+        return;
+      }
+      battle.actionAnimation = null;
+      render();
+      onComplete?.();
+    });
   }, CONTACT_REVEAL_HOLD_MS);
   return true;
 }
@@ -6893,6 +7186,7 @@ function canPlayerAct() {
       !battle.aiThinking &&
       !battle.actionAnimation &&
       !battle.pendingSide &&
+      !state.online.effectPlaybackActive &&
       (!battle.finalActions || battle.finalActions.player > 0),
   );
 }
@@ -6908,7 +7202,8 @@ function canPlayerEndTurn() {
       !battle.pendingSide &&
       !battle.turnTransition &&
       !battle.aiThinking &&
-      !battle.actionAnimation,
+      !battle.actionAnimation &&
+      !state.online.effectPlaybackActive,
   );
 }
 
@@ -7440,8 +7735,10 @@ function enterOnlineAuthoritativeBattle(snapshot) {
     renderOnlinePanel();
     return;
   }
-  state.online.lastEffectSerial = 0;
+  state.online.lastEffectSerial = getMaxOnlineEffectSerial(snapshot.battle.effects || []);
   state.online.effectPlayback = Promise.resolve();
+  state.online.effectPlaybackActive = false;
+  state.online.pendingSnapshot = null;
   state.battle = hydrateOnlineBattle(snapshot.battle);
   warmVisibleBattleAssets(state.battle, { priority: true });
   state.screen = "battle";
@@ -7478,13 +7775,66 @@ function applyOnlineBattleSnapshot(snapshot) {
   const previousBattle = state.battle;
   const previousMulliganActive = state.mulligan.active;
   const nextBattle = hydrateOnlineBattle(snapshot.battle);
+  const freshEffects = getFreshOnlineBattleEffects(nextBattle.effects || []);
+  if (shouldStageOnlineBattleSnapshot(freshEffects, previousBattle, nextBattle)) {
+    state.online.pendingSnapshot = { snapshot, nextBattle, previousBattle, previousMulliganActive };
+    state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, getMaxOnlineEffectSerial(freshEffects));
+    state.pending = null;
+    state.selectedHandUid = null;
+    render();
+    queueOnlineBattleEffectPlayback(freshEffects, {
+      onComplete: () => {
+        if (state.online.pendingSnapshot?.snapshot !== snapshot) {
+          return;
+        }
+        const pending = state.online.pendingSnapshot;
+        state.online.pendingSnapshot = null;
+        state.online.effectPlaybackActive = false;
+        applyOnlineSnapshotState(pending.snapshot, pending.nextBattle, pending.previousBattle, pending.previousMulliganActive);
+      },
+    });
+    return;
+  }
+  applyOnlineSnapshotState(snapshot, nextBattle, previousBattle, previousMulliganActive);
+  playOnlineBattleEffects(nextBattle.effects || []);
+}
+
+function applyOnlineSnapshotState(snapshot, nextBattle, previousBattle, previousMulliganActive) {
   applyOnlineTurnTransition(previousBattle, nextBattle, previousMulliganActive, Boolean(snapshot.mulligan?.active));
   state.battle = nextBattle;
   state.pending = snapshot.pending || null;
   state.mulligan = snapshot.mulligan || { active: false, selectedUids: [] };
   state.selectedHandUid = null;
   render();
-  playOnlineBattleEffects(nextBattle.effects || []);
+}
+
+function shouldStageOnlineBattleSnapshot(freshEffects, previousBattle, nextBattle) {
+  return Boolean(
+    previousBattle &&
+      nextBattle?.phase === "battle" &&
+      freshEffects.some((effect) =>
+        effect.type === "damage" ||
+          effect.type === "destroyed" ||
+          effect.type === "intercept" ||
+          (effect.type === "expose" && effect.playSourceVideo)
+      ),
+  );
+}
+
+function getFreshOnlineBattleEffects(effects = []) {
+  if (!Array.isArray(effects) || !effects.length) {
+    return [];
+  }
+  return effects
+    .filter((effect) => Number(effect.serial) > (state.online.lastEffectSerial || 0))
+    .sort((left, right) => Number(left.serial || 0) - Number(right.serial || 0));
+}
+
+function getMaxOnlineEffectSerial(effects = []) {
+  if (!Array.isArray(effects) || !effects.length) {
+    return 0;
+  }
+  return Math.max(0, ...effects.map((effect) => Number(effect.serial || 0)));
 }
 
 function isOnlineAuthoritativeBattle() {
@@ -7529,13 +7879,21 @@ function playOnlineBattleEffects(effects = []) {
   if (!Array.isArray(effects) || !effects.length || state.screen !== "battle") {
     return;
   }
-  const freshEffects = effects
-    .filter((effect) => Number(effect.serial) > (state.online.lastEffectSerial || 0))
-    .sort((left, right) => Number(left.serial || 0) - Number(right.serial || 0));
+  const freshEffects = getFreshOnlineBattleEffects(effects);
   if (!freshEffects.length) {
     return;
   }
   state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, ...freshEffects.map((effect) => Number(effect.serial || 0)));
+  queueOnlineBattleEffectPlayback(freshEffects);
+}
+
+function queueOnlineBattleEffectPlayback(freshEffects, options = {}) {
+  if (!freshEffects.length) {
+    return;
+  }
+  const playbackToken = Symbol("online-effect-playback");
+  state.online.effectPlaybackToken = playbackToken;
+  state.online.effectPlaybackActive = true;
   state.online.effectPlayback = (state.online.effectPlayback || Promise.resolve())
     .then(async () => {
       const videoKeys = new Set();
@@ -7543,54 +7901,18 @@ function playOnlineBattleEffects(effects = []) {
         await playOnlineBattleEffect(effect, videoKeys);
       }
     })
-    .catch(() => {});
-  return;
-  freshEffects.forEach((effect) => {
-    const sourceCard = getCard(effect.sourceCardId) || getCard(effect.targetCardId) || getCard("us_marine_rifle");
-    if (effect.type === "damage") {
-      const targetRef = findBoardInstance(state.battle, effect.targetSide, effect.targetUid) || {
-        side: effect.targetSide,
-        lineId: effect.lineId || "frontline",
-        uid: effect.targetUid,
-        instance: { uid: effect.targetUid, cardId: effect.targetCardId, damage: 0 },
-      };
-      playCombatVfx({
-        attackerSide: effect.attackerSide || "player",
-        sourceCard,
-        targetRef,
-        amount: effect.amount || 1,
-      });
-    } else if (effect.type === "destroyed") {
-      const targetCard = getCard(effect.targetCardId) || sourceCard;
-      const fromPoint = getElementCenter(getBoardCardElement(effect.targetSide, effect.targetUid)) || getFallbackVfxPoint(effect.targetSide, effect.lineId || "frontline");
-      playCardFlightFromPoint(targetCard, effect.targetSide, fromPoint, getPileElement(effect.targetSide, "grave"), { back: true, duration: 760 });
-      playDestroyedVfx(effect.targetSide, effect.targetUid);
-      playImpactVfx(fromPoint, "destroyed", 4);
-    } else if (effect.type === "intercept") {
-      const interceptorRef = findBoardInstance(state.battle, effect.targetSide, effect.interceptorUid);
-      const targetRef = interceptorRef || findBoardInstance(state.battle, effect.targetSide, effect.targetUid) || {
-        side: effect.targetSide,
-        lineId: effect.lineId || "support",
-        uid: effect.targetUid,
-        instance: { uid: effect.targetUid, cardId: effect.targetCardId || "us_marine_rifle", damage: 0 },
-      };
-      playBlockedVfx(targetRef, "拦截");
-    } else if (effect.type === "draw") {
-      const side = effect.targetSide || "player";
-      const amount = Math.max(1, Number(effect.amount) || 1);
-      const cardBack = getCard("us_marine_rifle");
-      for (let index = 0; index < amount; index += 1) {
-        window.setTimeout(() => {
-          playCardFlightBetweenElements(cardBack, side, getPileElement(side, "deck"), getHandDestinationElement(side), { back: true, duration: 660 });
-        }, index * 90);
+    .catch(() => {})
+    .finally(() => {
+      if (state.online.effectPlaybackToken !== playbackToken) {
+        return;
       }
-    } else if (effect.type === "discard") {
-      const side = effect.targetSide || "player";
-      const discardCard = getCard(effect.targetCardId) || getCard("us_marine_rifle");
-      playCardFlightFromPoint(discardCard, side, getFallbackHandPoint(side), getPileElement(side, "grave"), { back: false, duration: 680 });
-    }
-  });
-  state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, ...freshEffects.map((effect) => Number(effect.serial || 0)));
+      if (typeof options.onComplete === "function") {
+        options.onComplete();
+        return;
+      }
+      state.online.effectPlaybackActive = false;
+      render();
+    });
 }
 
 async function playOnlineBattleEffect(effect, videoKeys) {
@@ -7628,6 +7950,10 @@ async function playOnlineBattleEffect(effect, videoKeys) {
   } else if (effect.type === "deploy") {
     playOnlineDeployEffect(effect, sourceCard);
   } else if (effect.type === "expose") {
+    if (effect.playSourceVideo) {
+      await playOnlineFireVideoForEffect(effect, sourceCard, videoKeys);
+    }
+    revealOnlineEffectTarget(effect);
     playOnlineStatusEffect(effect, "暴露");
   } else if (effect.type === "shield") {
     playOnlineStatusEffect(effect, "烟幕");
@@ -7643,6 +7969,19 @@ async function playOnlineBattleEffect(effect, videoKeys) {
     const side = effect.targetSide || "player";
     const discardCard = getCard(effect.targetCardId) || getCard("us_marine_rifle");
     playCardFlightFromPoint(discardCard, side, getFallbackHandPoint(side), getPileElement(side, "grave"), { back: false, duration: 680 });
+  }
+}
+
+function revealOnlineEffectTarget(effect) {
+  const targetRef = findBoardInstance(state.battle, effect.targetSide, effect.targetUid);
+  if (!targetRef?.instance) {
+    return;
+  }
+  if (targetRef.instance.hidden || !targetRef.instance.exposed) {
+    targetRef.instance.hidden = false;
+    targetRef.instance.exposed = true;
+    markCardFlip(targetRef.instance, "reveal");
+    renderBoard();
   }
 }
 
@@ -7701,11 +8040,19 @@ function getOnlineEffectTargetRef(effect) {
 }
 
 async function playOnlineFireVideoForEffect(effect, sourceCard, videoKeys) {
-  if (!["damage", "intercept"].includes(effect.type) || !sourceCard || !getCardFireVideoPath(sourceCard)) {
+  if (!["damage", "intercept", "expose"].includes(effect.type) || !sourceCard || !getCardFireVideoPath(sourceCard)) {
     return;
   }
   const sourceRef = getOnlineEffectSourceRef(effect);
-  if (!sourceRef || sourceRef.instance.hidden || sourceRef.instance.masked) {
+  if (!sourceRef || sourceRef.instance.masked) {
+    return;
+  }
+  if (effect.type === "expose" && sourceRef.instance.hidden) {
+    sourceRef.instance.hidden = false;
+    sourceRef.instance.exposed = true;
+    markCardFlip(sourceRef.instance, "reveal");
+  }
+  if (sourceRef.instance.hidden) {
     return;
   }
   const videoKey = `${effect.atAction || ""}:${effect.sourceSide || effect.attackerSide || ""}:${effect.sourceUid || ""}:${sourceCard.id}`;
@@ -7755,6 +8102,9 @@ function leaveOnlineRoom() {
     battleSnapshot: null,
     lastEffectSerial: 0,
     effectPlayback: Promise.resolve(),
+    effectPlaybackActive: false,
+    pendingSnapshot: null,
+    effectPlaybackToken: null,
     lastEvent: "已离开线上房间。",
   });
   renderOnlinePanel();
@@ -7765,13 +8115,56 @@ async function copyOnlineRoomCode() {
     return;
   }
   const inviteUrl = getOnlineInviteUrl(state.online.roomCode);
-  try {
-    await navigator.clipboard.writeText(inviteUrl);
+  if (await writeClipboardText(inviteUrl, ".online-invite-link input")) {
     state.online.lastEvent = `邀请链接已复制，房间码 ${state.online.roomCode}。`;
-  } catch {
+  } else {
     state.online.lastEvent = `邀请链接：${inviteUrl}`;
   }
   renderOnlinePanel();
+}
+
+async function writeClipboardText(text, selector = "") {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall back to the legacy copy path below.
+  }
+  const visibleInput = selector ? document.querySelector(selector) : null;
+  if (visibleInput) {
+    try {
+      visibleInput.focus();
+      visibleInput.select();
+      visibleInput.setSelectionRange(0, visibleInput.value.length);
+      if (document.execCommand("copy")) {
+        return true;
+      }
+    } catch {
+      // Fall back to the temporary textarea path below.
+    }
+  }
+  try {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "0";
+    textarea.style.top = "0";
+    textarea.style.width = "1px";
+    textarea.style.height = "1px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    return copied;
+  } catch {
+    return false;
+  }
 }
 
 function ensureOnlineSocket() {

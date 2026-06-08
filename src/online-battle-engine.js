@@ -93,6 +93,8 @@ export function applyBattleAction(battle, side, action = {}) {
       return applyActivateUnit(battle, side, action);
     case "choose_target":
       return applyChooseTarget(battle, side, action);
+    case "frontline_breakthrough":
+      return applyFrontlineBreakthrough(battle, side, action);
     case "choose_supply":
       return applyChooseSupply(battle, side, action);
     case "pass_turn":
@@ -259,6 +261,7 @@ function applyPlayUnit(battle, side, action) {
     targetCardId: instance.hidden ? null : card.id,
   });
   resolveFrontlineContact(battle, side, sourceRef);
+  resolveInfiltrationFrontlineReveal(battle, side, sourceRef);
   enforceHighAirExposure(battle);
   if (battle.pending) {
     finishActionAfterResolved(battle, side);
@@ -389,8 +392,8 @@ function applyChooseTarget(battle, side, action) {
   if (battle.pending.kind === "supplyChoice") {
     return applyChooseSupply(battle, side, action);
   }
-  const targetSide = mapViewerSideToServer(action.targetSide, side);
-  const target = battle.pending.targets.find((item) => item.side === targetSide && item.uid === action.targetUid);
+  const selectedTargets = getSelectedPendingTargets(battle.pending, action, side);
+  const target = selectedTargets[0] || null;
   if (!target) {
     return { ok: false, error: "目标已失效。" };
   }
@@ -439,10 +442,73 @@ function applyChooseTarget(battle, side, action) {
     return { ok: true };
   }
 
-  const result = resolveEffectOnTarget(battle, side, pending, target);
+  const result = resolveEffectOnTarget(battle, side, pending, target, { selectedTargets });
   if (result === "pending") {
     return { ok: true };
   }
+  finishActionAfterResolved(battle, side);
+  return { ok: true };
+}
+
+function getSelectedPendingTargets(pending, action, viewerSide) {
+  if (!pending?.targets?.length) {
+    return [];
+  }
+  const rawTargets = Array.isArray(action.selectedTargets) && action.selectedTargets.length
+    ? action.selectedTargets
+    : [{ side: action.targetSide, uid: action.targetUid }];
+  const selected = [];
+  const seen = new Set();
+  const limit = pending.ability?.kind === "areaDamage"
+    ? Math.max(1, pending.ability.maxTargets || 1)
+    : 1;
+  rawTargets.forEach((raw) => {
+    if (!raw?.uid || selected.length >= limit) {
+      return;
+    }
+    const serverSide = mapViewerSideToServer(raw.side || action.targetSide, viewerSide);
+    const key = `${serverSide}:${raw.uid}`;
+    if (seen.has(key)) {
+      return;
+    }
+    const target = pending.targets.find((item) => item.side === serverSide && item.uid === raw.uid);
+    if (target) {
+      seen.add(key);
+      selected.push(target);
+    }
+  });
+  return selected;
+}
+
+function applyFrontlineBreakthrough(battle, side, action) {
+  const ready = assertCanAct(battle, side);
+  if (!ready.ok) return ready;
+  if (battle.pending) {
+    return { ok: false, error: "请先完成当前目标选择。" };
+  }
+  const sourceRef = findBoardInstance(battle, side, action.sourceUid);
+  if (!canSourceUseBreakthrough(battle, side, sourceRef)) {
+    return { ok: false, error: "当前没有可执行前线突破的单位。" };
+  }
+  const targetSide = mapViewerSideToServer(action.targetSide, side);
+  const opponent = getOpponentSide(side);
+  if (targetSide !== opponent) {
+    return { ok: false, error: "前线突破只能选择敌方支援区目标。" };
+  }
+  const targetRef = findBoardInstance(battle, targetSide, action.targetUid);
+  if (!targetRef || targetRef.lineId !== "support" || getCurrentPower(targetRef.instance) <= 0) {
+    return { ok: false, error: "请选择一个敌方支援区目标。" };
+  }
+
+  const sourceCard = getCard(sourceRef.instance.cardId);
+  markBoardActionUsed(battle, side);
+  markUnitActed(battle, sourceRef.instance);
+  const result = resolveBreakthroughOnTarget(battle, side, sourceRef, sourceCard.ability, targetRef);
+  if (result === "pending") {
+    return { ok: true };
+  }
+  cleanupDestroyed(battle, side);
+  enforceHighAirExposure(battle);
   finishActionAfterResolved(battle, side);
   return { ok: true };
 }
@@ -543,7 +609,7 @@ function maybeOpenPendingOrResolve(battle, side, sourceUid, ability, kind) {
   };
 }
 
-function resolveEffectOnTarget(battle, side, pending, targetRef) {
+function resolveEffectOnTarget(battle, side, pending, targetRef, options = {}) {
   const sourceCard = getCard(pending.cardId);
   const ability = pending.ability || {};
   const sourceRef = pending.sourceUid ? findBoardInstance(battle, side, pending.sourceUid) : null;
@@ -579,7 +645,7 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
   }
 
   if (ability.kind === "areaDamage") {
-    const targets = getAreaDamageTargets(battle, side, ability, targetRef);
+    const targets = getAreaDamageTargets(battle, side, ability, targetRef, { selectedTargets: options.selectedTargets });
     for (const [index, item] of targets.entries()) {
       const amount = index === 0
         ? getDamageAmount(battle, side, ability, item, sourceCard)
@@ -595,7 +661,7 @@ function resolveEffectOnTarget(battle, side, pending, targetRef) {
 
   if (ability.kind === "exposeAndCallFire") {
     const freshExpose = targetRef.instance.hidden;
-    exposeTarget(battle, targetRef, sourceCard.name, { attackerSide: side, sourceCardId: sourceCard.id, sourceRef });
+    exposeTarget(battle, targetRef, sourceCard.name, { attackerSide: side, sourceCardId: sourceCard.id, sourceRef, playSourceVideo: true });
     const callFireOptions = getCallableFireOptions(battle, side, ability, targetRef, { freshExpose });
     if (callFireOptions.length > 1) {
       battle.pending = {
@@ -937,16 +1003,28 @@ function matchesTargetRequirements(instance, ability = {}) {
   return true;
 }
 
-function getAreaDamageTargets(battle, side, ability, primaryTarget) {
-  const row = battle.board[primaryTarget.side][primaryTarget.lineId]
-    .filter((instance) => getCurrentPower(instance) > 0)
-    .map((instance) => ({ side: primaryTarget.side, lineId: primaryTarget.lineId, uid: instance.uid, instance }))
-    .filter((target) => canTargetForAbility(battle, side, target, { ...ability, hiddenOnly: false }));
+function getAreaDamageTargets(battle, side, ability, primaryTarget, options = {}) {
+  const maxTargets = Math.max(1, ability.maxTargets || 2);
+  if (Array.isArray(options.selectedTargets) && options.selectedTargets.length) {
+    return options.selectedTargets
+      .map((target) => findBoardInstance(battle, target.side, target.uid))
+      .filter(Boolean)
+      .filter((target) => canTargetForAbility(battle, side, target, { ...ability, hiddenOnly: false }) && matchesTargetRequirements(target.instance, ability))
+      .slice(0, maxTargets);
+  }
+
+  const rows = ability.sameLineOnly ? [primaryTarget.lineId] : ability.rows || [primaryTarget.lineId];
+  const candidates = getAllBoardTargets(battle, primaryTarget.side)
+    .filter((target) => rows.includes(target.lineId))
+    .filter((target) => getCurrentPower(target.instance) > 0)
+    .filter((target) => canTargetForAbility(battle, side, target, { ...ability, hiddenOnly: false }) && matchesTargetRequirements(target.instance, ability));
   const ordered = [
     primaryTarget,
-    ...row.filter((item) => item.uid !== primaryTarget.uid),
+    ...candidates
+      .filter((item) => item.uid !== primaryTarget.uid)
+      .sort((left, right) => getCurrentPower(right.instance) - getCurrentPower(left.instance)),
   ];
-  return ordered.slice(0, ability.maxTargets || 2);
+  return ordered.slice(0, maxTargets);
 }
 
 function getDamageAmount(battle, side, ability = {}, targetRef, sourceCard) {
@@ -977,7 +1055,7 @@ function getDamageAmount(battle, side, ability = {}, targetRef, sourceCard) {
   if (ability.flatBonus) {
     amount += ability.flatBonus;
   }
-  return Math.max(0, amount - (targetRef.instance.shield ? 1 : 0));
+  return Math.max(0, amount);
 }
 
 function getSecondaryDamageAmount(ability = {}, targetRef) {
@@ -1201,7 +1279,8 @@ function exposeTarget(battle, targetRef, sourceName, options = {}) {
   targetRef.instance.hidden = false;
   targetRef.instance.exposed = true;
   if (changed || options.forceEffect) {
-    pushBoardEffect(battle, "expose", options.attackerSide || targetRef.side, targetRef, options.sourceCardId || null, 1, options.sourceRef || null);
+    const { attackerSide, sourceCardId, sourceRef, forceEffect, ...effectExtra } = options;
+    pushBoardEffect(battle, "expose", attackerSide || targetRef.side, targetRef, sourceCardId || null, 1, sourceRef || null, effectExtra);
   }
   battle.log.push(`${sourceName} 暴露 ${getCard(targetRef.instance.cardId).name}。`);
   return changed;
@@ -1297,6 +1376,32 @@ function resolveFrontlineContact(battle, side, deployedRef) {
     resolveFrontlineContactFire(battle, side, liveDeployed, opponent, responseTargets[0]);
     cleanupDestroyed(battle, side);
   }
+}
+
+function resolveInfiltrationFrontlineReveal(battle, side, deployedRef) {
+  const deployedCard = getCard(deployedRef.instance.cardId);
+  if (deployedRef.lineId !== "frontline" || !deployedCard?.contactException || !deployedRef.instance.hidden) {
+    return false;
+  }
+  const opponent = getOpponentSide(side);
+  const revealed = getAllBoardTargets(battle, opponent)
+    .filter((target) => target.lineId === "frontline" && target.instance.hidden && getCurrentPower(target.instance) > 0)
+    .filter((target) => {
+      const card = getCard(target.instance.cardId);
+      return !card.contactException;
+    });
+  revealed.forEach((target) => {
+    exposeTarget(battle, target, deployedCard.name, {
+      attackerSide: side,
+      sourceCardId: deployedCard.id,
+      sourceRef: deployedRef,
+      playSourceVideo: true,
+    });
+  });
+  if (revealed.length) {
+    battle.log.push(`${deployedCard.name} 渗透进入前线，迫使 ${revealed.length} 个敌方前线单位暴露。`);
+  }
+  return revealed.length > 0;
 }
 
 function resolveFrontlineContactFire(battle, attackerSide, sourceRef, defenderSide, targetRef, options = {}) {
