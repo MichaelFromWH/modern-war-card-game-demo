@@ -774,3 +774,14 @@
 验证记录：
 - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\validate-unity-playable-stage.ps1 -LogPath 'D:\Unity\BattleVfxSandbox\Logs\ModernWarCardsValidate_match_restart_green2.log'` 通过。
 - 验证覆盖 Unity Runtime 编译、Unity Editor 编译、`ValidateMigrationFromBatch`、`playable battle HUD`、结束态胜负反馈、本地“再开一局”按钮、点击后回到新的 mulligan 开局；结果为 `Modern War Cards migration validation passed`。
+## 2026-06-09 Web 联机对战：部署后立即开火视频跳过
+
+来源：Michael 反馈线上 PVP 在线对战里，卡牌部署后经常还没播放单位开火视频就完成了打击结算。
+根因：服务端权威快照会把“部署成功”和“立即打击后的伤害结果”一次性发给客户端；客户端为了等待动画播放会暂存最终快照，但渲染仍使用旧战场状态，导致刚部署的开火单位还不在 DOM 里，`playCardFireVideo()` 找不到棋盘卡牌视频节点后直接跳过。
+修复记录：
+- 新增 `src/online-animation-state.js`，在播放联机效果前构造只用于动画的中间战场状态：把下一快照中已经公开的开火来源先放到场上，但不提前应用伤害、摧毁、得分等最终结算。
+- `src/main.js` 的 `applyOnlineBattleSnapshot()` 在排队播放新效果前先渲染该动画中间态，视频播放结束后再应用最终权威快照。
+- 为避免泄露信息，隐藏部署效果如果没有可见卡牌 ID，不会在动画中间态提前物化或翻开；只有需要播放开火视频且来源已公开的效果才会强制露出来源节点。
+验证记录：
+- `node scripts/v052-regression-tests.mjs` 通过，29/29。
+- `node --check src/main.js`、`node --check src/online-animation-state.js`、`node --check scripts/v052-regression-tests.mjs` 通过。

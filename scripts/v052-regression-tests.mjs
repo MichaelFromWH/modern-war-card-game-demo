@@ -13,6 +13,9 @@ import {
   VICTORY_SCORE,
   getCard,
 } from "../src/game-data.js";
+import {
+  buildOnlineEffectAnimationBattle,
+} from "../src/online-animation-state.js";
 
 const SIDES = ["player", "enemy"];
 const LINE_IDS = LINES.map((line) => line.id);
@@ -802,6 +805,91 @@ testCase("TC-V052-060B", "P0", "Active card visible text does not expose old-ver
     assert(!legacyPattern.test(visible), `${card.id} visible text contains old-version wording: ${visible}`);
   });
   return "active visible card text is free of known V0.5.2 legacy wording.";
+});
+
+testCase("TC-V052-061", "P0", "Online staged playback materializes newly deployed firing source before applying damage snapshot", () => {
+  const previous = createBattle("online-animation-previous");
+  const himars = addHand(previous, "player", "us_himars");
+  const target = addBoard(previous, "enemy", "support", "ru_buk_m3", { exposed: true });
+
+  const next = structuredClone(previous);
+  next.hands.player = next.hands.player.filter((instance) => instance.uid !== himars.uid);
+  next.board.player.support.push({
+    ...himars,
+    hidden: false,
+    exposed: true,
+    deployedAtAction: 1,
+  });
+  const nextTarget = next.board.enemy.support.find((instance) => instance.uid === target.uid);
+  nextTarget.damage = 3;
+
+  const staged = buildOnlineEffectAnimationBattle(previous, next, [
+    {
+      type: "deploy",
+      serial: 1,
+      sourceSide: "player",
+      sourceLineId: "support",
+      sourceUid: himars.uid,
+      sourceCardId: "us_himars",
+      targetSide: "player",
+      lineId: "support",
+      targetUid: himars.uid,
+      targetCardId: "us_himars",
+    },
+    {
+      type: "damage",
+      serial: 2,
+      sourceSide: "player",
+      sourceLineId: "support",
+      sourceUid: himars.uid,
+      sourceCardId: "us_himars",
+      targetSide: "enemy",
+      lineId: "support",
+      targetUid: target.uid,
+      targetCardId: "ru_buk_m3",
+      amount: 3,
+    },
+  ]);
+
+  assert(staged.board.player.support.some((instance) => instance.uid === himars.uid), "staged battle should contain newly deployed firing source");
+  assert(!staged.hands.player.some((instance) => instance.uid === himars.uid), "staged battle should remove deployed source from hand to avoid duplicates");
+  const stagedTarget = staged.board.enemy.support.find((instance) => instance.uid === target.uid);
+  assert(stagedTarget.damage === 0, "staged battle must not apply final damage before the video resolves");
+  assert(previous.board.player.support.length === 0, "previous battle should not be mutated");
+  assert(previous.hands.player.some((instance) => instance.uid === himars.uid), "previous hand should not be mutated");
+  return "online animation middle state can render a deployed firing source without pre-applying damage.";
+});
+
+testCase("TC-V052-061A", "P0", "Online animation middle state does not reveal hidden deployments just because a deploy effect exists", () => {
+  const previous = createBattle("online-hidden-deploy-previous");
+  const scout = addHand(previous, "player", "us_rangers_target");
+  const next = structuredClone(previous);
+  next.hands.player = next.hands.player.filter((instance) => instance.uid !== scout.uid);
+  next.board.player.frontline.push({
+    ...scout,
+    hidden: true,
+    exposed: false,
+    deployedAtAction: 1,
+  });
+
+  const staged = buildOnlineEffectAnimationBattle(previous, next, [
+    {
+      type: "deploy",
+      serial: 1,
+      sourceSide: "player",
+      sourceLineId: "frontline",
+      sourceUid: scout.uid,
+      sourceCardId: null,
+      targetSide: "player",
+      lineId: "frontline",
+      targetUid: scout.uid,
+      targetCardId: null,
+    },
+  ]);
+
+  assert(!staged.board.player.frontline.some((instance) => instance.uid === scout.uid), "hidden deployment should not be materialized as a visible animation source");
+  assert(staged.hands.player.some((instance) => instance.uid === scout.uid), "previous hidden hand state should remain until the final snapshot applies");
+  return "hidden deploy effects do not leak concealed units in the animation middle state.";
 });
 
 testCase("TC-V052-001/002/004/015", "P0", "摧毁得分、50 分胜利、牌库耗尽不直接判负", () => {

@@ -26,6 +26,9 @@ import {
   isModernUnitCard,
   renderRarityStars,
 } from "./card-design.js";
+import {
+  buildOnlineEffectAnimationBattle,
+} from "./online-animation-state.js";
 
 const refs = {
   app: document.querySelector("#app"),
@@ -7777,10 +7780,12 @@ function applyOnlineBattleSnapshot(snapshot) {
   const nextBattle = hydrateOnlineBattle(snapshot.battle);
   const freshEffects = getFreshOnlineBattleEffects(nextBattle.effects || []);
   if (shouldStageOnlineBattleSnapshot(freshEffects, previousBattle, nextBattle)) {
+    const animationBattle = hydrateOnlineBattle(buildOnlineEffectAnimationBattle(previousBattle, nextBattle, freshEffects));
     state.online.pendingSnapshot = { snapshot, nextBattle, previousBattle, previousMulliganActive };
     state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, getMaxOnlineEffectSerial(freshEffects));
     state.pending = null;
     state.selectedHandUid = null;
+    state.battle = animationBattle;
     render();
     queueOnlineBattleEffectPlayback(freshEffects, {
       onComplete: () => {
