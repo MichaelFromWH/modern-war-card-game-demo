@@ -81,6 +81,16 @@ const BGM_PLAYLIST = [
 
 const BATTLEFIELD_BACKGROUND_PATH = "./assets/backgrounds/battlefield-board.optimized.webp";
 const CARD_BACK_ART_PATH = "./assets/ui/card-back-frame.webp";
+const BREAKTHROUGH_GROUND_PLATFORM_TAGS = [
+  "步兵",
+  "装甲",
+  "榴弹炮",
+  "火箭炮",
+  "伴随防空",
+  "重型防空",
+  "弹道导弹",
+];
+const BREAKTHROUGH_GROUND_ATTACK_TAGS = new Set(["步兵", "装甲"]);
 const HOME_BOOT_IMAGE_ASSETS = [
   "./assets/backgrounds/homepage-v3.optimized.webp",
   "./assets/backgrounds/details-page-v3.optimized.webp",
@@ -5844,10 +5854,22 @@ function getBreakthroughStrikeAbility(ability) {
   return {
     ...ability,
     rows: [...new Set([...(ability.rows || []), "support"])],
+    requiresAnyTag: getBreakthroughRequiresAnyTag(ability),
     canRevealHidden: true,
     allowSupport: true,
     requiresExposed: false,
   };
+}
+
+function getBreakthroughRequiresAnyTag(ability = {}) {
+  if (!Array.isArray(ability.requiresAnyTag)) {
+    return ability.requiresAnyTag;
+  }
+  const canHitGround = ability.requiresAnyTag.some((tag) => BREAKTHROUGH_GROUND_ATTACK_TAGS.has(tag));
+  if (!canHitGround) {
+    return ability.requiresAnyTag;
+  }
+  return [...new Set([...ability.requiresAnyTag, ...BREAKTHROUGH_GROUND_PLATFORM_TAGS])];
 }
 
 function getAllBoardTargets(battle, side) {

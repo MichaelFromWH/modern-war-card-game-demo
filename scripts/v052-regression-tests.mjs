@@ -767,6 +767,43 @@ testCase("TC-V052-023A", "P0", "Frontline breakthrough is an explicit expose-fir
   return "explicit breakthrough separates reveal-only and reveal-plus-damage cases.";
 });
 
+testCase("TC-V052-023B", "P0", "Frontline breakthrough treats support artillery, air defense, and ballistic missile cards as ground platforms", () => {
+  const groundPlatformIds = ["ru_2s19", "ru_tornado_s", "ru_pantsir", "ru_buk_m3", "ru_iskander"];
+  groundPlatformIds.forEach((targetCardId) => {
+    const battle = createBattle(`breakthrough-ground-platform-${targetCardId}`);
+    battle.turnActions.player.enemyFrontlineEmptyAtStart = true;
+    battle.turnActions.player.ownBoardEmptyAtStart = false;
+    const tank = addBoard(battle, "player", "frontline", "us_m1a2", { deployedAtAction: 0 });
+    const target = addBoard(battle, "enemy", "support", targetCardId, { hidden: true, exposed: false });
+    assertAction(applyBattleAction(battle, "player", {
+      kind: "frontline_breakthrough",
+      sourceUid: tank.uid,
+      targetSide: "enemy",
+      targetUid: target.uid,
+    }), `M1A2 breakthrough damages ${targetCardId} as a ground platform`);
+    assert(target.instance.hidden === false && target.instance.exposed === true, `${targetCardId} should be exposed by breakthrough`);
+    assert(target.instance.damage >= 4, `${targetCardId} should take ground-platform breakthrough damage`);
+  });
+  return "frontline breakthrough can damage support-zone ground platforms, including vehicle-mounted ballistic missiles.";
+});
+
+testCase("TC-V052-023C", "P0", "Frontline breakthrough does not treat cruise missiles as ground platforms", () => {
+  const battle = createBattle("breakthrough-cruise-missile-expose-only");
+  battle.turnActions.player.enemyFrontlineEmptyAtStart = true;
+  battle.turnActions.player.ownBoardEmptyAtStart = false;
+  const tank = addBoard(battle, "player", "frontline", "us_m1a2", { deployedAtAction: 0 });
+  const cruiseMissile = addBoard(battle, "enemy", "support", "ru_kalibr", { hidden: true, exposed: false });
+  assertAction(applyBattleAction(battle, "player", {
+    kind: "frontline_breakthrough",
+    sourceUid: tank.uid,
+    targetSide: "enemy",
+    targetUid: cruiseMissile.uid,
+  }), "M1A2 breakthrough exposes but does not damage a cruise missile card");
+  assert(cruiseMissile.instance.hidden === false && cruiseMissile.instance.exposed === true, "cruise missile should be exposed by breakthrough");
+  assert(cruiseMissile.instance.damage === 0, "cruise missile should not take ground-platform breakthrough damage");
+  return "cruise missiles remain non-ground breakthrough targets.";
+});
+
 testCase("TC-V052-038A", "P0", "Recon call-fire effects order plays scout mark before reveal before called-fire damage", () => {
   const battle = createBattle("recon-effect-order");
   const scout = addBoard(battle, "player", "frontline", "us_rangers_target");

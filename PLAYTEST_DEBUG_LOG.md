@@ -785,3 +785,17 @@
 验证记录：
 - `node scripts/v052-regression-tests.mjs` 通过，29/29。
 - `node --check src/main.js`、`node --check src/online-animation-state.js`、`node --check scripts/v052-regression-tests.mjs` 通过。
+
+## 2026-06-09 前线突破：地面支援平台只暴露不受伤
+
+来源：Michael 反馈前线突破时，突破单位明明具备地面打击能力，但对方地面支援单位只被暴露，日志显示无法进行打击。
+根因：突破裁决复用了普通主技能的 `requiresAnyTag`。坦克/装甲主技能主要面向前线目标，常写为可打 `步兵 / 装甲`；支援区的榴弹炮、火箭炮、伴随防空、重型防空和车载弹道导弹虽然属于地面平台，但标签不是 `步兵 / 装甲`，因此被误判为不可打击。
+修复记录：
+- `src/online-battle-engine.js` 和 `src/main.js` 的前线突破派生打击能力增加地面平台标签扩展，仅作用于突破裁决，不改变普通开火目标规则。
+- 纳入突破地面平台：`步兵`、`装甲`、`榴弹炮`、`火箭炮`、`伴随防空`、`重型防空`、`弹道导弹`。
+- `巡航导弹` 不纳入地面平台，仍按非地面目标处理。
+验证记录：
+- 新增 `TC-V052-023B`：M1A2 前线突破可伤害姆斯塔榴弹炮、Tornado-S、Pantsir-S1、Buk-M3、伊斯坎德尔。
+- 新增 `TC-V052-023C`：M1A2 前线突破口径巡航导弹只暴露不伤害。
+- `node scripts/v052-regression-tests.mjs` 通过，31/31。
+- `node --check src/main.js`、`node --check src/online-battle-engine.js`、`node --check scripts/v052-regression-tests.mjs` 通过。

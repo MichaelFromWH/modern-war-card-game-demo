@@ -14,6 +14,16 @@ const LINE_CAPACITY = {
   frontline: 7,
   support: 6,
 };
+const BREAKTHROUGH_GROUND_PLATFORM_TAGS = [
+  "步兵",
+  "装甲",
+  "榴弹炮",
+  "火箭炮",
+  "伴随防空",
+  "重型防空",
+  "弹道导弹",
+];
+const BREAKTHROUGH_GROUND_ATTACK_TAGS = new Set(["步兵", "装甲"]);
 
 export function createAuthoritativeBattle({ roomCode, match, players }) {
   const battle = {
@@ -947,9 +957,21 @@ function getBreakthroughStrikeAbility(ability) {
     ...ability,
     kind: ability.kind === "areaDamage" ? "damage" : ability.kind,
     rows: [...new Set([...(ability.rows || []), "support"])],
+    requiresAnyTag: getBreakthroughRequiresAnyTag(ability),
     canRevealHidden: true,
     requiresExposed: false
   };
+}
+
+function getBreakthroughRequiresAnyTag(ability = {}) {
+  if (!Array.isArray(ability.requiresAnyTag)) {
+    return ability.requiresAnyTag;
+  }
+  const canHitGround = ability.requiresAnyTag.some((tag) => BREAKTHROUGH_GROUND_ATTACK_TAGS.has(tag));
+  if (!canHitGround) {
+    return ability.requiresAnyTag;
+  }
+  return [...new Set([...ability.requiresAnyTag, ...BREAKTHROUGH_GROUND_PLATFORM_TAGS])];
 }
 
 function resolveBreakthroughOnTarget(battle, side, sourceRef, ability, targetRef) {
