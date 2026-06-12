@@ -5281,6 +5281,78 @@ Object.entries(V052_20260527_RULE_PATCHES).forEach(([cardId, patch]) => {
   }
 });
 
+const HIGH_AIR_RULE_NOTE = "高空：若双方场上同时存在高空单位，无论是否隐蔽，所有高空单位都会立即暴露。";
+const RECON_RULE_NOTE = "侦察：可以选定隐蔽单位并使其暴露，可以直接选定支援区单位。";
+const INTERCEPT_RULE_NOTE = "拦截：仅能在敌方回合触发。";
+
+const V053_20260611_DISPLAY_TEXT_PATCHES = {
+  "us_rangers_target": {
+    "ruleNote": `步兵：可以攻击地面单位。${RECON_RULE_NOTE}渗透：本单位不会因前线接敌而暴露。`
+  },
+  "us_reaper": {
+    "ruleNote": `无人机：无法攻击。${RECON_RULE_NOTE}`
+  },
+  "us_avenger": {
+    "ruleNote": `伴随防空：可以攻击低空和高空单位。${INTERCEPT_RULE_NOTE}`
+  },
+  "us_patriot": {
+    "ruleNote": `重型防空：可以攻击高空单位。${INTERCEPT_RULE_NOTE}`
+  },
+  "us_himars": {
+    "effect": "选择最多两个目标，对次要目标攻击力为1。若目标为步兵，伤害+1，对所有目标生效。"
+  },
+  "us_b2": {
+    "ruleNote": `轰炸机：可以攻击地面单位，一次攻击多个目标。${HIGH_AIR_RULE_NOTE}`,
+    "effect": "选择最多两个目标，对次要目标攻击力为3。"
+  },
+  "us_f35": {
+    "ruleNote": `战斗机：可以攻击所有战线单位。${HIGH_AIR_RULE_NOTE}`
+  },
+  "us_f35a_sead": {
+    "ruleNote": `战斗机：可以攻击所有战线单位。${HIGH_AIR_RULE_NOTE}`
+  },
+  "us_electronic_suppression": {
+    "effect": "干扰一个目标，持续一回合。"
+  },
+  "ru_spetsnaz_target": {
+    "displayTags": ["步兵"],
+    "unitAttribute": "步兵",
+    "ruleNote": `步兵：可以攻击地面单位。${RECON_RULE_NOTE}渗透：本单位不会因前线接敌而暴露。`
+  },
+  "ru_orlan10": {
+    "ruleNote": `无人机：无法攻击。${RECON_RULE_NOTE}`
+  },
+  "ru_pantsir": {
+    "ruleNote": `伴随防空：可以攻击低空和高空单位。${INTERCEPT_RULE_NOTE}`
+  },
+  "ru_buk_m3": {
+    "ruleNote": `重型防空：可以攻击高空单位。${INTERCEPT_RULE_NOTE}`
+  },
+  "ru_tornado_s": {
+    "effect": "选择最多三个目标造成伤害，对2个次要目标攻击力为1。"
+  },
+  "ru_su34": {
+    "ruleNote": `轰炸机：可以攻击地面单位，一次攻击多个目标。${HIGH_AIR_RULE_NOTE}`,
+    "effect": "选择最多两个目标，对次要目标攻击力为3。"
+  },
+  "ru_su35": {
+    "ruleNote": `战斗机：可以攻击所有战线单位。${HIGH_AIR_RULE_NOTE}`
+  },
+  "ru_su57_sead": {
+    "ruleNote": `战斗机：可以攻击所有战线单位。${HIGH_AIR_RULE_NOTE}`
+  },
+  "ru_electronic_suppression": {
+    "effect": "干扰一个目标，持续一回合。"
+  }
+};
+
+Object.entries(V053_20260611_DISPLAY_TEXT_PATCHES).forEach(([cardId, patch]) => {
+  const card = CARD_LIBRARY[cardId];
+  if (card) {
+    Object.assign(card, patch);
+  }
+});
+
 Object.entries(CARD_DISPLAY_ORDER).forEach(([factionId, cardIds]) => {
   cardIds.forEach((cardId, index) => {
     const card = CARD_LIBRARY[cardId];

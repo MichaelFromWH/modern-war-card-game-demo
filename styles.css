@@ -9700,6 +9700,34 @@ button:disabled {
   letter-spacing: 0;
 }
 
+.board-card__fire-lock {
+  position: absolute;
+  z-index: 12;
+  top: 5px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 17px;
+  border: 1px solid rgba(255, 198, 130, 0.52);
+  border-radius: 3px;
+  padding: 0 5px;
+  color: #ffe5b0;
+  background:
+    linear-gradient(180deg, rgba(104, 20, 18, 0.92), rgba(39, 8, 8, 0.9));
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55), inset 0 0 8px rgba(255, 217, 148, 0.12);
+  font-family: var(--ui-font);
+  font-size: clamp(9px, 1.02svmin, 12px);
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.board-card.is-fire-locked .card-thumb-hud__rating {
+  top: 25px;
+}
+
 .card-thumb-hud__rating {
   position: absolute;
   left: 8px;
@@ -10770,6 +10798,112 @@ button:disabled {
 .battle-stage .round-plaque__scores em {
   color: rgba(246, 239, 221, 0.72);
   font-size: clamp(22px, 3.8svmin, 42px);
+}
+
+.round-plaque__resources {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.round-plaque__resources > span {
+  grid-column: 1 / -1;
+  color: rgba(246, 239, 221, 0.58);
+  font-size: clamp(8px, 0.88svmin, 11px);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.round-plaque__resource {
+  position: relative;
+  min-width: 0;
+  height: clamp(17px, 2.0svmin, 23px);
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid rgba(223, 196, 126, 0.34);
+  border-radius: 3px;
+  padding: 0 4px;
+  color: #f6efdd;
+  background: rgba(6, 8, 8, 0.58);
+  box-shadow: inset 0 0 10px rgba(226, 196, 126, 0.07);
+  font-style: normal;
+  letter-spacing: 0;
+  pointer-events: auto;
+}
+
+.round-plaque__resource::after {
+  position: absolute;
+  z-index: 40;
+  top: 50%;
+  left: calc(100% + 8px);
+  width: min(220px, 40vw);
+  padding: 8px 9px;
+  border: 1px solid rgba(223, 196, 126, 0.35);
+  border-radius: 4px;
+  color: #f6efdd;
+  background: rgba(10, 12, 11, 0.94);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+  content: attr(data-help);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translateY(-50%) translateX(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  white-space: normal;
+}
+
+.round-plaque__resource:hover::after,
+.round-plaque__resource:focus::after,
+.round-plaque__resource:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+.round-plaque__resource:hover::after {
+  opacity: 1 !important;
+  transform: translateY(-50%) translateX(0) !important;
+}
+
+.round-plaque__resource:focus::after,
+.round-plaque__resource:focus-visible::after {
+  opacity: 1 !important;
+  transform: translateY(-50%) translateX(0) !important;
+}
+
+.round-plaque__resource b {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(246, 239, 221, 0.74);
+  font-size: clamp(8px, 0.86svmin, 10px);
+  font-weight: 800;
+  line-height: 1;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.round-plaque__resource em {
+  color: #ffe29b;
+  font-family: var(--ui-font);
+  font-size: clamp(11px, 1.18svmin, 14px);
+  font-style: normal;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.round-plaque__resource.is-spent {
+  opacity: 0.42;
+}
+
+.round-plaque__resources.is-opponent {
+  opacity: 0.64;
 }
 
 .battle-stage .round-plaque small {

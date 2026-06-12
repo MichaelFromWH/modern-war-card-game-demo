@@ -80,6 +80,7 @@ export function createAuthoritativeBattle({ roomCode, match, players }) {
     battle.decks[side] = createDeckForSide(battle, side, faction, loadout.deck);
     drawCards(battle, side, 7, { silent: true, triggerExhaustion: false });
   });
+  SIDES.forEach((side) => resetTurnActions(battle, side));
 
   return battle;
 }
@@ -232,7 +233,7 @@ function applyPlayUnit(battle, side, action) {
     return { ok: false, error: "请先完成当前目标选择。" };
   }
   if (!canUseUnitDeployment(battle, side)) {
-    return { ok: false, error: "本回合单位部署额度已经用完。" };
+    return { ok: false, error: "通用点不足，无法继续部署单位。" };
   }
 
   const handIndex = battle.hands[side].findIndex((item) => item.uid === action.handUid);
@@ -291,8 +292,8 @@ function applyPlayTactic(battle, side, action) {
   if (battle.pending) {
     return { ok: false, error: "请先完成当前目标选择。" };
   }
-  if (getTurnActions(battle, side).tacticPlayed) {
-    return { ok: false, error: "本回合已经打出过一张战术牌。" };
+  if (!canUseTacticAction(battle, side)) {
+    return { ok: false, error: "本回合战术资源已经用完。" };
   }
 
   const handIndex = battle.hands[side].findIndex((item) => item.uid === action.handUid);
@@ -444,7 +445,9 @@ function applyChooseTarget(battle, side, action) {
   if (pending.kind === "frontlineContact") {
     const sourceRef = findBoardInstance(battle, side, pending.sourceUid);
     if (sourceRef) {
-      resolveFrontlineContactFire(battle, side, sourceRef, target.side, target);
+      resolveFrontlineContactFire(battle, side, sourceRef, target.side, target, {
+        allowDestroyedSource: pending.allowDestroyedSource,
+      });
       cleanupDestroyed(battle, side);
       enforceHighAirExposure(battle);
     }
@@ -646,7 +649,7 @@ function resolveEffectOnTarget(battle, side, pending, targetRef, options = {}) {
     if (targetRef.instance.hidden && canRevealHiddenTargetForAbility(ability, targetRef.instance)) {
       exposeTarget(battle, targetRef, sourceCard.name, { attackerSide: side, sourceCardId: sourceCard.id, sourceRef });
     }
-    const result = dealDamage(battle, side, targetRef, getDamageAmount(battle, side, ability, targetRef, sourceCard), sourceCard, ability, sourceRef);
+    const result = dealDirectDamageWithCounterattack(battle, side, targetRef, getDamageAmount(battle, side, ability, targetRef, sourceCard), sourceCard, ability, sourceRef);
     if (result === "pending") {
       return "pending";
     }
@@ -1096,6 +1099,9 @@ function getSecondaryDamageAmount(ability = {}, targetRef) {
 
 function applyInterception(battle, attackerSide, targetRef, amount, sourceCard, ability = {}, sourceRef = null) {
   const defenderSide = targetRef.side;
+  if (battle.activeSide === defenderSide) {
+    return amount;
+  }
   const targetCard = getCard(targetRef.instance.cardId);
   if (ability.ignoreInterceptionForTargetTags?.some((tag) => targetCard.tags.includes(tag))) {
     return amount;
@@ -1238,6 +1244,59 @@ function dealDamage(battle, attackerSide, targetRef, amount, sourceCard, ability
   return applyDamageAfterInterception(battle, attackerSide, targetRef, finalAmount, sourceCard, sourceRef);
 }
 
+function dealDirectDamageWithCounterattack(battle, attackerSide, targetRef, amount, sourceCard, ability = {}, sourceRef = null) {
+  const counterPlan = getCounterattackPlan(battle, attackerSide, sourceRef, sourceCard, targetRef, ability);
+  const result = dealDamage(battle, attackerSide, targetRef, amount, sourceCard, ability, sourceRef);
+  if (result === "pending" || !counterPlan) {
+    return result;
+  }
+  return resolveCounterattackPlan(battle, counterPlan);
+}
+
+function getCounterattackPlan(battle, attackerSide, sourceRef, sourceCard, targetRef, attackingAbility = {}) {
+  if (!battle || !sourceRef?.instance || !targetRef?.instance || !isDirectAttackAbility(attackingAbility)) {
+    return null;
+  }
+  if (attackingAbility.kind === "areaDamage" || sourceRef.side === targetRef.side) {
+    return null;
+  }
+  const defenderSide = targetRef.side;
+  const defenderCard = getCard(targetRef.instance.cardId);
+  const defenderAbility = defenderCard?.ability;
+  if (!defenderAbility || !isDirectAttackAbility(defenderAbility) || defenderAbility.kind === "areaDamage") {
+    return null;
+  }
+  if (targetRef.instance.hidden || targetRef.instance.suppressed || getCurrentPower(targetRef.instance) <= 0 || getCurrentPower(sourceRef.instance) <= 0) {
+    return null;
+  }
+  const isFrontlineCounter = sourceRef.lineId === "frontline" && targetRef.lineId === "frontline";
+  const isHighAirCounter = isHighAirUnit(sourceCard) && isHighAirUnit(defenderCard);
+  if (!isFrontlineCounter && !isHighAirCounter) {
+    return null;
+  }
+  if (!canTargetForAbility(battle, defenderSide, sourceRef, defenderAbility, defenderCard, { sourceRef: targetRef }) ||
+      !matchesTargetRequirements(sourceRef.instance, defenderAbility)) {
+    return null;
+  }
+  return {
+    kind: isHighAirCounter ? "highAir" : "frontline",
+    attackerSide: defenderSide,
+    sourceRef: targetRef,
+    sourceCard: defenderCard,
+    targetRef: sourceRef,
+    ability: defenderAbility,
+  };
+}
+
+function resolveCounterattackPlan(battle, plan) {
+  if (!plan?.sourceRef?.instance || !plan?.targetRef?.instance) {
+    return "resolved";
+  }
+  const amount = getDamageAmount(battle, plan.attackerSide, plan.ability, plan.targetRef, plan.sourceCard);
+  battle.log.push(`${plan.sourceCard.name} 触发${plan.kind === "highAir" ? "高空反击" : "前线反击"}。`);
+  return dealDamage(battle, plan.attackerSide, plan.targetRef, amount, plan.sourceCard, plan.ability, plan.sourceRef);
+}
+
 function applyDamageAfterInterception(battle, attackerSide, targetRef, amount, sourceCard, sourceRef = null) {
   let finalAmount = amount;
   if (finalAmount <= 0) {
@@ -1277,11 +1336,12 @@ function cleanupDestroyed(battle, attackerSide) {
         const [destroyed] = row.splice(index, 1);
         battle.graves[side].push(destroyed);
         const value = getCardTargetValue(getCard(destroyed.cardId));
-        battle.scores[attackerSide] += value;
-        battle.log.push(`${getSideName(battle, attackerSide)}摧毁 ${getCard(destroyed.cardId).name}，获得 ${value} 分。`);
+        const scorer = destroyed.lastDamagedBy || attackerSide;
+        battle.scores[scorer] += value;
+        battle.log.push(`${getSideName(battle, scorer)}摧毁 ${getCard(destroyed.cardId).name}，获得 ${value} 分。`);
         pushEffect(battle, {
           type: "destroyed",
-          attackerSide,
+          attackerSide: scorer,
           targetSide: side,
           lineId: line.id,
           targetUid: destroyed.uid,
@@ -1372,12 +1432,12 @@ function resolveFrontlineContact(battle, side, deployedRef) {
     exposeInstanceRef(battle, ambusher, "前线接敌");
     if (findBoardInstance(battle, side, deployedRef.uid)) {
       resolveFrontlineContactFire(battle, opponent, ambusher, side, deployedRef, { includeAmbushBonus: true });
-      cleanupDestroyed(battle, opponent);
     }
   });
 
   const liveDeployed = findBoardInstance(battle, side, deployedRef.uid);
   if (!liveDeployed) {
+    cleanupDestroyed(battle, opponent);
     return;
   }
   const responseTargets = opponentFrontline
@@ -1391,12 +1451,17 @@ function resolveFrontlineContact(battle, side, deployedRef) {
       sourceUid: liveDeployed.uid,
       cardId: deployedCard.id,
       ability: deployedCard.ability,
+      allowDestroyedSource: ambushers.length > 0,
       targets: responseTargets,
     };
     battle.log.push(`${deployedCard.name} 前线接敌，需要选择反击目标。`);
   } else if (responseTargets.length === 1) {
-    resolveFrontlineContactFire(battle, side, liveDeployed, opponent, responseTargets[0]);
+    resolveFrontlineContactFire(battle, side, liveDeployed, opponent, responseTargets[0], {
+      allowDestroyedSource: ambushers.length > 0,
+    });
     cleanupDestroyed(battle, side);
+  } else if (ambushers.length) {
+    cleanupDestroyed(battle, opponent);
   }
 }
 
@@ -1427,7 +1492,10 @@ function resolveInfiltrationFrontlineReveal(battle, side, deployedRef) {
 }
 
 function resolveFrontlineContactFire(battle, attackerSide, sourceRef, defenderSide, targetRef, options = {}) {
-  if (!canUseActionLikePassive(battle, sourceRef.instance)) {
+  const canFire = options.allowDestroyedSource
+    ? Boolean(sourceRef.instance && !sourceRef.instance.suppressed && !hasUnitActedInActionSequence(battle, sourceRef.instance))
+    : canUseActionLikePassive(battle, sourceRef.instance);
+  if (!canFire) {
     return false;
   }
   const sourceCard = getCard(sourceRef.instance.cardId);
@@ -1999,41 +2067,107 @@ function createTurnActionState() {
     nonTacticActionsUsed: 0,
     unitDeployments: 0,
     boardActions: 0,
+    initialActionPoints: 1,
+    initialTacticPoints: 1,
+    initialGenericPoints: 1,
+    actionPoints: 1,
+    tacticPoints: 1,
+    genericPoints: 1,
+    spentActionPoints: 0,
+    spentTacticPoints: 0,
+    spentGenericPoints: 0,
   };
 }
 
 function resetTurnActions(battle, side) {
   const opponent = getOpponentSide(side);
+  const ownBoardEmptyAtStart = countAliveUnitsForSide(battle, side) === 0;
+  const resources = getInitialTurnResources(ownBoardEmptyAtStart);
   battle.turnActions[side] = {
     ...createTurnActionState(),
     enemyFrontlineEmptyAtStart: countAliveUnitsOnLine(battle, opponent, "frontline") === 0,
-    ownBoardEmptyAtStart: countAliveUnitsForSide(battle, side) === 0,
+    ownBoardEmptyAtStart,
+    ...resources,
   };
 }
 
 function getTurnActions(battle, side) {
   battle.turnActions[side] ||= createTurnActionState();
+  hydrateTurnResources(battle, side, battle.turnActions[side]);
   return battle.turnActions[side];
+}
+
+function getInitialTurnResources(ownBoardEmptyAtStart) {
+  const genericPoints = ownBoardEmptyAtStart ? 2 : 1;
+  const actionPoints = ownBoardEmptyAtStart ? 0 : 1;
+  const tacticPoints = 1;
+  return {
+    initialActionPoints: actionPoints,
+    initialTacticPoints: tacticPoints,
+    initialGenericPoints: genericPoints,
+    actionPoints,
+    tacticPoints,
+    genericPoints,
+    spentActionPoints: 0,
+    spentTacticPoints: 0,
+    spentGenericPoints: 0,
+  };
+}
+
+function hydrateTurnResources(battle, side, actions) {
+  if (!actions || Number.isFinite(actions.actionPoints) && Number.isFinite(actions.tacticPoints) && Number.isFinite(actions.genericPoints)) {
+    return;
+  }
+  const ownBoardEmptyAtStart = Boolean(actions.ownBoardEmptyAtStart ?? (battle ? countAliveUnitsForSide(battle, side) === 0 : false));
+  const resources = getInitialTurnResources(ownBoardEmptyAtStart);
+  Object.entries(resources).forEach(([key, value]) => {
+    if (!Number.isFinite(actions[key])) {
+      actions[key] = value;
+    }
+  });
+}
+
+function spendSpecificOrGenericPoint(actions, specificKey, spentSpecificKey) {
+  if ((actions[specificKey] || 0) > 0) {
+    actions[specificKey] -= 1;
+    actions[spentSpecificKey] = (actions[spentSpecificKey] || 0) + 1;
+    return true;
+  }
+  if ((actions.genericPoints || 0) > 0) {
+    actions.genericPoints -= 1;
+    actions.spentGenericPoints = (actions.spentGenericPoints || 0) + 1;
+    return true;
+  }
+  return false;
+}
+
+function spendGenericPoint(actions) {
+  if ((actions.genericPoints || 0) <= 0) {
+    return false;
+  }
+  actions.genericPoints -= 1;
+  actions.spentGenericPoints = (actions.spentGenericPoints || 0) + 1;
+  return true;
+}
+
+function canUseTacticAction(battle, side) {
+  const actions = getTurnActions(battle, side);
+  return (actions.tacticPoints || 0) > 0 || (actions.genericPoints || 0) > 0;
 }
 
 function canUseUnitDeployment(battle, side) {
   const actions = getTurnActions(battle, side);
-  if ((actions.nonTacticActionsUsed || 0) >= 2 || (actions.unitDeployments || 0) >= 2) {
-    return false;
-  }
-  if ((actions.unitDeployments || 0) >= 1 && !actions.ownBoardEmptyAtStart) {
-    return false;
-  }
-  return true;
+  return (actions.genericPoints || 0) > 0 && (actions.unitDeployments || 0) < 2;
 }
 
 function canUseBoardAction(battle, side) {
   const actions = getTurnActions(battle, side);
-  return (actions.nonTacticActionsUsed || 0) < 2 && (actions.boardActions || 0) < 2;
+  return (actions.boardActions || 0) < 2 && ((actions.actionPoints || 0) > 0 || (actions.genericPoints || 0) > 0);
 }
 
 function markUnitDeploymentUsed(battle, side) {
   const actions = getTurnActions(battle, side);
+  spendGenericPoint(actions);
   actions.unitDeployments = (actions.unitDeployments || 0) + 1;
   actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
   actions.unitPlayed = actions.unitDeployments > 0;
@@ -2041,11 +2175,14 @@ function markUnitDeploymentUsed(battle, side) {
 }
 
 function markTacticActionUsed(battle, side) {
-  getTurnActions(battle, side).tacticPlayed = true;
+  const actions = getTurnActions(battle, side);
+  spendSpecificOrGenericPoint(actions, "tacticPoints", "spentTacticPoints");
+  actions.tacticPlayed = (actions.spentTacticPoints || 0) + (actions.spentGenericPoints || 0) > 0;
 }
 
 function markBoardActionUsed(battle, side) {
   const actions = getTurnActions(battle, side);
+  spendSpecificOrGenericPoint(actions, "actionPoints", "spentActionPoints");
   actions.boardActions = (actions.boardActions || 0) + 1;
   actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
   actions.hiddenActivated = actions.boardActions > 0;

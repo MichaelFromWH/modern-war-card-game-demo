@@ -1,5 +1,40 @@
 Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对局，还需要做哪些事情，你能帮我推进么
 
+## 2026-06-12
+
+- Implemented and deployed V0.5.3 runtime changes:
+  - Three visible turn resources: generic, action, tactic.
+  - Left score plaque resource display for AI and online-authoritative battles.
+  - Fire-lock marker on current-turn deployed/acted units.
+  - Frontline counterattack and high-air counterattack in both local AI and online 1v1 engine.
+  - V0.5.3 visible card text patches for recon, air defense interception, high-air exposure, rocket artillery, electronic suppression, and Russian infiltrator type display.
+- Verification:
+  - `node --check src/main.js`
+  - `node --check src/online-battle-engine.js`
+  - `node --check src/game-data.js`
+  - `node scripts/v053-regression-tests.mjs`: 5/5 passed.
+  - `node scripts/v052-regression-tests.mjs`: 31/31 passed.
+  - Browser AI smoke on public ECS: opening resources 2/0/1, deployment consumes generic point, fire-lock marker visible.
+  - Public WebSocket 1v1 smoke on `ws://121.41.9.156/ws`: create/join/ready/mulligan/deploy passed.
+- Deployment:
+  - Uploaded changed files to ECS app path `/opt/war-card-game`.
+  - PM2 process `war-card-game` restarted and online.
+  - Public health check `http://121.41.9.156/healthz` returned `{"ok":true,"rooms":0,"sockets":0}`.
+  - `.deployed-version` set to `v0.5.3-20260612-90ca033+local`.
+  - Pre-deploy backup stored on ECS at `/tmp/war-card-game-backup-v053-20260612-0218.tgz`.
+- Follow-up P0/P1/P2 fixes deployed:
+  - Hidden frontline contact now keeps simultaneous response damage before cleanup.
+  - Local high-air contact now only exposes high-air units; automatic high-air combat was removed.
+  - Air-defense interception is gated to opponent turns, so same-turn high-air counterattacks are not intercepted by the attacker's own air defense.
+  - Codex/deck builder no longer expose `card.id` / `specialization`; left resource chips show hover/focus examples.
+- Follow-up verification:
+  - `node scripts/v053-regression-tests.mjs`: 8/8 passed.
+  - `node scripts/v052-regression-tests.mjs`: 31/31 passed.
+  - Browser local UI smoke: resource tooltip focus opacity=1, codex has no visible `us_`/`ru_` ID, deck builder has no specialization text, no console errors.
+  - Public HTTP static check confirmed updated `src/main.js` and `styles.css`.
+  - Public WebSocket 1v1 smoke passed: create/join/ready/mulligan/deploy, opening resources 2/0/1, deployment leaves generic point at 1, guest mirror sees the unit.
+  - ECS `.deployed-version` set to `v0.5.3-20260612-p0p1p2-1139`; public health check returned `{"ok":true,"rooms":0,"sockets":0}`.
+
 ## 2026-05-21
 
 - Goal: move the current local single-player/AI WebDemo toward online 1v1 play.

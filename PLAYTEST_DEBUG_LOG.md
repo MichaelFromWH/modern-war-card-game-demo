@@ -1,5 +1,47 @@
 # 对局排查日志
 
+## 2026-06-12 V0.5.3 回合资源、禁火标记与反击机制上线
+
+来源：Michael 提供 V0.5.3 机制文档与补充口径：回合行动拆为行动点、战术点、通用点；计分牌需要展示三类资源；己方回合疲惫后单位右上角显示禁火；新增前线反击和高空反击，且反击不造成疲惫、被压制单位不能反击、必须满足目标合法性。
+
+修复：
+
+- `src/main.js` 与 `src/online-battle-engine.js` 同步回合资源模型：空场开局 2 通用 / 0 行动 / 1 战术，非空场 1 通用 / 1 行动 / 1 战术；战术和场上行动可用通用点补足，部署消耗通用点。
+- `src/main.js` 与 `styles.css` 在左侧计分牌展示当前行动方三类资源，并在己方当前回合已部署或已主动行动的单位右上角显示“禁火”状态。
+- `src/main.js` 与 `src/online-battle-engine.js` 增加前线反击和高空反击：直接单目标攻击满足区域与合法目标条件时，先计算双方伤害，再统一结算摧毁与得分；反击不疲惫、不消耗点数。
+- `src/game-data.js` 同步 V0.5.3 可见文本：侦察可选隐蔽与支援区、防空拦截仅敌方回合、高空单位强制暴露、海马斯/Tornado-S 多目标文字、电子压制文字与俄方渗透单位类型展示。
+- `scripts/v053-regression-tests.mjs` 增加 0.5.3 专项回归，覆盖通用点补足、前线合法反击、非法反击跳过、高空战斗机反击、压制禁反击。
+
+验证结果：
+
+- `node --check src/main.js`
+- `node --check src/online-battle-engine.js`
+- `node --check src/game-data.js`
+- `node scripts/v053-regression-tests.mjs`：5/5 通过。
+- `node scripts/v052-regression-tests.mjs`：31/31 通过。
+- `http://127.0.0.1:3000/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`。
+- 浏览器 smoke：AI 对局首回合计分牌显示 `通用 2 / 行动 0 / 战术 1`；部署单位后通用点变为 1，单位右上角出现“禁火”标记。
+- WebSocket smoke：本地 1v1 建房、加入、双方 ready、跳过调度后，房主资源为 `2/0/1`；部署 `us_f35a_sead` 后通用点为 1，场上单位数为 1。
+- 线上部署：已通过 SSH key 上传到 ECS `/opt/war-card-game`，PM2 进程 `war-card-game` 重启后为 `online`，`.deployed-version = v0.5.3-20260612-90ca033+local`，覆盖前备份位于 `/tmp/war-card-game-backup-v053-20260612-0218.tgz`。
+- 公网验证：`http://121.41.9.156/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`；公网 WebSocket 1v1 建房、加入、ready、调度、部署 smoke 通过，房主首回合资源 `2/0/1`，部署后通用点为 1；公网浏览器 AI 对局部署后禁火角标可见。
+
+## 2026-06-12 V0.5.3 P0/P1/P2 复测修复
+
+来源：Michael 要求优先修复 P0，并同步处理 P1/P2 后部署上线：隐蔽反击与前线反击必须按规则同时结算；高空接敌默认只互相暴露，不自动打击或反击；高空反击被防空拦截遵循“拦截仅能在敌方回合触发”；图鉴/组卡页移除内部字段；行动额度 hover 展示三类点数解释与示例。
+
+修复：
+- `src/online-battle-engine.js` 调整隐蔽前线接敌清算顺序：伏击伤害先写入，进场单位仍可在同一接敌序列内打出合法反击，最后统一清理摧毁与得分。
+- `src/main.js` 移除本地高空接敌自动交战路径，改为 `enforceHighAirExposure()` 只暴露双方高空单位；玩家之后手动攻击高空单位时才触发高空反击。
+- `src/main.js` 与 `src/online-battle-engine.js` 的防空拦截增加当前行动方判断：只有被攻击方处在敌方回合时才可触发拦截，避免己方回合的高空反击被己方防空错误拦截。
+- `src/main.js` 与 `styles.css` 给左侧行动额度三类资源增加 hover/focus 说明，解释通用点、行动点、战术点的用途和示例。
+- 图鉴卡片移除 `card.id` 可见展示，组卡页移除 `specialization` 可见展示；同步更新旧行动额度提示、README、机制文档和 `TEST_CASES.md` 重复编号。
+
+验证结果：
+- `node scripts/v053-regression-tests.mjs`：8/8 通过，覆盖新增隐蔽前线同时反击、高空接敌不自动交战、防空仅敌方回合拦截。
+- `node scripts/v052-regression-tests.mjs`：31/31 通过。
+- `node --check src/main.js`、`node --check src/online-battle-engine.js`、`node --check scripts/v053-regression-tests.mjs` 通过。
+- 浏览器 smoke：AI 对局首回合资源栏显示通用/行动/战术；资源 chip focus 后 tooltip opacity=1；图鉴 23 张卡无 `us_`/`ru_` 可见 ID；组卡页 23 张卡无 `specialization` 文案；两个测试标签页均无 console error。
+
 ## 2026-06-09 线上 PVP 与 AI 对战交互/裁决一致性修复
 
 来源：Michael 线上 PVP 实测反馈：复制邀请链接未进入剪贴板且不展示地址；渗透单位前线接敌时仍无法完整执行隐蔽部署与强制暴露；复仇者打击无人机时先入弃牌堆再播放打击；轰炸机/远火多目标只打默认前排或一个单位；补给选择卡面仍保留旧 UI；F-35A/HIMARS 对烟幕目标伤害少 1；重型防空卡面出现文档中不存在的轰炸机文字；前线突破无法显式执行。

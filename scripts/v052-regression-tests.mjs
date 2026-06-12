@@ -251,7 +251,7 @@ testCase("TC-DATA-001", "P0", "V0.5.2 关键卡牌数据口径一致", () => {
 
 testCase("TC-DATA-002", "P0", "Rocket artillery targeting uses ordered selected targets across rows", () => {
   const himars = getCard("us_himars");
-  assert(himars.effect === "选择最多两个目标，对次要目标攻击力为1，若目标为步兵，伤害+1。", "HIMARS visible effect must match the V0.5.2 docx");
+  assert(himars.effect === "选择最多两个目标，对次要目标攻击力为1。若目标为步兵，伤害+1，对所有目标生效。", "HIMARS visible effect must match the V0.5.3 docx");
   assert(himars.ability.allowSupport === true, "HIMARS must be able to choose support targets directly");
   assert(himars.ability.sameLineOnly !== true, "HIMARS must not be locked to the primary target row");
   assert(himars.ability.maxTargets === 2, "HIMARS must select up to two targets");
@@ -260,7 +260,7 @@ testCase("TC-DATA-002", "P0", "Rocket artillery targeting uses ordered selected 
   assert(himars.fire.maxTargets === 2, "HIMARS callable fire must select up to two targets");
 
   const tornado = getCard("ru_tornado_s");
-  assert(tornado.effect === "选择最多三个地面目标造成伤害，对2个次要目标攻击力为1。", "Tornado-S visible effect must match the V0.5.2 docx");
+  assert(tornado.effect === "选择最多三个目标造成伤害，对2个次要目标攻击力为1。", "Tornado-S visible effect must match the V0.5.3 docx");
   assert(tornado.ability.allowSupport === true, "Tornado-S must be able to choose support targets directly");
   assert(tornado.ability.sameLineOnly !== true, "Tornado-S must not be locked to the primary target row");
   assert(tornado.ability.maxTargets === 3, "Tornado-S must select up to three targets per the V0.5.2 docx");

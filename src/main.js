@@ -1197,13 +1197,73 @@ function resetTurnActions(battle, side) {
   const opponent = side === "player" ? "enemy" : side === "enemy" ? "player" : null;
   nextActions.enemyFrontlineEmptyAtStart = opponent ? countAliveUnitsOnLine(battle, opponent, "frontline") === 0 : false;
   nextActions.ownBoardEmptyAtStart = countAliveUnitsForSide(battle, side) === 0;
+  Object.assign(nextActions, getInitialTurnResources(nextActions.ownBoardEmptyAtStart));
   battle.turnActions[side] = nextActions;
 }
 
 function getTurnActions(battle, side) {
   battle.turnActions ||= {};
   battle.turnActions[side] ||= createTurnActionState();
+  hydrateTurnResources(battle, side, battle.turnActions[side]);
   return battle.turnActions[side];
+}
+
+function getInitialTurnResources(ownBoardEmptyAtStart) {
+  const genericPoints = ownBoardEmptyAtStart ? 2 : 1;
+  const actionPoints = ownBoardEmptyAtStart ? 0 : 1;
+  const tacticPoints = 1;
+  return {
+    initialActionPoints: actionPoints,
+    initialTacticPoints: tacticPoints,
+    initialGenericPoints: genericPoints,
+    actionPoints,
+    tacticPoints,
+    genericPoints,
+    spentActionPoints: 0,
+    spentTacticPoints: 0,
+    spentGenericPoints: 0,
+  };
+}
+
+function hydrateTurnResources(battle, side, actions) {
+  if (!actions || (Number.isFinite(actions.actionPoints) && Number.isFinite(actions.tacticPoints) && Number.isFinite(actions.genericPoints))) {
+    return;
+  }
+  const ownBoardEmptyAtStart = Boolean(actions.ownBoardEmptyAtStart ?? (battle ? countAliveUnitsForSide(battle, side) === 0 : false));
+  const resources = getInitialTurnResources(ownBoardEmptyAtStart);
+  Object.entries(resources).forEach(([key, value]) => {
+    if (!Number.isFinite(actions[key])) {
+      actions[key] = value;
+    }
+  });
+}
+
+function spendSpecificOrGenericPoint(actions, specificKey, spentSpecificKey) {
+  if ((actions[specificKey] || 0) > 0) {
+    actions[specificKey] -= 1;
+    actions[spentSpecificKey] = (actions[spentSpecificKey] || 0) + 1;
+    return true;
+  }
+  if ((actions.genericPoints || 0) > 0) {
+    actions.genericPoints -= 1;
+    actions.spentGenericPoints = (actions.spentGenericPoints || 0) + 1;
+    return true;
+  }
+  return false;
+}
+
+function spendGenericPoint(actions) {
+  if ((actions.genericPoints || 0) <= 0) {
+    return false;
+  }
+  actions.genericPoints -= 1;
+  actions.spentGenericPoints = (actions.spentGenericPoints || 0) + 1;
+  return true;
+}
+
+function canUseTacticAction(battle, side) {
+  const actions = getTurnActions(battle, side);
+  return (actions.tacticPoints || 0) > 0 || (actions.genericPoints || 0) > 0;
 }
 
 function getTurnUiState(battle) {
@@ -1337,7 +1397,7 @@ function createBattle(options = {}) {
       enemy: 0,
     },
     log: [
-      "V0.5.2 / 20260527 规则：单位拆分为攻击、生命和目标价值，摧毁后按目标价值获得战场得分。",
+      "V0.5.3 / 20260612 规则：回合资源拆分为通用点、行动点和战术点；单位仍按攻击、生命和目标价值结算得分。",
       "巡航导弹、弹道导弹、战斗机和轰炸机均为驻场单位，拥有生命、可被摧毁并提供得分。",
       "巡航导弹和弹道导弹可打击地面与低空单位，包括无人机和直升机；巡航可被伴随/重型防空拦截，弹道只能被重型防空拦截。",
       "F-35A 与 Su-57 按普通战斗机对地打击处理，不再使用 SEAD、反辐射或隐蔽防空锁定规则。",
@@ -1426,6 +1486,15 @@ function createTurnActionState() {
     nonTacticActionsUsed: 0,
     unitDeployments: 0,
     boardActions: 0,
+    initialActionPoints: 1,
+    initialTacticPoints: 1,
+    initialGenericPoints: 1,
+    actionPoints: 1,
+    tacticPoints: 1,
+    genericPoints: 1,
+    spentActionPoints: 0,
+    spentTacticPoints: 0,
+    spentGenericPoints: 0,
   };
 }
 
@@ -1578,6 +1647,7 @@ function renderBoardCard(instance, side, lineId) {
   const contactClass = getContactAnimationClass(actionAnimation, instance.uid);
   const deployClass = actionAnimation?.kind === "deployHold" && actionAnimation.sourceUid === instance.uid ? "is-deploying" : "";
   const thumbnailClass = !concealed && card.type === "unit" ? "board-card--thumbnail" : "";
+  const fireLocked = isUnitFireLockedForTurn(state.battle, side, instance, concealed);
   const stateTitle = concealed
     ? side === "player"
       ? `${card.name}（隐蔽部署，悬停查看详情）`
@@ -1587,7 +1657,7 @@ function renderBoardCard(instance, side, lineId) {
       : card.name;
   return `
     <article
-      class="board-card ${modernClass} ${generatedClass} ${thumbnailClass} ${contactClass} ${deployClass} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
+      class="board-card ${modernClass} ${generatedClass} ${thumbnailClass} ${contactClass} ${deployClass} ${fireLocked ? "is-fire-locked" : ""} ${targetable ? "is-targetable" : ""} ${instance.hidden ? "is-hidden" : ""} ${concealed ? "is-concealed-card" : ""} ${instance.exposed ? "is-exposed" : ""} ${flipClass}"
       data-board-card="${instance.uid}"
       data-side="${side}"
       ${inspectable ? `data-card-id="${card.id}"` : ""}
@@ -1595,6 +1665,7 @@ function renderBoardCard(instance, side, lineId) {
       title="${escapeHtml(stateTitle)}"
       style="--accent:${getFaction(card.faction).accent};--card-art:${artPath ? `url('${artPath}')` : "none"};--art-position:${getCardArtPosition(card.id)}"
     >
+      ${fireLocked ? `<b class="board-card__fire-lock" title="本回合已行动，禁火">禁火</b>` : ""}
       <div class="board-card__power">${concealed ? "" : `<strong>${attack}</strong><span>战</span>`}</div>
       ${!concealed && card.type === "unit" ? renderUnitHealthBadge(card, "board-card__health-badge", currentHealth, maxHealth) : ""}
       ${!concealed && card.type === "unit" ? renderUnitValueBadge(card, "board-card__value-badge") : ""}
@@ -1621,6 +1692,18 @@ function renderBoardCard(instance, side, lineId) {
       </div>
     </article>
   `;
+}
+
+function isUnitFireLockedForTurn(battle, side, instance, concealed = false) {
+  if (!battle || concealed || battle.activeSide !== side || battle.phase !== "battle") {
+    return false;
+  }
+  return Boolean(
+    wasUnitDeployedThisTurn(battle, instance) ||
+      instance?.actedAction === battle.actionSerial ||
+      instance?.calledAction === battle.actionSerial ||
+      instance?.assistAction === battle.actionSerial
+  );
 }
 
 function getContactAnimationClass(actionAnimation, uid) {
@@ -1697,6 +1780,7 @@ function renderScore() {
         <em>:</em>
         <i>${getTotalScore(battle, "enemy")}</i>
       </div>
+      ${renderTurnResources(battle)}
       <small>${escapeHtml(turn.detail)}</small>
     </div>
     ${renderCommanderPanel(battle, "player", playerFaction)}
@@ -1715,6 +1799,39 @@ function renderScore() {
   refs.bgmButton.setAttribute("title", state.bgmOn ? "关闭音乐" : "开启音乐");
   refs.codexButton.hidden = true;
   refs.reset.hidden = true;
+}
+
+function renderTurnResources(battle) {
+  const side = battle?.activeSide;
+  if (!battle || !["player", "enemy"].includes(side) || battle.phase === "match-over") {
+    return "";
+  }
+  const actions = getTurnActions(battle, side);
+  const label = side === "player" ? "我方资源" : "对方资源";
+  const dimClass = side === "player" ? "" : " is-opponent";
+  return `
+    <div class="round-plaque__resources${dimClass}" aria-label="${label}">
+      <span>${escapeHtml(label)}</span>
+      ${renderResourceChip("通用", actions.genericPoints, actions.initialGenericPoints)}
+      ${renderResourceChip("行动", actions.actionPoints, actions.initialActionPoints)}
+      ${renderResourceChip("战术", actions.tacticPoints, actions.initialTacticPoints)}
+    </div>
+  `;
+}
+
+const RESOURCE_HELP_TEXT = {
+  "通用": "通用点：部署单位；也可在行动点或战术点不足时替代消耗。例：首回合 2 点通用可连续部署两张单位。",
+  "行动": "行动点：让已在场且可行动单位执行一次攻击、翻开或突破。例：F-22 已在场时消耗 1 行动点打击高空目标。",
+  "战术": "战术点：打出一张战术牌；不足时可用通用点替代。例：使用电子压制压制一个已暴露单位。",
+};
+
+function renderResourceChip(label, current = 0, initial = 0) {
+  const safeCurrent = Math.max(0, Number(current) || 0);
+  const safeInitial = Math.max(safeCurrent, Number(initial) || 0);
+  const spent = safeInitial > 0 && safeCurrent <= 0 ? " is-spent" : "";
+  const help = RESOURCE_HELP_TEXT[label] || `${label}点：${safeCurrent}/${safeInitial}`;
+  const title = `${help} 当前 ${safeCurrent}/${safeInitial}`;
+  return `<i class="round-plaque__resource${spent}" title="${escapeHtml(title)}" data-help="${escapeHtml(title)}" tabindex="0"><b>${label}</b><em>${safeCurrent}</em></i>`;
 }
 
 function renderTurnOverlay() {
@@ -1804,7 +1921,7 @@ function renderWarCard(card, options = {}) {
   const displayTags = getCardDisplayTags(card);
   const metaItems = displayTags;
   const factionMarkPath = getFactionMarkPath(card.faction);
-  const footerFactionLabel = options.preview ? faction.shortName : card.specialization;
+  const footerFactionLabel = faction.shortName;
   const classes = [
     "war-card",
     `war-card--${card.type}`,
@@ -2707,7 +2824,6 @@ function renderCodexCard(card, count = 1, order = card.docOrder || 0) {
         </header>
         <div class="codex-card__meta">
           ${renderCodexCardStats(card)}
-          <span>${escapeHtml(card.id)}</span>
         </div>
         <div class="codex-card__tags">${tags}</div>
         <section class="codex-card__text">
@@ -2758,7 +2874,7 @@ function renderGuide() {
     {
       index: "03",
       title: "隐蔽与暴露",
-      body: "单位可以正面或隐蔽部署。每回合除了打出一张手牌，还能选择一个场上单位行动：隐蔽单位主动翻开，或已暴露单位再次发动技能。",
+      body: "单位可以正面或隐蔽部署。通用点用于部署，也可替代行动点或战术点；行动点用于场上单位攻击、翻开或突破；战术点用于打出战术牌。",
     },
     {
       index: "04",
@@ -3046,7 +3162,6 @@ function renderDeckBuilderCard(card, count) {
         </div>
         <p>${escapeHtml(TYPE_LABELS[card.type])} / ${escapeHtml(line)} / ${escapeHtml(RARITY_LABELS[card.rarity] || card.rarity)}</p>
         <div class="deck-card__tags">${tags}</div>
-        <em>${escapeHtml(card.specialization)}</em>
       </div>
       <div class="deck-card__controls">
         <button type="button" data-action="deck-remove:${card.id}" ${count ? "" : "disabled"}>-</button>
@@ -3071,9 +3186,10 @@ function selectHandCard(uid, options = {}) {
   const card = getCard(instance.cardId);
   if (!canUseHandAction(battle, "player", card)) {
     gameAudio.play("ui.error");
+    const actions = getTurnActions(battle, "player");
     battle.log.push(card.type === "unit"
-      ? "本回合已经部署过一张单位牌。你仍可打出一张战术牌、执行一次场上单位行动，或点击【回合结束】。"
-      : "本回合已经打出过一张战术牌。你仍可部署一张单位牌、执行一次场上单位行动，或点击【回合结束】。");
+      ? `通用点不足，无法部署 ${card.name}。当前通用点 ${actions.genericPoints}。`
+      : `战术点和可替代通用点不足，无法打出 ${card.name}。当前战术点 ${actions.tacticPoints}，通用点 ${actions.genericPoints}。`);
     render();
     return;
   }
@@ -3265,12 +3381,10 @@ function continueUnitDeployment(battle, side, sourceRef, card, options = {}) {
   }
 
   if (!options.skipContact && instance.hidden) {
-    resolveHighAirEngagement(battle, side, sourceRef);
-    if (instance.hidden) {
-      refreshIntelValues(battle);
-      finishAction(side);
-      return;
-    }
+    enforceHighAirExposure(battle);
+    refreshIntelValues(battle);
+    finishAction(side);
+    return;
   }
   if (!findBoardInstance(battle, side, instance.uid)) {
     finishActionWithResolutionHold(battle, side, { pacedFinish: true });
@@ -3723,7 +3837,7 @@ function resolveEffectOnTarget(battle, payload, options = {}) {
       exposeInstance(battle, target, sourceCard.name);
     }
     const amount = getDamageAmount(battle, payload.side, ability, target.instance, target.lineId, sourceCard);
-    dealDamage(battle, payload.side, target.side, target, amount, sourceCard, sourceRef);
+    dealDirectDamageWithCounterattack(battle, payload.side, target.side, target, amount, sourceCard, sourceRef, ability);
     if (ability.splash) {
       applySplashDamage(battle, payload.side, target, ability.splash, sourceCard);
     }
@@ -4108,6 +4222,63 @@ function dealDamage(battle, attackerSide, defenderSide, targetRefOrInstance, raw
   if (!options.skipAssist) {
     applyAssistFire(battle, attackerSide, defenderSide, targetRef, sourceCard, sourceRef);
   }
+}
+
+function dealDirectDamageWithCounterattack(battle, attackerSide, defenderSide, targetRefOrInstance, rawAmount, sourceCard, sourceRef = null, ability = {}) {
+  const targetRef = normalizeTargetRef(battle, defenderSide, targetRefOrInstance);
+  if (!targetRef) {
+    return;
+  }
+  const counterPlan = getCounterattackPlan(battle, attackerSide, sourceRef, sourceCard, targetRef, ability);
+  dealDamage(battle, attackerSide, defenderSide, targetRef, rawAmount, sourceCard, sourceRef);
+  if (counterPlan) {
+    resolveCounterattackPlan(battle, counterPlan);
+  }
+}
+
+function getCounterattackPlan(battle, attackerSide, sourceRef, sourceCard, targetRef, attackingAbility = {}) {
+  if (!battle || !sourceRef?.instance || !targetRef?.instance || !isDirectAttackAbility(attackingAbility)) {
+    return null;
+  }
+  if (attackingAbility.kind === "areaDamage" || sourceRef.side === targetRef.side) {
+    return null;
+  }
+  const defenderSide = targetRef.side;
+  const defenderCard = getCard(targetRef.instance.cardId);
+  const defenderAbility = defenderCard?.ability;
+  if (!defenderAbility || !isDirectAttackAbility(defenderAbility) || defenderAbility.kind === "areaDamage") {
+    return null;
+  }
+  if (targetRef.instance.hidden || targetRef.instance.suppressed || getCurrentPower(targetRef.instance) <= 0 || getCurrentPower(sourceRef.instance) <= 0) {
+    return null;
+  }
+  const isFrontlineCounter = sourceRef.lineId === "frontline" && targetRef.lineId === "frontline";
+  const isHighAirCounter = isHighAirUnit(sourceCard) && isHighAirUnit(defenderCard);
+  if (!isFrontlineCounter && !isHighAirCounter) {
+    return null;
+  }
+  if (!canTargetForAbility(battle, defenderSide, sourceRef, defenderAbility, { sourceRef: targetRef, sourceCard: defenderCard }) ||
+      !matchesTargetRequirements(sourceRef.instance, defenderAbility)) {
+    return null;
+  }
+  return {
+    kind: isHighAirCounter ? "highAir" : "frontline",
+    attackerSide: defenderSide,
+    defenderSide: sourceRef.side,
+    sourceRef: targetRef,
+    sourceCard: defenderCard,
+    targetRef: sourceRef,
+    ability: defenderAbility,
+  };
+}
+
+function resolveCounterattackPlan(battle, plan) {
+  if (!plan?.sourceRef?.instance || !plan?.targetRef?.instance) {
+    return;
+  }
+  const amount = getDamageAmount(battle, plan.attackerSide, plan.ability, plan.targetRef.instance, plan.targetRef.lineId, plan.sourceCard);
+  battle.log.push(`${plan.sourceCard.name} 触发${plan.kind === "highAir" ? "高空反击" : "前线反击"}。`);
+  dealDamage(battle, plan.attackerSide, plan.defenderSide, plan.targetRef, amount, plan.sourceCard, plan.sourceRef, { skipAssist: true });
 }
 
 function playCombatVfx({ attackerSide, sourceCard, targetRef, amount }) {
@@ -4524,6 +4695,9 @@ function canPassiveRevealFromHidden(passive) {
 }
 
 function applyInterception(battle, defenderSide, targetLineId, amount, sourceCard, sourceRef = null, targetRef = null) {
+  if (battle.activeSide === defenderSide) {
+    return amount;
+  }
   if (!sourceCard.tags.some((tag) => ["直升机", "战斗机", "轰炸机", "导弹", "空战", "战机", "巡航导弹", "弹道导弹"].includes(tag))) {
     return amount;
   }
@@ -6320,26 +6494,29 @@ function hasOwnCardOnBoard(battle, side, cardId) {
   return LINES.some((line) => battle.board[side][line.id].some((instance) => instance.cardId === cardId && getCurrentPower(instance) > 0));
 }
 
-function resolveHighAirEngagement(battle, side, deployedRef) {
-  const deployedCard = getCard(deployedRef.instance.cardId);
-  if (!deployedRef.instance.hidden || !isHighAirUnit(deployedCard)) {
-    return;
-  }
-  const opponent = side === "player" ? "enemy" : "player";
-  const opponentRef = getAllBoardTargets(battle, opponent).find((target) => {
+function enforceHighAirExposure(battle) {
+  const sidesWithHighAir = SIDES.filter((side) => getAllBoardTargets(battle, side).some((target) => {
     const card = getCard(target.instance.cardId);
-    return target.instance.hidden && getCurrentPower(target.instance) > 0 && isHighAirUnit(card);
-  });
-  if (!opponentRef) {
-    return;
+    return getCurrentPower(target.instance) > 0 && isHighAirUnit(card);
+  }));
+  if (sidesWithHighAir.length < 2) {
+    return false;
   }
-
-  exposeInstance(battle, deployedRef, "高空接敌", { ignoreDecoy: true });
-  exposeInstance(battle, opponentRef, "高空接敌", { ignoreDecoy: true });
-  battle.log.push(`高空接敌：${deployedCard.name} 与 ${getCard(opponentRef.instance.cardId).name} 同时暴露并交战。`);
-  const deployedFired = resolveFrontlineContactFire(battle, side, deployedRef, opponent, opponentRef, { exposeSource: false });
-  const opponentFired = resolveFrontlineContactFire(battle, opponent, opponentRef, side, deployedRef, { exposeSource: false });
-  cleanupDestroyed(battle, deployedFired ? side : opponentFired ? opponent : side, deployedFired ? deployedCard : getCard(opponentRef.instance.cardId), opponentFired ? deployedRef : opponentRef);
+  let exposedCount = 0;
+  SIDES.forEach((side) => {
+    getAllBoardTargets(battle, side).forEach((target) => {
+      const card = getCard(target.instance.cardId);
+      if (getCurrentPower(target.instance) > 0 && isHighAirUnit(card)) {
+        if (exposeInstance(battle, target, "高空接敌", { ignoreDecoy: true })) {
+          exposedCount += 1;
+        }
+      }
+    });
+  });
+  if (exposedCount > 0) {
+    battle.log.push("高空接敌：双方高空单位互相暴露。");
+  }
+  return exposedCount > 0;
 }
 
 function getAreaDamageTargets(battle, side, ability, primaryTarget, context = {}) {
@@ -7237,9 +7414,8 @@ function canAnyHandAction(battle, side) {
 }
 
 function canUseHandAction(battle, side, card = null) {
-  const actions = getTurnActions(battle, side);
   if (card && card.type !== "unit") {
-    return !actions.tacticPlayed;
+    return canUseTacticAction(battle, side);
   }
   return canUseUnitDeployment(battle, side);
 }
@@ -7247,9 +7423,11 @@ function canUseHandAction(battle, side, card = null) {
 function markHandActionUsed(battle, side, card = null) {
   const actions = getTurnActions(battle, side);
   if (card && card.type !== "unit") {
-    actions.tacticPlayed = true;
+    spendSpecificOrGenericPoint(actions, "tacticPoints", "spentTacticPoints");
+    actions.tacticPlayed = (actions.spentTacticPoints || 0) + (actions.spentGenericPoints || 0) > 0;
     return;
   }
+  spendGenericPoint(actions);
   actions.unitDeployments = (actions.unitDeployments || 0) + 1;
   actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
   actions.unitPlayed = actions.unitDeployments > 0;
@@ -7266,11 +7444,12 @@ function markHiddenActionUsed(battle, side) {
 
 function canUseBoardAction(battle, side) {
   const actions = getTurnActions(battle, side);
-  return (actions.nonTacticActionsUsed || 0) < 2 && (actions.boardActions || 0) < 2;
+  return (actions.boardActions || 0) < 2 && ((actions.actionPoints || 0) > 0 || (actions.genericPoints || 0) > 0);
 }
 
 function markBoardActionUsed(battle, side) {
   const actions = getTurnActions(battle, side);
+  spendSpecificOrGenericPoint(actions, "actionPoints", "spentActionPoints");
   actions.boardActions = (actions.boardActions || 0) + 1;
   actions.nonTacticActionsUsed = (actions.nonTacticActionsUsed || 0) + 1;
   actions.hiddenActivated = actions.boardActions > 0;
@@ -7278,13 +7457,7 @@ function markBoardActionUsed(battle, side) {
 
 function canUseUnitDeployment(battle, side) {
   const actions = getTurnActions(battle, side);
-  if ((actions.nonTacticActionsUsed || 0) >= 2 || (actions.unitDeployments || 0) >= 2) {
-    return false;
-  }
-  if ((actions.unitDeployments || 0) >= 1 && !actions.ownBoardEmptyAtStart) {
-    return false;
-  }
-  return true;
+  return (actions.genericPoints || 0) > 0 && (actions.unitDeployments || 0) < 2;
 }
 
 function wasUnitDeployedThisTurn(battle, instance) {
