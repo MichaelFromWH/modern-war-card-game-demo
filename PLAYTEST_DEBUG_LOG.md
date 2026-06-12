@@ -1,5 +1,38 @@
 # 对局排查日志
 
+## 2026-06-12 V0.5.3 线上反击、抽牌、暴露演出与取消目标热修
+
+来源：Michael 与朋友线上 1v1 实战反馈：已暴露前线步兵被打击没有反击；线上抽牌发生在结束回合后而不是各自回合开始；己方部署前线单位强制暴露敌方单位时，敌方卡牌未展示插画与动画就直接结算；战术牌目标选择框关闭后，该战术牌无法再次使用且无法点击结束回合。
+
+根因：
+
+- 线上前线接敌打击走 `resolveFrontlineContactFire()` 的直接伤害路径，只调用 `dealDamage()`，绕过了 V0.5.3 前线反击裁决。
+- 线上 `applyPassTurn()` 在结束方移交指挥权前抽牌，导致抽牌时机表现为“回合结束后抽卡”；调度完成进入第一行动方时也没有统一按回合开始补抽。
+- 线上暴露演出 staging 只物化了效果来源，目标仍可能保留上一帧的遮罩 `cardId` 与 `masked` 状态，因此出现黑卡、0/0 或无插画的短暂错误画面。
+- 客户端关闭目标选择只清了本地 `state.pending`，服务器 `battle.pending` 仍然存在，继续把当前玩家标记为 pending 方，导致结束回合和再次使用卡牌都被服务器拒绝。
+
+修复：
+
+- `src/online-battle-engine.js` 将线上前线接敌的正面打击改为走 `dealDirectDamageWithCounterattack()`；若本次已经触发隐蔽反击，则记录对应目标并跳过普通前线反击，保持“隐蔽反击优先，不与前线反击同时生效”的口径。
+- 线上调度完成后为第一行动方执行回合开始抽 1 张；之后 `pass_turn` 改为切换到下一行动方、重置行动额度后，由下一行动方抽 1 张。
+- `src/online-animation-state.js` 与 `src/main.js` 在 `expose` effect 中按服务器下发的 `targetCardId` 物化被暴露目标，先展示真实卡牌插画与翻开状态，再应用最终快照结算。
+- 新增服务器权威动作 `cancel_pending`；客户端关闭目标选择时向服务器取消 pending，并清理本地选择态，不再锁死结束回合。
+- `scripts/v053-regression-tests.mjs` 增加 4 个专项用例：线上前线接敌反击、回合开始抽牌、暴露 staging 真实卡牌、取消目标释放服务器 pending。
+
+验证结果：
+
+- `node --check src/main.js`
+- `node --check src/online-battle-engine.js`
+- `node --check src/online-animation-state.js`
+- `node --check scripts/v053-regression-tests.mjs`
+- `node scripts/v053-regression-tests.mjs`：13/13 通过。
+- `node scripts/v052-regression-tests.mjs`：31/31 通过。
+- 本地 `/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`。
+- 本地 WebSocket 双端 smoke：host/guest 建房、ready、跳过调度、回合移交、guest 部署、host 使用并取消电子压制目标选择、取消后结束回合均通过；host 先手回合开始手牌 8，guest 回合开始手牌 8，host 第二回合开始手牌 9，取消后 `spentTacticPoints = 0`。
+- 浏览器 smoke（Chrome channel）：AI 对局跳过调度后手牌 8，资源显示 `通用 2 / 行动 0 / 战术 1`，“回合结束”按钮可点击，控制台无 error。
+- 线上部署：ECS `/opt/war-card-game` 已更新，PM2 进程 `war-card-game` 重启后为 `online`，`.deployed-version = v0.5.3-20260612-online-turn-cancel-20260612-221119`，覆盖前备份位于 `/tmp/war-card-game-backup-online-turn-cancel-20260612-221119.tgz`。
+- 公网验证：`http://121.41.9.156/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`；公网源码已包含 `cancel_pending`、`drawCards(battle, nextSide, 1)`、`drawCards(battle, enteringSide, 1)`、`materializeEffectTarget`；公网 WebSocket 双端 smoke 通过，host 先手回合开始手牌 8，guest 回合开始手牌 8，host 第二回合开始手牌 9，取消目标后 `spentTacticPoints = 0` 且可结束回合。
+
 ## 2026-06-12 V0.5.3 回合资源、禁火标记与反击机制上线
 
 来源：Michael 提供 V0.5.3 机制文档与补充口径：回合行动拆为行动点、战术点、通用点；计分牌需要展示三类资源；己方回合疲惫后单位右上角显示禁火；新增前线反击和高空反击，且反击不造成疲惫、被压制单位不能反击、必须满足目标合法性。

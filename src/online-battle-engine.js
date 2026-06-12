@@ -108,6 +108,8 @@ export function applyBattleAction(battle, side, action = {}) {
       return applyFrontlineBreakthrough(battle, side, action);
     case "choose_supply":
       return applyChooseSupply(battle, side, action);
+    case "cancel_pending":
+      return applyCancelPending(battle, side);
     case "pass_turn":
       return applyPassTurn(battle, side);
     case "surrender":
@@ -221,6 +223,7 @@ function applyMulligan(battle, side, selectedUids = []) {
   if (SIDES.every((item) => battle.mulligan[item].done)) {
     battle.status = "battle";
     resetTurnActions(battle, battle.activeSide);
+    drawCards(battle, battle.activeSide, 1);
     battle.log.push("双方调度完成，房主获得先手。");
   }
   return { ok: true };
@@ -447,6 +450,7 @@ function applyChooseTarget(battle, side, action) {
     if (sourceRef) {
       resolveFrontlineContactFire(battle, side, sourceRef, target.side, target, {
         allowDestroyedSource: pending.allowDestroyedSource,
+        skipCounterattack: pending.skipCounterTargetUids?.includes(target.uid),
       });
       cleanupDestroyed(battle, side);
       enforceHighAirExposure(battle);
@@ -547,6 +551,25 @@ function applyChooseSupply(battle, side, action) {
   return { ok: true };
 }
 
+function applyCancelPending(battle, side) {
+  const ready = assertCanAct(battle, side);
+  if (!ready.ok) return ready;
+  if (!battle.pending || battle.pending.side !== side) {
+    return { ok: true };
+  }
+  if (["supplyChoice", "interceptChoice", "callFireChoice"].includes(battle.pending.kind)) {
+    return { ok: false, error: "当前选择不能取消。" };
+  }
+
+  const pending = battle.pending;
+  battle.pending = null;
+  battle.log.push(`${getSideName(battle, side)}取消了目标选择。`);
+  if (pending.kind !== "handEffect") {
+    finishActionAfterResolved(battle, side);
+  }
+  return { ok: true };
+}
+
 function applyPassTurn(battle, side) {
   const ready = assertCanAct(battle, side);
   if (!ready.ok) return ready;
@@ -559,9 +582,6 @@ function applyPassTurn(battle, side) {
   }
 
   clearSuppressionForSide(battle, side);
-  if (!battle.finalActions) {
-    drawCards(battle, side, 1);
-  }
   battle.passed[side] = true;
   battle.log.push(`${getSideName(battle, side)}结束回合，移交指挥权。`);
   if (battle.finalActions) {
@@ -579,6 +599,7 @@ function applyPassTurn(battle, side) {
   battle.actionSerial += 1;
   battle.passed[nextSide] = false;
   resetTurnActions(battle, nextSide);
+  drawCards(battle, nextSide, 1);
   battle.log.push(`${getSideName(battle, nextSide)}进入行动阶段。`);
   return { ok: true };
 }
@@ -1444,6 +1465,7 @@ function resolveFrontlineContact(battle, side, deployedRef) {
     .map((target) => findBoardInstance(battle, opponent, target.uid))
     .filter(Boolean)
     .filter((target) => canTargetForAbility(battle, side, target, deployedCard.ability, deployedCard, { sourceRef: liveDeployed }) && matchesTargetRequirements(target.instance, deployedCard.ability || {}));
+  const ambusherUids = new Set(ambushers.map((target) => target.uid));
   if (responseTargets.length > 1) {
     battle.pending = {
       side,
@@ -1452,12 +1474,14 @@ function resolveFrontlineContact(battle, side, deployedRef) {
       cardId: deployedCard.id,
       ability: deployedCard.ability,
       allowDestroyedSource: ambushers.length > 0,
+      skipCounterTargetUids: [...ambusherUids],
       targets: responseTargets,
     };
     battle.log.push(`${deployedCard.name} 前线接敌，需要选择反击目标。`);
   } else if (responseTargets.length === 1) {
     resolveFrontlineContactFire(battle, side, liveDeployed, opponent, responseTargets[0], {
       allowDestroyedSource: ambushers.length > 0,
+      skipCounterattack: ambusherUids.has(responseTargets[0].uid),
     });
     cleanupDestroyed(battle, side);
   } else if (ambushers.length) {
@@ -1511,8 +1535,10 @@ function resolveFrontlineContactFire(battle, attackerSide, sourceRef, defenderSi
     battle.log.push(`${sourceCard.name} 触发【前线伏击】，本次伤害 +${sourceCard.ambushBonus}。`);
   }
   markUnitActed(battle, sourceRef.instance);
-  dealDamage(battle, attackerSide, targetRef, amount, sourceCard, ability, sourceRef);
-  return true;
+  const result = options.skipCounterattack
+    ? dealDamage(battle, attackerSide, targetRef, amount, sourceCard, ability, sourceRef)
+    : dealDirectDamageWithCounterattack(battle, attackerSide, targetRef, amount, sourceCard, ability, sourceRef);
+  return result === "pending" ? "pending" : true;
 }
 
 function enforceHighAirExposure(battle) {

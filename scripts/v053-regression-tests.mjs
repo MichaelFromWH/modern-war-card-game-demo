@@ -3,6 +3,9 @@ import {
   createAuthoritativeBattle,
 } from "../src/online-battle-engine.js";
 import {
+  buildOnlineEffectAnimationBattle,
+} from "../src/online-animation-state.js";
+import {
   LINES,
   getCard,
 } from "../src/game-data.js";
@@ -297,6 +300,100 @@ testCase("V053-ENDTURN-001", "local end turn can be queued during player-side de
   assert(mainSource.includes("consumeQueuedEndTurn(battle, side)"), "finishAction should consume queued end-turn after the current deployment/action resolves");
   assert(mainSource.includes("passTurn(side);"), "queued end-turn consumption should reuse the normal passTurn path");
   return "end-turn clicks during deployment resolution locks are queued and consumed after resolution.";
+});
+
+testCase("V053-CONTACT-COUNTER-001", "online frontline contact fire into an exposed frontline unit triggers counterattack", () => {
+  const battle = createBattle("contactctr");
+  const defender = addBoard(battle, "enemy", "frontline", "ru_motostrelki", { hidden: false, exposed: true });
+  const marine = addHand(battle, "player", "us_marine_rifle");
+  battle.turnActions.player = turnState({
+    ownBoardEmptyAtStart: true,
+    enemyFrontlineEmptyAtStart: false,
+    actionPoints: 0,
+    tacticPoints: 1,
+    genericPoints: 2,
+  });
+
+  assertAction(applyBattleAction(battle, "player", {
+    kind: "play_unit",
+    handUid: marine.uid,
+    lineId: "frontline",
+    hidden: false,
+  }), "frontline deployment resolves contact fire");
+  const deployed = battle.board.player.frontline.find((instance) => instance.cardId === "us_marine_rifle");
+  assert(deployed?.damage > 0, `exposed defender should counter the contact fire, got deployed damage ${deployed?.damage || 0}`);
+  assert(defender.instance.damage > 0, "deployed unit should still damage the exposed defender");
+  return "exposed frontline defenders counterattack contact fire in online authoritative combat.";
+});
+
+testCase("V053-DRAW-001", "online pass turn draws for the next active side at turn start", () => {
+  const battle = createBattle("drawstart");
+  battle.hands.player = [];
+  battle.hands.enemy = [];
+  battle.decks.player = [makeInstance(battle, "player", "us_marine_rifle")];
+  battle.decks.enemy = [makeInstance(battle, "enemy", "ru_motostrelki")];
+
+  assertAction(applyBattleAction(battle, "player", { kind: "pass_turn" }), "player passes turn");
+  assert(battle.hands.player.length === 0, `ending side should not draw on pass, got ${battle.hands.player.length}`);
+  assert(battle.hands.enemy.length === 1, `next active side should draw at turn start, got ${battle.hands.enemy.length}`);
+  assert(battle.activeSide === "enemy", "enemy should be the next active side");
+  return "draw timing moved from ending side pass to next side turn start.";
+});
+
+testCase("V053-ANIMATION-001", "online expose staging replaces masked target with revealed card art data", () => {
+  const previous = createBattle("exposeprev");
+  const next = createBattle("exposenext");
+  const targetUid = "enemy-mask-1";
+  previous.board.enemy.frontline = [{
+    uid: targetUid,
+    cardId: "us_marine_rifle",
+    hidden: true,
+    exposed: false,
+    masked: true,
+    damage: 0,
+  }];
+  next.board.enemy.frontline = [{
+    uid: targetUid,
+    cardId: "ru_motostrelki",
+    hidden: false,
+    exposed: true,
+    damage: 0,
+  }];
+  const staged = buildOnlineEffectAnimationBattle(previous, next, [{
+    type: "expose",
+    serial: 1,
+    attackerSide: "player",
+    sourceSide: "player",
+    sourceUid: "player-scout",
+    sourceCardId: "us_rangers_target",
+    targetSide: "enemy",
+    lineId: "frontline",
+    targetUid,
+    targetCardId: "ru_motostrelki",
+    playSourceVideo: true,
+  }]);
+  const revealed = staged.board.enemy.frontline.find((instance) => instance.uid === targetUid);
+  assert(revealed?.cardId === "ru_motostrelki", `staged reveal should show the real card id, got ${revealed?.cardId}`);
+  assert(revealed.hidden === false && revealed.exposed === true, "staged reveal should flip the target face up");
+  return "forced reveal animation can render the newly exposed card art before final snapshot applies.";
+});
+
+testCase("V053-CANCEL-001", "online cancel target selection releases server pending without spending the tactic card", () => {
+  const battle = createBattle("cancel");
+  addBoard(battle, "enemy", "frontline", "ru_motostrelki", { hidden: false, exposed: true });
+  const tactic = addHand(battle, "player", "us_electronic_suppression");
+
+  assertAction(applyBattleAction(battle, "player", { kind: "play_tactic", handUid: tactic.uid }), "play tactic opens target selection");
+  assert(battle.pending?.kind === "handEffect", "tactic should be waiting for target selection");
+  assertAction(applyBattleAction(battle, "player", { kind: "cancel_pending" }), "cancel target selection");
+  assert(!battle.pending, "server pending should be cleared");
+  assert(battle.hands.player.some((instance) => instance.uid === tactic.uid), "cancelled tactic should remain in hand");
+  assert(battle.turnActions.player.spentTacticPoints === 0 && battle.turnActions.player.spentGenericPoints === 0, "cancel should not spend resources");
+  assertAction(applyBattleAction(battle, "player", { kind: "pass_turn" }), "player can pass after cancelling target selection");
+
+  const mainSource = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert(mainSource.includes("cancel_pending"), "online client cancel button should send cancel_pending to the server");
+  return "online target cancellation is server-authoritative and does not lock the turn.";
 });
 
 const failures = RESULTS.filter((result) => result.result !== "Pass");

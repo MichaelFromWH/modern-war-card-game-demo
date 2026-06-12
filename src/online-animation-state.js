@@ -15,6 +15,9 @@ export function buildOnlineEffectAnimationBattle(previousBattle, nextBattle, eff
       materializeEffectSource(stagedBattle, nextBattle, effect, { requireVideo: false });
       return;
     }
+    if (effect.type === "expose") {
+      materializeEffectTarget(stagedBattle, nextBattle, effect);
+    }
     if (FIRE_EFFECT_TYPES.has(effect.type)) {
       materializeEffectSource(stagedBattle, nextBattle, effect, { requireVideo: true });
     }
@@ -66,6 +69,43 @@ function materializeEffectSource(stagedBattle, nextBattle, effect, options = {})
 
   const lineId = nextRef.lineId || effect.sourceLineId || effect.lineId || effect.targetLineId || "frontline";
   const row = getBoardRow(stagedBattle, sourceSide, lineId);
+  if (row) {
+    row.push(stagedInstance);
+  }
+}
+
+function materializeEffectTarget(stagedBattle, nextBattle, effect) {
+  const targetSide = effect.targetSide;
+  const targetUid = effect.targetUid;
+  const targetCardId = effect.targetCardId;
+  if (!targetSide || !targetUid || !targetCardId) {
+    return;
+  }
+
+  const targetCard = getCard(targetCardId);
+  if (!targetCard) {
+    return;
+  }
+
+  const nextRef = findBoardRef(nextBattle, targetSide, targetUid);
+  if (!nextRef?.instance || nextRef.instance.hidden || nextRef.instance.masked) {
+    return;
+  }
+
+  const stagedRef = findBoardRef(stagedBattle, targetSide, targetUid);
+  const stagedInstance = cloneInstance(nextRef.instance);
+  stagedInstance.cardId = targetCard.id;
+  stagedInstance.hidden = false;
+  stagedInstance.exposed = true;
+  delete stagedInstance.masked;
+
+  if (stagedRef?.instance) {
+    Object.assign(stagedRef.instance, stagedInstance);
+    return;
+  }
+
+  const lineId = nextRef.lineId || effect.lineId || effect.targetLineId || "frontline";
+  const row = getBoardRow(stagedBattle, targetSide, lineId);
   if (row) {
     row.push(stagedInstance);
   }

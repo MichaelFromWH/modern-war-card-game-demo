@@ -39,6 +39,11 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Fix: local player end-turn clicks during action resolution show `结束中`, log the queued command, and consume through the normal `passTurn` path after resolution completes.
   - Verification: `node --check src/main.js`, `node --check src/online-battle-engine.js`, `node --check scripts/v053-regression-tests.mjs`; `node scripts/v053-regression-tests.mjs` 9/9; `node scripts/v052-regression-tests.mjs` 31/31; browser smoke confirmed queued/end-turn logs and no console errors.
   - Deployment: ECS `.deployed-version` set to `v0.5.3-20260612-endturn-queue-203312`; public health check returned `{"ok":true,"rooms":0,"sockets":0}` and public `src/main.js` contains the queue handler.
+- Hotfix: online 1v1 reaction, draw timing, reveal animation, and target-cancel lock.
+  - Root cause: online frontline contact fire bypassed the V0.5.3 counterattack path; `pass_turn` drew for the ending side; expose staging did not materialize the revealed target card id; closing a target picker cleared only local pending state while the server still blocked the turn.
+  - Fix: online contact fire now uses the counterattack-aware damage path except where hidden counter already took priority; turn-start draw happens for the incoming active side in both online and local AI paths; expose events replace masked targets with server-revealed card data before final snapshot; target cancel sends server action `cancel_pending`.
+  - Verification: `node --check src/main.js`, `node --check src/online-battle-engine.js`, `node --check src/online-animation-state.js`, `node --check scripts/v053-regression-tests.mjs`; `node scripts/v053-regression-tests.mjs` 13/13; `node scripts/v052-regression-tests.mjs` 31/31; local WebSocket smoke confirmed turn-start draw and cancel pending; Chrome channel browser smoke confirmed AI battle hand count 8, resources 2/0/1, end-turn enabled, and no console errors.
+  - Deployment: ECS `.deployed-version` set to `v0.5.3-20260612-online-turn-cancel-20260612-221119`; public health check returned `{"ok":true,"rooms":0,"sockets":0}`; public WebSocket smoke confirmed turn-start draw and cancel pending release.
 
 ## 2026-05-21
 

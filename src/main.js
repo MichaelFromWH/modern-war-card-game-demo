@@ -1173,9 +1173,13 @@ function beginTurnHandoff(battle, fromSide, toSide, options = {}) {
       return;
     }
     battle.turnTransition = null;
-    resetTurnActions(battle, battle.activeSide);
+    const enteringSide = battle.activeSide;
+    resetTurnActions(battle, enteringSide);
+    if (!battle.finalActions && enteringSide) {
+      drawCards(battle, enteringSide, 1);
+    }
     render();
-    if (battle.activeSide === "enemy") {
+    if (enteringSide === "enemy") {
       scheduleAi();
     }
   }, options.duration || TURN_HANDOFF_MS);
@@ -4966,8 +4970,6 @@ function finishAction(side, options = {}) {
   clearSuppressionForSide(battle, side);
   if (battle.finalActions && battle.finalTriggeredAtAction !== battle.actionSerial) {
     battle.finalActions[side] = Math.max(0, battle.finalActions[side] - 1);
-  } else if (!battle.finalActions) {
-    drawCards(battle, side, 1);
   }
 
   if (resolveBattleEndIfReady(battle)) {
@@ -8241,6 +8243,10 @@ function revealOnlineEffectTarget(effect) {
   if (!targetRef?.instance) {
     return;
   }
+  if (effect.targetCardId && getCard(effect.targetCardId)) {
+    targetRef.instance.cardId = effect.targetCardId;
+    targetRef.instance.masked = false;
+  }
   if (targetRef.instance.hidden || !targetRef.instance.exposed) {
     targetRef.instance.hidden = false;
     targetRef.instance.exposed = true;
@@ -8772,10 +8778,32 @@ function cancelIntent() {
     gameAudio.play("ui.error");
     return;
   }
+  if (isOnlineAuthoritativeBattle() && state.pending) {
+    cancelOnlinePendingSelection();
+    return;
+  }
   state.pending = null;
   state.selectedHandUid = null;
   clearSpotlight();
   clearDragState();
+  render();
+}
+
+function cancelOnlinePendingSelection() {
+  if (!state.pending || state.pending.kind === "supplyChoice" || state.pending.kind === "interceptChoice" || state.pending.kind === "callFireChoice") {
+    gameAudio.play("ui.error");
+    return;
+  }
+  sendOnlineBattleAction({ kind: "cancel_pending" });
+  state.pending = null;
+  state.selectedHandUid = null;
+  if (state.battle) {
+    state.battle.pendingSide = null;
+    state.battle.pendingKind = null;
+  }
+  clearSpotlight();
+  clearDragState();
+  gameAudio.play("ui.switch");
   render();
 }
 
