@@ -25,6 +25,34 @@
 - 线上部署：已通过 SSH key 上传到 ECS `/opt/war-card-game`，PM2 进程 `war-card-game` 重启后为 `online`，`.deployed-version = v0.5.3-20260612-90ca033+local`，覆盖前备份位于 `/tmp/war-card-game-backup-v053-20260612-0218.tgz`。
 - 公网验证：`http://121.41.9.156/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`；公网 WebSocket 1v1 建房、加入、ready、调度、部署 smoke 通过，房主首回合资源 `2/0/1`，部署后通用点为 1；公网浏览器 AI 对局部署后禁火角标可见。
 
+## 2026-06-12 V0.5.3 双部署后回合结束按钮不可点击
+
+来源：Michael 截图反馈：开局回合部署两个单位后，资源显示为 `通用 0 / 行动 0 / 战术 1`，但右下角“回合结束”按钮无法交互。
+
+根因：
+
+- 本地 AI 对局中，部署后的卡牌飞行、暴露、接敌与日志结算会短暂设置 `battle.actionAnimation`。
+- V0.5.3 双部署开局时，第二张单位已经视觉上进入战场、资源也已经扣到 `0/0/1`，但部署结算演出锁仍未释放；`canPlayerEndTurn()` 因 `battle.actionAnimation` 返回 false。
+- 按钮 disabled 状态和视觉高亮不一致，玩家看到的是“按钮像可点，但点不动”，体验上等同卡死。
+
+修复：
+
+- `src/main.js` 新增 `handleEndTurnAction()`、`queueEndTurnAfterCurrentAction()` 和 `consumeQueuedEndTurn()`。
+- 当本地玩家回合没有 pending、指挥权转交或 AI 思考，但当前动作仍在 `actionAnimation` 结算中时，“回合结束”按钮保持可点击；点击后显示“结束中”，写入日志“已收到结束回合指令...”，当前部署结算完成后自动执行结束回合。
+- 排队消费复用原有 `passTurn(side)` 路径，保证日志、抽牌、清压制和指挥权移交与正常点击完全一致。
+- 队列状态在新对局、重置、投降/退出、进入或应用线上权威快照时清空；线上权威模式暂不使用本地排队，避免和服务器快照播放交错。
+- `scripts/v053-regression-tests.mjs` 增加 `V053-ENDTURN-001`，防止本地回合结束排队路径被移除。
+
+验证结果：
+
+- 红灯复现：`V053-ENDTURN-001` 初始失败，提示本地 UI 缺少 queue-aware end-turn handler。
+- `node --check src/main.js`、`node --check src/online-battle-engine.js`、`node --check scripts/v053-regression-tests.mjs` 通过。
+- `node scripts/v053-regression-tests.mjs`：9/9 通过。
+- `node scripts/v052-regression-tests.mjs`：31/31 通过。
+- 浏览器复测：部署结算锁期间点击“回合结束”后，日志出现“已收到结束回合指令”，正常结束回合日志随后出现，资源进入下一己方回合；控制台无 error。
+- 线上部署：ECS `/opt/war-card-game` 已更新，PM2 进程 `war-card-game` 为 `online`，`.deployed-version = v0.5.3-20260612-endturn-queue-203312`，覆盖前备份位于 `/tmp/war-card-game-backup-v053-endturn-20260612-203312.tgz`。
+- 公网验证：`http://121.41.9.156/healthz` 返回 `{"ok":true,"rooms":0,"sockets":0}`；公网 `src/main.js` 已包含 `handleEndTurnAction()`、`queuedEndTurnSide` 和 `passTurn(side);` 排队消费路径。
+
 ## 2026-06-12 V0.5.3 P0/P1/P2 复测修复
 
 来源：Michael 要求优先修复 P0，并同步处理 P1/P2 后部署上线：隐蔽反击与前线反击必须按规则同时结算；高空接敌默认只互相暴露，不自动打击或反击；高空反击被防空拦截遵循“拦截仅能在敌方回合触发”；图鉴/组卡页移除内部字段；行动额度 hover 展示三类点数解释与示例。

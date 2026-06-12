@@ -290,6 +290,15 @@ testCase("V053-INTERCEPT-001", "air defense interception only triggers during th
   return "counterattack damage was not intercepted by same-side air defense during the active side turn.";
 });
 
+testCase("V053-ENDTURN-001", "local end turn can be queued during player-side deploy resolution locks", () => {
+  const mainSource = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert(mainSource.includes("function handleEndTurnAction()"), "local UI should route end-turn clicks through a queue-aware handler");
+  assert(mainSource.includes("queueEndTurnAfterCurrentAction(battle, \"player\")"), "end-turn clicks during player actionAnimation should queue the pass instead of being ignored");
+  assert(mainSource.includes("consumeQueuedEndTurn(battle, side)"), "finishAction should consume queued end-turn after the current deployment/action resolves");
+  assert(mainSource.includes("passTurn(side);"), "queued end-turn consumption should reuse the normal passTurn path");
+  return "end-turn clicks during deployment resolution locks are queued and consumed after resolution.";
+});
+
 const failures = RESULTS.filter((result) => result.result !== "Pass");
 console.table(RESULTS);
 if (failures.length) {

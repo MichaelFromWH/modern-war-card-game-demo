@@ -327,6 +327,7 @@ const state = {
     active: false,
     selectedUids: [],
   },
+  queuedEndTurnSide: null,
   uidCounter: 0,
 };
 
@@ -902,7 +903,7 @@ function handleAction(action) {
   } else if (action === "pass") {
     passTurn("player");
   } else if (action === "end-turn") {
-    passTurn("player");
+    handleEndTurnAction();
   } else if (action === "surrender") {
     surrenderBattle();
   } else if (action === "reset") {
@@ -1021,6 +1022,7 @@ function startBattle(options = {}) {
   state.selectedHandUid = null;
   state.hoveredCardId = null;
   state.pending = null;
+  state.queuedEndTurnSide = null;
   state.guideOpen = false;
   state.deckBuilderOpen = false;
   state.mulligan = {
@@ -1047,6 +1049,7 @@ function resetBattle() {
   state.selectedHandUid = null;
   state.hoveredCardId = null;
   state.pending = null;
+  state.queuedEndTurnSide = null;
   state.guideOpen = false;
   state.deckBuilderOpen = false;
   state.mulligan = {
@@ -1790,8 +1793,10 @@ function renderScore() {
   refs.pass.disabled = false;
   refs.pass.textContent = battleOver ? "退出" : "投降";
   refs.endTurn.hidden = false;
-  refs.endTurn.disabled = battleOver || !canPlayerEndTurn();
-  refs.endTurn.textContent = battleOver ? "对局结束" : battle.activeSide === "player" && !battle.turnTransition ? "回合结束" : "等待对方";
+  const queuedEndTurn = state.queuedEndTurnSide === "player";
+  refs.endTurn.disabled = battleOver || queuedEndTurn || (!canPlayerEndTurn() && !canPlayerQueueEndTurn());
+  refs.endTurn.textContent = battleOver ? "对局结束" : queuedEndTurn ? "结束中" : battle.activeSide === "player" && !battle.turnTransition ? "回合结束" : "等待对方";
+  refs.endTurn.classList.toggle("is-queued", queuedEndTurn);
   refs.bgmButton.hidden = false;
   refs.bgmButton.classList.toggle("is-active", state.bgmOn);
   refs.bgmButton.textContent = state.bgmOn ? "🔊" : "🔇";
@@ -4938,6 +4943,10 @@ function finishAction(side, options = {}) {
   state.pending = null;
   refreshIntelValues(battle);
 
+  if (!options.endTurn && consumeQueuedEndTurn(battle, side)) {
+    return;
+  }
+
   if (!options.endTurn && !battle.finalActions && (side === "player" || side === "enemy")) {
     if (resolveBattleEndIfReady(battle)) {
       render();
@@ -4999,6 +5008,9 @@ function passTurn(side) {
   if (!battle || state.pending || battle.turnTransition || battle.aiThinking || battle.phase !== "battle" || battle.activeSide !== side) {
     return;
   }
+  if (state.queuedEndTurnSide === side) {
+    state.queuedEndTurnSide = null;
+  }
 
   if (isOnlineAuthoritativeBattle()) {
     sendOnlineBattleAction({ kind: "pass_turn" });
@@ -5010,6 +5022,21 @@ function passTurn(side) {
   state.selectedHandUid = null;
   state.pending = null;
   finishAction(side, { endTurn: true });
+}
+
+function handleEndTurnAction() {
+  const battle = state.battle;
+  if (canPlayerEndTurn()) {
+    passTurn("player");
+    return;
+  }
+  if (queueEndTurnAfterCurrentAction(battle, "player")) {
+    gameAudio.play("ui.switch");
+    battle.log.push("已收到结束回合指令，当前部署结算完成后移交指挥权。");
+    render();
+    return;
+  }
+  gameAudio.play("ui.error");
 }
 
 function surrenderBattle() {
@@ -5029,6 +5056,7 @@ function surrenderBattle() {
   state.selectedHandUid = null;
   state.hoveredCardId = null;
   state.pending = null;
+  state.queuedEndTurnSide = null;
   clearDragState({ render: false });
   gameAudio.play(battleOver ? "ui.confirm" : "system.defeat");
   if (refs.bgm) {
@@ -7409,6 +7437,39 @@ function canPlayerEndTurn() {
   );
 }
 
+function canPlayerQueueEndTurn() {
+  const battle = state.battle;
+  return Boolean(
+    battle &&
+      !isOnlineAuthoritativeBattle() &&
+      battle.phase === "battle" &&
+      battle.activeSide === "player" &&
+      !state.mulligan.active &&
+      !state.pending &&
+      !battle.pendingSide &&
+      !battle.turnTransition &&
+      !battle.aiThinking &&
+      battle.actionAnimation &&
+      !state.online.effectPlaybackActive,
+  );
+}
+
+function queueEndTurnAfterCurrentAction(battle, side) {
+  if (side !== "player" || !canPlayerQueueEndTurn()) {
+    return false;
+  }
+  state.queuedEndTurnSide = side;
+  return true;
+}
+
+function consumeQueuedEndTurn(battle, side) {
+  if (state.queuedEndTurnSide !== side || side !== "player") {
+    return false;
+  }
+  passTurn(side);
+  return true;
+}
+
 function canAnyHandAction(battle, side) {
   return (battle?.hands?.[side] || []).some((instance) => canUseHandAction(battle, side, getCard(instance.cardId)));
 }
@@ -7943,6 +8004,7 @@ function enterOnlineAuthoritativeBattle(snapshot) {
   state.selectedHandUid = null;
   state.hoveredCardId = null;
   state.pending = snapshot.pending || null;
+  state.queuedEndTurnSide = null;
   state.mulligan = snapshot.mulligan || { active: false, selectedUids: [] };
   state.guideOpen = false;
   state.deckBuilderOpen = false;
@@ -7980,6 +8042,7 @@ function applyOnlineBattleSnapshot(snapshot) {
     state.online.lastEffectSerial = Math.max(state.online.lastEffectSerial || 0, getMaxOnlineEffectSerial(freshEffects));
     state.pending = null;
     state.selectedHandUid = null;
+    state.queuedEndTurnSide = null;
     state.battle = animationBattle;
     render();
     queueOnlineBattleEffectPlayback(freshEffects, {
@@ -8005,6 +8068,7 @@ function applyOnlineSnapshotState(snapshot, nextBattle, previousBattle, previous
   state.pending = snapshot.pending || null;
   state.mulligan = snapshot.mulligan || { active: false, selectedUids: [] };
   state.selectedHandUid = null;
+  state.queuedEndTurnSide = null;
   render();
 }
 

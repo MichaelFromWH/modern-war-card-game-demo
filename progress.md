@@ -34,6 +34,11 @@ Original prompt: 这个项目我现在想部署到线上能跟我的朋友1v1对
   - Public HTTP static check confirmed updated `src/main.js` and `styles.css`.
   - Public WebSocket 1v1 smoke passed: create/join/ready/mulligan/deploy, opening resources 2/0/1, deployment leaves generic point at 1, guest mirror sees the unit.
   - ECS `.deployed-version` set to `v0.5.3-20260612-p0p1p2-1139`; public health check returned `{"ok":true,"rooms":0,"sockets":0}`.
+- Hotfix: local AI end-turn clicks during deployment resolution are now queued instead of ignored.
+  - Root cause: after the second opening deployment, resources and board state were already visible, but `battle.actionAnimation` still held the turn lock, leaving the end-turn button disabled while it looked clickable.
+  - Fix: local player end-turn clicks during action resolution show `结束中`, log the queued command, and consume through the normal `passTurn` path after resolution completes.
+  - Verification: `node --check src/main.js`, `node --check src/online-battle-engine.js`, `node --check scripts/v053-regression-tests.mjs`; `node scripts/v053-regression-tests.mjs` 9/9; `node scripts/v052-regression-tests.mjs` 31/31; browser smoke confirmed queued/end-turn logs and no console errors.
+  - Deployment: ECS `.deployed-version` set to `v0.5.3-20260612-endturn-queue-203312`; public health check returned `{"ok":true,"rooms":0,"sockets":0}` and public `src/main.js` contains the queue handler.
 
 ## 2026-05-21
 
