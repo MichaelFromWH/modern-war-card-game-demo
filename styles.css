@@ -14696,3 +14696,167 @@ body:has(.deck-builder-overlay:not([hidden])) .card-spotlight {
 .app-shell[data-screen="briefing"] .briefing .online-panel.is-in-room .online-room-code .small-button {
   width: 100% !important;
 }
+
+/* Compact combat values must stay readable even when the fixed battlefield scales down. */
+.battle-stage .battle-line__cards .board-card .card-thumb-hud__combat {
+  left: 5% !important;
+  right: 5% !important;
+  bottom: 5% !important;
+  gap: clamp(1px, 0.24svmin, 3px) !important;
+  overflow: visible !important;
+}
+
+.battle-stage .battle-line__cards .board-card .card-thumb-hud__stat {
+  min-width: max-content !important;
+  flex: 0 0 auto !important;
+  display: inline-flex !important;
+  gap: clamp(1px, 0.16svmin, 2px) !important;
+  overflow: visible !important;
+  font-size: clamp(10px, 1.4svmin, 16px) !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+.battle-stage .battle-line__cards .board-card .card-thumb-hud__stat b {
+  min-width: 0.68em;
+  flex: 0 0 auto;
+  display: block !important;
+  overflow: visible !important;
+  font-size: clamp(11px, 1.55svmin, 18px) !important;
+  line-height: 1 !important;
+  text-align: center;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+.battle-stage .battle-line__cards .board-card .card-thumb-hud__icon {
+  width: 0.76em;
+  height: 0.76em;
+  flex-basis: 0.76em;
+  overflow: visible !important;
+  font-size: 0.78em !important;
+}
+
+.battle-stage .battle-line__cards .board-card .card-thumb-hud__icon--health {
+  font-size: 0.92em !important;
+}
+
+/* Touch-first card interaction: tap once for detail/actions, tap again to act. */
+button,
+[data-hand-card],
+[data-board-card],
+[data-row] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hand-rail,
+.codex-grid,
+.deck-builder-body,
+.battle-log {
+  -webkit-overflow-scrolling: touch;
+}
+
+.card-spotlight__stage {
+  position: relative;
+}
+
+.card-spotlight__close {
+  position: absolute;
+  z-index: 20;
+  top: -12px;
+  right: -12px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 226, 164, 0.72);
+  border-radius: 50%;
+  padding: 0;
+  color: #fff4d3;
+  background: rgba(36, 12, 10, 0.94);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.62);
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.card-spotlight__touch-actions {
+  position: absolute;
+  z-index: 18;
+  left: 50%;
+  top: calc(100% + 12px);
+  width: min(320px, calc(100vw - 24px));
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.card-spotlight__touch-actions:has(button:only-child) {
+  grid-template-columns: 1fr;
+}
+
+.card-spotlight__touch-actions button {
+  min-height: 48px;
+  border: 1px solid rgba(255, 226, 164, 0.7);
+  border-radius: 7px;
+  padding: 0 12px;
+  color: #fff4d3;
+  background: linear-gradient(180deg, rgba(118, 40, 28, 0.97), rgba(56, 17, 13, 0.98));
+  box-shadow: 0 9px 22px rgba(0, 0, 0, 0.58), inset 0 0 12px rgba(255, 218, 145, 0.1);
+  font-size: 15px;
+  font-weight: 900;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.card-spotlight__touch-actions button:disabled {
+  opacity: 0.42;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .battle-stage .hand-rail .war-card,
+  .battle-stage .battle-line__cards .board-card,
+  .codex-overlay [data-card-id],
+  .deck-builder-overlay [data-card-id] {
+    cursor: pointer;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  .battle-stage .hand-rail .war-card:hover:not(.is-touch-focused):not(.is-selected) {
+    z-index: auto;
+    transform: translateY(0) rotate(var(--fan, 0deg)) !important;
+  }
+
+  .battle-stage .hand-rail .war-card .war-card__deploy-actions,
+  .battle-stage .hand-rail .war-card:hover .war-card__deploy-actions {
+    display: none !important;
+  }
+
+  .battle-stage .hand-rail .war-card.is-touch-focused {
+    z-index: 24;
+    transform: translateY(-18%) rotate(0deg) scale(1.08) !important;
+  }
+
+  body:has(.codex-overlay:not([hidden])) .card-spotlight.is-touch-pinned,
+  body:has(.deck-builder-overlay:not([hidden])) .card-spotlight.is-touch-pinned {
+    display: block !important;
+  }
+
+  .hand-rail {
+    touch-action: pan-x;
+    overscroll-behavior-inline: contain;
+  }
+
+  .codex-grid,
+  .deck-builder-body,
+  .battle-log {
+    touch-action: pan-y;
+    overscroll-behavior-block: contain;
+  }
+}

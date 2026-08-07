@@ -902,3 +902,26 @@
 - 新增 `TC-V052-023C`：M1A2 前线突破口径巡航导弹只暴露不伤害。
 - `node scripts/v052-regression-tests.mjs` 通过，31/31。
 - `node --check src/main.js`、`node --check src/online-battle-engine.js`、`node --check scripts/v052-regression-tests.mjs` 通过。
+
+## 2026-08-07 Web AI 回合卡死、场上数值裁切与 iPad 触屏支持
+
+来源：Michael 复测反馈结束己方回合后 AI 无任何行动，14 寸浏览器中场上缩略卡的攻击/生命数字被缩到不可见；追加要求网页对局支持 iPad 浏览器触屏操作。
+
+根因：
+- 本地隐蔽部署会调用 `enforceHighAirExposure()`，该函数遍历未在 `src/main.js` 定义的 `SIDES`，浏览器抛出 `ReferenceError: SIDES is not defined`；异常发生在 `finishAction()` 前，AI 调度链因此中断并停在敌方回合。
+- 场上数值的 `.card-thumb-hud__stat` 同时继承了 `.board-card span { overflow: hidden }`，又在不足 80px 的卡宽里使用固定图标、较大间距和可收缩 flex 子项；1280×720 下数字可见宽度会降为 0。
+- 原交互依赖 `mouseover/out` 和 hover 后出现的卡面部署按钮；iPad 没有稳定 hover，且手牌在固定战场中只露出顶部约 9%，直接把竖排按钮放进手牌会落入舞台裁切区。
+
+修复记录：
+- `src/main.js` 增加本地 `SIDES = ["player", "enemy"]`，保证隐蔽部署完成高空暴露刷新后能继续进入 `finishAction()`。
+- 场上攻击/生命 HUD 改为不可收缩、允许溢出显示的紧凑角标；数字字号与间距按 `svmin` 缩放，≤1100px 时保留既有“隐藏图标、保留数字”策略。
+- 触屏首次点按手牌或场上单位会固定大卡详情；再次点按场上卡牌可执行原行动，待选目标保持单击直达；点空白或 44×44 关闭按钮可退出详情。
+- 手里单位的“正面部署 / 隐蔽部署”移动到大卡详情下方，按钮实测 155×48，不再受只露出顶部的手牌区裁切；战术牌提供“打出卡牌”按钮。
+- `pointerover/out` 仅响应鼠标悬停，触摸/触控笔走固定详情路径；滚动区域启用单指滚动，viewport 增加 `viewport-fit=cover` 适配 iPad 安全区。
+
+验证记录：
+- `node --check src/main.js` 通过；`node scripts/v052-regression-tests.mjs` 31/31；`node scripts/v053-regression-tests.mjs` 15/15。
+- Playwright 真触屏上下文（`hasTouch: true`）通过：首次点按固定详情；关闭按钮 44×44；正面/隐蔽部署按钮各 155×48；隐蔽部署成功进入场上；页面异常 0。
+- 1024×768、1280×720、1366×768、768×1024 四个视口的攻击/生命数字均完整可见，stat `overflow` 为 `visible`；对应场上卡宽分别为 57.6、59.04、78.33、57.6px。
+- 768×1024 竖屏详情边界为 left 224 / top 306 / right 544 / bottom 786，完整位于视口内；1366×1024 横屏与竖屏截图已人工检查。
+- 真实 UI 路径完成“触屏隐蔽部署 → 正面部署 → 结束回合 → 进入敌方 → AI 行动 → 回到我方”，页面错误为 0。
