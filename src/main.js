@@ -71,6 +71,7 @@ const lineOrders = {
   enemy: ["support", "frontline"],
   player: ["frontline", "support"],
 };
+const SIDES = ["player", "enemy"];
 
 const BGM_PLAYLIST = [
   "./assets/audio/bgm/assembling-the-fleet.mp3",
@@ -288,6 +289,8 @@ const state = {
   battle: null,
   selectedHandUid: null,
   hoveredCardId: null,
+  spotlightPinnedKey: null,
+  lastPointerType: "",
   draggingUid: null,
   dragMode: null,
   dragTargets: [],
@@ -353,10 +356,11 @@ async function bootstrap() {
 function bindEvents() {
   window.addEventListener("pointerdown", () => gameAudio.unlock(), { once: true, passive: true });
   window.addEventListener("keydown", () => gameAudio.unlock(), { once: true });
+  document.addEventListener("pointerdown", handlePointerDown, { passive: true });
   document.addEventListener("click", handleClick);
   document.addEventListener("input", handleInput);
-  document.addEventListener("mouseover", handleHover);
-  document.addEventListener("mouseout", handleHoverOut);
+  document.addEventListener("pointerover", handleHover);
+  document.addEventListener("pointerout", handleHoverOut);
   document.addEventListener("dragstart", handleDragStart);
   document.addEventListener("drag", handleDragMove);
   document.addEventListener("dragover", handleDragOver);
@@ -766,12 +770,51 @@ function handleInput(event) {
   }
 }
 
+function handlePointerDown(event) {
+  state.lastPointerType = event.pointerType || "";
+}
+
+function isTouchPrimaryInput() {
+  const directTouch = state.lastPointerType === "touch" || state.lastPointerType === "pen";
+  const coarsePrimaryPointer = window.matchMedia?.("(hover: none), (pointer: coarse)").matches;
+  return Boolean(directTouch || coarsePrimaryPointer || navigator.maxTouchPoints > 0);
+}
+
 function handleClick(event) {
+  const actionTarget = event.target.closest("[data-action]");
+  const cardElement = event.target.closest("[data-card-id]");
   const target = event.target.closest("[data-action],[data-hand-card],[data-row],[data-board-card]");
+  const touchInput = isTouchPrimaryInput();
+  gameAudio.unlock();
+
+  if (touchInput && state.spotlightPinnedKey && !cardElement && !event.target.closest("#card-spotlight")) {
+    clearSpotlight();
+  }
+
+  if (
+    touchInput
+    && cardElement
+    && !actionTarget
+    && !state.pending
+    && !state.mulligan.active
+    && !refs.spotlight?.contains(cardElement)
+  ) {
+    const sourceKey = getSpotlightSourceKey(cardElement);
+    if (sourceKey && state.spotlightPinnedKey !== sourceKey) {
+      document.querySelectorAll(".is-touch-focused").forEach((element) => element.classList.remove("is-touch-focused"));
+      state.spotlightPinnedKey = sourceKey;
+      state.hoveredCardId = cardElement.dataset.cardId;
+      gameAudio.play("card.flip");
+      renderInspector();
+      renderSpotlight();
+      return;
+    }
+    clearSpotlight();
+  }
+
   if (!target) {
     return;
   }
-  gameAudio.unlock();
 
   if (target.dataset.action) {
     gameAudio.play("ui.click");
@@ -800,10 +843,14 @@ function handleClick(event) {
 }
 
 function handleHover(event) {
+  if (event.pointerType && event.pointerType !== "mouse") {
+    return;
+  }
   const cardElement = event.target.closest("[data-card-id]");
   if (!cardElement) {
     return;
   }
+  state.spotlightPinnedKey = null;
   gameAudio.play("ui.hover");
   state.hoveredCardId = cardElement.dataset.cardId;
   renderInspector();
@@ -811,6 +858,9 @@ function handleHover(event) {
 }
 
 function handleHoverOut(event) {
+  if (state.spotlightPinnedKey || (event.pointerType && event.pointerType !== "mouse")) {
+    return;
+  }
   const cardElement = event.target.closest("[data-card-id]");
   if (!cardElement || cardElement.contains(event.relatedTarget)) {
     return;
@@ -822,11 +872,14 @@ function handleHoverOut(event) {
 
 function clearSpotlight() {
   state.hoveredCardId = null;
+  state.spotlightPinnedKey = null;
+  document.querySelectorAll(".is-touch-focused").forEach((element) => element.classList.remove("is-touch-focused"));
   if (!refs.spotlight) {
     return;
   }
   refs.spotlight.classList.remove("is-overlay-preview");
   refs.spotlight.classList.remove("has-rule-aside");
+  refs.spotlight.classList.remove("is-touch-pinned");
   clearSpotlightLayout();
   refs.spotlight.hidden = true;
   refs.spotlight.innerHTML = "";
@@ -883,10 +936,26 @@ function updateSpotlightPosition() {
 
 const SPOTLIGHT_SOURCE_SELECTOR = ".hand-rail [data-card-id], .battle-board [data-card-id], .codex-overlay [data-card-id], .deck-builder-overlay [data-card-id]";
 
+function getSpotlightSourceKey(element) {
+  const handCard = element?.closest("[data-hand-card]");
+  if (handCard) {
+    return `hand:${handCard.dataset.handCard}`;
+  }
+  const boardCard = element?.closest("[data-board-card]");
+  if (boardCard) {
+    return `board:${boardCard.dataset.side}:${boardCard.dataset.boardCard}`;
+  }
+  return element?.dataset.cardId ? `card:${element.dataset.cardId}` : "";
+}
+
 function getHoveredSpotlightSource(cardId) {
-  return Array.from(document.querySelectorAll(SPOTLIGHT_SOURCE_SELECTOR)).find(
-    (element) => element.dataset.cardId === cardId && element.matches(":hover"),
-  );
+  const sources = Array.from(document.querySelectorAll(SPOTLIGHT_SOURCE_SELECTOR));
+  if (state.spotlightPinnedKey) {
+    return sources.find(
+      (element) => element.dataset.cardId === cardId && getSpotlightSourceKey(element) === state.spotlightPinnedKey,
+    );
+  }
+  return sources.find((element) => element.dataset.cardId === cardId && element.matches(":hover"));
 }
 
 function handleAction(action) {
@@ -911,6 +980,8 @@ function handleAction(action) {
   } else if (action === "cancel") {
     gameAudio.play("ui.switch");
     cancelIntent();
+  } else if (action === "close-spotlight") {
+    clearSpotlight();
   } else if (action === "open-codex") {
     gameAudio.play("ui.switch");
     openCodex();
@@ -2360,13 +2431,20 @@ function renderSpotlight() {
   }
   const card = getCard(state.hoveredCardId);
   const showRuleAside = canShowInBattle && shouldShowBattleRuleAside(card, hoveredSource);
+  const touchActions = canShowInBattle && state.spotlightPinnedKey
+    ? renderTouchSpotlightActions(card, hoveredSource)
+    : "";
+  hoveredSource.classList.toggle("is-touch-focused", Boolean(state.spotlightPinnedKey));
   refs.spotlight.hidden = false;
   refs.spotlight.classList.toggle("is-overlay-preview", canShowInDeckBuilder);
   refs.spotlight.classList.toggle("has-rule-aside", showRuleAside);
+  refs.spotlight.classList.toggle("is-touch-pinned", Boolean(state.spotlightPinnedKey));
   refs.spotlight.innerHTML = `
     <div class="card-spotlight__stage">
+      ${state.spotlightPinnedKey ? `<button class="card-spotlight__close" type="button" data-action="close-spotlight" aria-label="关闭卡牌详情">×</button>` : ""}
       ${renderPreviewCard(card)}
       ${showRuleAside ? renderCardRuleAside(card) : ""}
+      ${touchActions}
     </div>
   `;
   if (canShowInDeckBuilder) {
@@ -2374,6 +2452,28 @@ function renderSpotlight() {
   } else {
     clearSpotlightLayout();
   }
+}
+
+function renderTouchSpotlightActions(card, source) {
+  const handCard = source?.closest("[data-hand-card]");
+  if (!handCard || state.mulligan.active || state.pending || !canPlayerAct()) {
+    return "";
+  }
+  const uid = handCard.dataset.handCard;
+  if (card.type !== "unit") {
+    return `
+      <div class="card-spotlight__touch-actions">
+        <button type="button" data-action="play-open:${uid}">打出卡牌</button>
+      </div>
+    `;
+  }
+  const canConceal = !handCard.querySelector(`[data-action="play-hidden:${uid}"]`)?.disabled;
+  return `
+    <div class="card-spotlight__touch-actions">
+      <button type="button" data-action="play-open:${uid}">正面部署</button>
+      <button type="button" data-action="play-hidden:${uid}" ${canConceal ? "" : "disabled"}>隐蔽部署</button>
+    </div>
+  `;
 }
 
 function shouldShowBattleRuleAside(card, hoveredSource) {

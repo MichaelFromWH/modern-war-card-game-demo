@@ -273,6 +273,24 @@ testCase("V053-HIGH-AIR-001", "local high-air deployment only exposes and does n
   return "local high-air deployment has no auto-combat call path.";
 });
 
+testCase("V053-HIGH-AIR-002", "local hidden deployment can enumerate both sides before finishing the action", () => {
+  const mainSource = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  assert(mainSource.includes('const SIDES = ["player", "enemy"];'), "local high-air exposure must define the side list it iterates");
+  assert(mainSource.includes("enforceHighAirExposure(battle);"), "hidden deployment should still refresh high-air exposure before finishAction");
+  return "local hidden deployment has a defined two-side enumeration and can reach finishAction.";
+});
+
+testCase("V053-TOUCH-001", "touch users have explicit card preview and deployment controls", () => {
+  const mainSource = fs.readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const cssSource = fs.readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  assert(mainSource.includes("spotlightPinnedKey"), "touch card previews should retain a pinned source instead of depending on hover");
+  assert(mainSource.includes("isTouchPrimaryInput()"), "card click routing should identify touch-first input");
+  assert(mainSource.includes('action === "close-spotlight"'), "touch preview should expose an explicit close action");
+  assert(mainSource.includes("card-spotlight__touch-actions"), "touch preview should expose large play/deployment controls outside the clipped hand rail");
+  assert(cssSource.includes("@media (hover: none), (pointer: coarse)"), "touch-first layouts should expose controls without hover");
+  return "touch-first card preview, close, and deploy affordances are present.";
+});
+
 testCase("V053-INTERCEPT-001", "air defense interception only triggers during the opponent turn", () => {
   const battle = createBattle("interceptturn");
   const attacker = addBoard(battle, "player", "support", "us_f35");
